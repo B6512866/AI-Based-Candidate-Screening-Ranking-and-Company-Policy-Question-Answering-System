@@ -89,8 +89,8 @@ PostgreSQL 15+
 
 ### 1. Clone Repository
 ```bash
-git clone https://github.com/your-org/ai-hr-system.git
-cd ai-hr-system
+git clone https://github.com/B6512866/AI-Based-Recruitment-Screening-and-Employee-Advisory-System.git
+cd AI-Based-Recruitment-Screening-and-Employee-Advisory-System
 ```
 
 ### 2. Setup Database
@@ -140,7 +140,7 @@ npm run dev
 ## 📁 Project Structure / โครงสร้างโปรเจกต์
 
 ```
-ai-hr-system/
+AI-Based-Recruitment-Screening-and-Employee-Advisory-System/
 ├── backend/
 │   ├── main.go
 │   ├── handlers/
