@@ -1,12 +1,12 @@
 package entity
 
-import "time"
+import "gorm.io/gorm"
 
 type KnowledgeBase struct {
-    DocID      uint      `json:"doc_id" gorm:"primaryKey;autoIncrement"`
-    Filename   string    `json:"filename"`
-    Content    string    `json:"content"`
-    VectorID   string    `json:"vector_id"`
-    UploadedAt time.Time `json:"uploaded_at"`
-    HrID       uint      `json:"hr_id"`
+	gorm.Model
+	Filename string `json:"filename"`
+	Content  string `json:"content"`
+	VectorID string `json:"vector_id"`
+	UserID   uint   `json:"user_id"`
+	User     User   `gorm:"foreignKey:UserID"`
 }

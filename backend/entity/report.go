@@ -1,10 +1,10 @@
 package entity
 
-import "time"
+import "gorm.io/gorm"
 
 type Report struct {
-    ReportID    uint      `json:"report_id" gorm:"primaryKey;autoIncrement"`
-    Type        string    `json:"type"`
-    GeneratedAt time.Time `json:"generated_at"`
-    HrID        uint      `json:"hr_id"`
+	gorm.Model
+	Type   string `json:"type"`
+	UserID uint   `json:"user_id"`
+	User   User   `gorm:"foreignKey:UserID"`
 }

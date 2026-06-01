@@ -1,12 +1,22 @@
 package entity
 
-import "time"
+import "gorm.io/gorm"
 
 type Application struct {
-    AppID       uint      `json:"app_id" gorm:"primaryKey;autoIncrement"`
-    AppliedAt   time.Time `json:"applied_at"`
-    Status      string    `json:"status"` // pending, approved, interview, rejected
-    AIScore     float64   `json:"ai_score"`
-    HrID        uint      `json:"hr_id"`
-    ScreeningID uint      `json:"screening_id"`
+	gorm.Model
+	Status    string  `json:"status"` // pending, approved, interview, rejected
+	AIScore   float64 `json:"ai_score"`
+	Position  string  `json:"position"`
+	ResumeURL string  `json:"resume_url"`
+
+	// Link to Candidate instead of User
+	CandidateID uint      `json:"candidate_id"`
+	Candidate   Candidate `gorm:"foreignKey:CandidateID"`
+
+	// Link to the HR who is responsible (Optional)
+	UserID uint `json:"user_id"`
+	User   User `gorm:"foreignKey:UserID"`
+
+	ScreeningID uint        `json:"screening_id"`
+	AIScreening AIScreening `gorm:"foreignKey:ScreeningID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
 }
