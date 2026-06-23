@@ -150,9 +150,8 @@ docker compose down -v
 
 ### AI Services
 
-* DeepSeek OCR
-* Meta Llama 3
-* Typhoon 2
+* Typhoon OCR
+* Typhoon 2.5
 
 ---
 
@@ -161,7 +160,7 @@ docker compose down -v
 ### Recruitment Screening Module
 
 * อัปโหลด Resume ของผู้สมัคร
-* ดึงข้อมูลอัตโนมัติด้วย OCR
+* ดึงข้อมูลอัตโนมัติด้วย Typhoon OCR
 * วิเคราะห์คุณสมบัติผู้สมัครด้วย AI
 * คำนวณคะแนนความเหมาะสมกับตำแหน่งงาน
 * แสดงผลลัพธ์พร้อมเหตุผลประกอบการตัดสินใจ
