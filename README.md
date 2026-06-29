@@ -58,6 +58,19 @@
 
 ---
 
+## 🖥️ ความต้องการของระบบ (Hardware Requirements)
+
+สำหรับการรันโมเดล **Typhoon AI** (Typhoon 2.5 & Typhoon OCR):
+
+| อุปกรณ์ | สเปคขั้นต่ำ (Minimum) | สเปคแนะนำ (Recommended) |
+| ------- | ---------------------- | ------------------------ |
+| **CPU** | Intel Core i5 (Gen 10+) / Ryzen 5 (3000+) | Intel Core i7 (Gen 12+) / Ryzen 7 (5000+) |
+| **RAM** | 16 GB | 32 GB |
+| **GPU** | NVIDIA GTX 1660 Ti / RTX 2060 (VRAM 6 GB) | NVIDIA RTX 3060 (VRAM 12 GB+) ขึ้นไป |
+| **Storage** | SSD พื้นที่ว่าง 20 GB | NVMe M.2 SSD พื้นที่ว่าง 30 GB |
+
+---
+
 ## ขั้นตอนการใช้งาน
 
 ### 1. เริ่มเชื่อมต่อฐานข้อมูลโดย PostgreSQL ต่อเข้ากับ Docker Compose
