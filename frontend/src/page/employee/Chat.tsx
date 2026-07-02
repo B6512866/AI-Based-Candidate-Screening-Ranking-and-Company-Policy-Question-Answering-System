@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { Send, Bot, Wifi, WifiOff } from "lucide-react";
+import { getallknowledge } from "../../services/knowledgeService";
 
-const TYPHOON_API = "http://localhost:8000";
+const TYPHOON_API = import.meta.env.VITE_TYPHOON_API_URL || "http://localhost:8000";
 
 interface Message {
     id: number;
@@ -67,12 +68,11 @@ export default function EmployeeChat() {
         setMessages(prev => [...prev, { id: botId, from: "bot", text: "", streaming: true }]);
 
         try {
-            // ดึงข้อมูลนโยบายและเอกสารทั้งหมดใน knowledge_bases จาก Database
+            // ดึงข้อมูลนโยบายและเอกสารทั้งหมดใน knowledge_bases จาก Database ผ่าน Service
             let knowledgeContext = "";
             try {
-                const kRes = await fetch("http://localhost:8080/api/knowledge");
-                const kData = await kRes.json();
-                if (kRes.ok && Array.isArray(kData.data) && kData.data.length > 0) {
+                const kData = await getallknowledge();
+                if (kData && Array.isArray(kData.data) && kData.data.length > 0) {
                     knowledgeContext = "\n\n=== คลังความรู้และนโยบายบริษัททั้งหมด (ดึงจาก Database) ===\n" +
                         kData.data
                             .map((d: { filename: string; content: string }, index: number) => `[เอกสารที่ ${index + 1}: ${d.filename}]\n${d.content.trim()}`)
@@ -166,22 +166,20 @@ ${knowledgeContext}
                             className={`flex gap-3 ${msg.from === "user" ? "flex-row-reverse ml-auto" : ""} max-w-[80%] ${msg.from === "user" ? "ml-auto" : ""}`}
                         >
                             {/* Avatar */}
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1 ${
-                                msg.from === "bot"
-                                    ? "bg-indigo-100"
-                                    : "bg-gradient-to-tr from-emerald-400 to-teal-500 text-white text-xs font-bold"
-                            }`}>
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1 ${msg.from === "bot"
+                                ? "bg-indigo-100"
+                                : "bg-gradient-to-tr from-emerald-400 to-teal-500 text-white text-xs font-bold"
+                                }`}>
                                 {msg.from === "bot"
-                                    ? <Bot className="w-4 h-4 text-[#6C63FF]" />
+                                    ? <Bot className="w-4 h-4 text-[#4169E1]" />
                                     : (firstName?.[0] || "E")}
                             </div>
 
                             {/* Bubble */}
-                            <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-                                msg.from === "bot"
-                                    ? "bg-white border border-slate-100 shadow-sm text-slate-700 rounded-tl-none"
-                                    : "bg-[#6C63FF] text-white rounded-tr-none"
-                            }`}>
+                            <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${msg.from === "bot"
+                                ? "bg-white border border-slate-100 shadow-sm text-slate-700 rounded-tl-none"
+                                : "bg-[#4169E1] text-white rounded-tr-none"
+                                }`}>
                                 {msg.text || (
                                     <span className="flex items-center gap-2 text-slate-400 text-xs">
                                         <span className="flex gap-1">
@@ -211,12 +209,12 @@ ${knowledgeContext}
                         onKeyDown={e => e.key === "Enter" && !e.shiftKey && handleSend()}
                         placeholder="ถามคำถามเรื่องนโยบายบริษัทที่นี่..."
                         disabled={loading}
-                        className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 focus:outline-none focus:ring-2 focus:ring-[#6C63FF]/30 focus:bg-white transition-all text-sm disabled:opacity-50"
+                        className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/30 focus:bg-white transition-all text-sm disabled:opacity-50"
                     />
                     <button
                         onClick={handleSend}
                         disabled={loading || !input.trim()}
-                        className="bg-[#6C63FF] hover:bg-[#5a52e0] text-white px-5 py-3 rounded-xl shadow shadow-indigo-200 transition-all hover:scale-105 active:scale-95 disabled:opacity-40 disabled:scale-100"
+                        className="bg-[#4169E1] hover:bg-[#5a52e0] text-white px-5 py-3 rounded-xl shadow shadow-indigo-200 transition-all hover:scale-105 active:scale-95 disabled:opacity-40 disabled:scale-100"
                     >
                         <Send className="w-5 h-5" />
                     </button>

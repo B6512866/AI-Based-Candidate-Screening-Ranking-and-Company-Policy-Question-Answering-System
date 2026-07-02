@@ -13,6 +13,8 @@ type Config struct {
 	DBPass      string
 	DBName      string
 	DBPort      string
+	JWTSecret   string
+	FrontendURL string
 }
 
 var Env Config
@@ -27,6 +29,8 @@ func LoadEnv() {
 		DBPass:      getEnv("DB_PASSWORD", "postgres"),
 		DBName:      getEnv("DB_NAME", "hr_system"),
 		DBPort:      getEnv("DB_PORT", "5432"),
+		JWTSecret:   getEnv("JWT_SECRET", "mysecretkey123"),
+		FrontendURL: getEnv("FRONTEND_URL", "http://localhost:5173"),
 	}
 }
 

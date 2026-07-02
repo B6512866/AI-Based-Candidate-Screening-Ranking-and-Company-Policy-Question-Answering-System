@@ -42,7 +42,7 @@ export default function CandidatesPage() {
                 <div className="flex items-center gap-3">
                     <Link
                         to="/hr/screening"
-                        className="flex items-center gap-2 bg-[#6C63FF] hover:bg-[#5a52e0] text-white font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm shadow-indigo-200 text-sm"
+                        className="flex items-center gap-2 bg-[#4169E1] hover:bg-[#5a52e0] text-white font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm shadow-indigo-200 text-sm"
                     >
                         <Sparkles className="w-4 h-4" />
                         คัดกรอง Resume ด้วย AI
@@ -58,11 +58,10 @@ export default function CandidatesPage() {
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
-                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                                activeTab === tab
-                                    ? "bg-indigo-50 text-[#6C63FF]"
-                                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
-                            }`}
+                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${activeTab === tab
+                                ? "bg-indigo-50 text-[#4169E1]"
+                                : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                                }`}
                         >
                             {tab}
                         </button>
@@ -125,20 +124,19 @@ export default function CandidatesPage() {
                                             </div>
                                         </td>
                                         <td className="py-4 px-6">
-                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-                                                c.status === "ผ่านการคัดกรอง AI"
-                                                    ? "bg-emerald-50 text-emerald-600"
-                                                    : c.status === "นัดสัมภาษณ์แล้ว"
-                                                    ? "bg-indigo-50 text-[#6C63FF]"
+                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${c.status === "ผ่านการคัดกรอง AI"
+                                                ? "bg-emerald-50 text-emerald-600"
+                                                : c.status === "นัดสัมภาษณ์แล้ว"
+                                                    ? "bg-indigo-50 text-[#4169E1]"
                                                     : "bg-blue-50 text-blue-600"
-                                            }`}>
+                                                }`}>
                                                 {c.status === "ผ่านการคัดกรอง AI" ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
                                                 {c.status}
                                             </span>
                                         </td>
                                         <td className="py-4 px-6 text-slate-400 text-xs">{c.appliedDate}</td>
                                         <td className="py-4 px-6 text-right">
-                                            <button className="p-2 text-slate-400 hover:text-[#6C63FF] hover:bg-indigo-50 rounded-lg transition-all">
+                                            <button className="p-2 text-slate-400 hover:text-[#4169E1] hover:bg-indigo-50 rounded-lg transition-all">
                                                 <Eye className="w-4 h-4" />
                                             </button>
                                         </td>

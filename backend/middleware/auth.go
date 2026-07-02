@@ -2,9 +2,8 @@ package middleware
 
 import (
 	"net/http"
-	"os"
 	"strings"
-
+	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/config"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -21,7 +20,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 
 		token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
-			return []byte(os.Getenv("JWT_SECRET")), nil
+			return []byte(config.Env.JWTSecret), nil
 		})
 
 		if err != nil || !token.Valid {

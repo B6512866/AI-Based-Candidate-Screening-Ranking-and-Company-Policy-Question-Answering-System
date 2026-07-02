@@ -40,16 +40,14 @@ export default function HRLayout() {
                                 <Link
                                     key={item.id}
                                     to={item.path}
-                                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all group ${
-                                        isActive
-                                            ? "bg-indigo-50 text-[#6C63FF]"
-                                            : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
-                                    }`}
+                                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all group ${isActive
+                                        ? "bg-indigo-50 text-[#4169E1]"
+                                        : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                                        }`}
                                 >
                                     <Icon
-                                        className={`w-[18px] h-[18px] flex-shrink-0 ${
-                                            isActive ? "text-[#6C63FF]" : "text-slate-400 group-hover:text-slate-600"
-                                        }`}
+                                        className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? "text-[#4169E1]" : "text-slate-400 group-hover:text-slate-600"
+                                            }`}
                                     />
                                     <span>{item.label}</span>
                                 </Link>
@@ -62,7 +60,7 @@ export default function HRLayout() {
                 <div className="mt-auto px-6 pb-6 border-t border-slate-100 pt-4">
                     <div className="flex items-center gap-2 px-3 py-2 mb-2">
                         <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center">
-                            <User className="w-3.5 h-3.5 text-[#6C63FF]" />
+                            <User className="w-3.5 h-3.5 text-[#4169E1]" />
                         </div>
                         <span className="text-xs font-bold text-slate-400 tracking-wide">HR Access</span>
                     </div>
@@ -95,7 +93,7 @@ export default function HRLayout() {
                                 <p className="text-slate-800 text-sm font-bold leading-tight">นาย{fullName}</p>
                                 <p className="text-slate-400 text-[11px]">ทรัพยากรบุคคล</p>
                             </div>
-                            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#6C63FF] to-[#4834d4] flex items-center justify-center text-white text-sm font-bold shadow-sm">
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#4169E1] to-[#4834d4] flex items-center justify-center text-white text-sm font-bold shadow-sm">
                                 {initials}
                             </div>
                         </div>

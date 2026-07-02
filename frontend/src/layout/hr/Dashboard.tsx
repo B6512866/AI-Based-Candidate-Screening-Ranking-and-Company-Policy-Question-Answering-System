@@ -50,7 +50,7 @@ export default function HRDashboard() {
             changePositive: true,
             icon: Briefcase,
             iconBg: "bg-indigo-50",
-            iconColor: "text-[#6C63FF]",
+            iconColor: "text-[#4169E1]",
         },
         {
             label: "ผู้สมัคร รอพิจารณา",
@@ -110,7 +110,7 @@ export default function HRDashboard() {
                     </h1>
                     <p className="text-slate-400 text-sm mt-1">ระบบจัดสรรทรัพยากรบุคคลอัจฉริยะ (HireAI Management System)</p>
                 </div>
-                <div className="hidden md:flex w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#6C63FF] to-[#4834d4] items-center justify-center shadow-md shadow-indigo-200">
+                <div className="hidden md:flex w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#4169E1] to-[#4834d4] items-center justify-center shadow-md shadow-indigo-200">
                     <Clock className="w-7 h-7 text-white" />
                 </div>
             </div>
@@ -128,7 +128,7 @@ export default function HRDashboard() {
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
                     <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                         <h3 className="text-slate-800 font-bold text-base">ตำแหน่งงานที่เปิดรับ</h3>
-                        <Link to="/hr/positions" className="text-xs font-bold text-[#6C63FF] hover:underline flex items-center gap-1">
+                        <Link to="/hr/positions" className="text-xs font-bold text-[#4169E1] hover:underline flex items-center gap-1">
                             ดูทั้งหมด <ArrowUpRight className="w-3.5 h-3.5" />
                         </Link>
                     </div>
@@ -140,7 +140,7 @@ export default function HRDashboard() {
                                     <p className="text-slate-400 text-xs mt-0.5">{pos.department}</p>
                                 </div>
                                 <div className="text-right">
-                                    <span className="inline-block px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-[#6C63FF]">
+                                    <span className="inline-block px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-[#4169E1]">
                                         {pos.applicants} ผู้สมัคร
                                     </span>
                                 </div>
@@ -153,7 +153,7 @@ export default function HRDashboard() {
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
                     <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                         <h3 className="text-slate-800 font-bold text-base">นัดหมายสัมภาษณ์ล่าสุด</h3>
-                        <Link to="/hr/interviews" className="text-xs font-bold text-[#6C63FF] hover:underline flex items-center gap-1">
+                        <Link to="/hr/interviews" className="text-xs font-bold text-[#4169E1] hover:underline flex items-center gap-1">
                             ดูทั้งหมด <ArrowUpRight className="w-3.5 h-3.5" />
                         </Link>
                     </div>
@@ -183,7 +183,7 @@ export default function HRDashboard() {
                         <h3 className="text-slate-800 font-bold text-base">ผู้สมัครล่าสุด</h3>
                         <p className="text-slate-400 text-xs mt-0.5">รายชื่อผู้สมัครที่ผ่านการคัดกรองเบื้องต้น</p>
                     </div>
-                    <Link to="/hr/candidates" className="text-xs font-bold text-[#6C63FF] hover:underline flex items-center gap-1">
+                    <Link to="/hr/candidates" className="text-xs font-bold text-[#4169E1] hover:underline flex items-center gap-1">
                         ดูผู้สมัครทั้งหมด <ArrowUpRight className="w-3.5 h-3.5" />
                     </Link>
                 </div>
@@ -206,8 +206,8 @@ export default function HRDashboard() {
                                     <td className="py-4 px-6">
                                         <div className="flex items-center gap-2">
                                             <div className="w-16 bg-slate-100 rounded-full h-2 overflow-hidden">
-                                                <div 
-                                                    className={`h-full rounded-full ${c.score >= 85 ? "bg-emerald-500" : "bg-blue-500"}`} 
+                                                <div
+                                                    className={`h-full rounded-full ${c.score >= 85 ? "bg-emerald-500" : "bg-blue-500"}`}
                                                     style={{ width: `${c.score}%` }}
                                                 />
                                             </div>
@@ -215,13 +215,12 @@ export default function HRDashboard() {
                                         </div>
                                     </td>
                                     <td className="py-4 px-6">
-                                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-                                            c.status.includes("ผ่าน")
-                                                ? "bg-emerald-50 text-emerald-600"
-                                                : c.status.includes("สัมภาษณ์")
+                                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${c.status.includes("ผ่าน")
+                                            ? "bg-emerald-50 text-emerald-600"
+                                            : c.status.includes("สัมภาษณ์")
                                                 ? "bg-amber-50 text-amber-600"
                                                 : "bg-blue-50 text-blue-600"
-                                        }`}>
+                                            }`}>
                                             {c.status.includes("ผ่าน") ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
                                             {c.status}
                                         </span>

@@ -29,7 +29,7 @@ export default function InterviewsPage() {
                     <h1 className="text-2xl font-black text-slate-800">นัดหมายสัมภาษณ์</h1>
                     <p className="text-slate-400 text-sm mt-1">ตารางนัดหมายสัมภาษณ์ผู้สมัครงาน</p>
                 </div>
-                <button className="flex items-center gap-2 bg-[#6C63FF] hover:bg-[#5a52e0] text-white font-bold px-5 py-2.5 rounded-xl transition-all shadow-md shadow-indigo-200 active:scale-95 text-sm">
+                <button className="flex items-center gap-2 bg-[#4169E1] hover:bg-[#5a52e0] text-white font-bold px-5 py-2.5 rounded-xl transition-all shadow-md shadow-indigo-200 active:scale-95 text-sm">
                     <Plus className="w-4 h-4" />
                     นัดหมายใหม่
                 </button>
@@ -41,9 +41,8 @@ export default function InterviewsPage() {
                     <div key={item.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:shadow-md transition-all">
                         <div className="space-y-2">
                             <div className="flex items-center gap-3">
-                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-                                    item.status === "ยืนยันแล้ว" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
-                                }`}>
+                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${item.status === "ยืนยันแล้ว" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
+                                    }`}>
                                     {item.status === "ยืนยันแล้ว" ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
                                     {item.status}
                                 </span>
@@ -65,7 +64,7 @@ export default function InterviewsPage() {
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
-                                <button className="bg-indigo-50 hover:bg-indigo-100 text-[#6C63FF] font-bold px-4 py-2 rounded-xl text-xs transition-all">
+                                <button className="bg-indigo-50 hover:bg-indigo-100 text-[#4169E1] font-bold px-4 py-2 rounded-xl text-xs transition-all">
                                     รายละเอียด
                                 </button>
                             </div>

@@ -43,6 +43,7 @@ func main() {
 		// ลงทะเบียน Routes ต่างๆ
 		routes.AuthRoutes(api, config.DB)
 		routes.KnowledgeRoutes(api, config.DB)
+		routes.JobPositionRoutes(api, config.DB)
 	}
 
 	fmt.Println("🚀 Server running on port:", config.Env.BackendPort)

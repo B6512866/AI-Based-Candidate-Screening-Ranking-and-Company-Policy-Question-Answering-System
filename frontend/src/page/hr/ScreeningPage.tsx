@@ -1,7 +1,8 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Upload, FileText, Briefcase, Sparkles, X, ChevronDown, ChevronUp, Wifi, WifiOff } from "lucide-react";
+import { getalljobs } from "../../services/jobPositionService";
 
-const TYPHOON_API = "http://localhost:8000";
+const TYPHOON_API = import.meta.env.VITE_TYPHOON_API_URL || "http://localhost:8000";
 
 const SYSTEM_PROMPT = `คุณคือผู้เชี่ยวชาญด้าน HR วิเคราะห์ Resume ภาษาไทย กรุณาวิเคราะห์อย่างละเอียดครอบคลุม:
 
@@ -9,7 +10,7 @@ const SYSTEM_PROMPT = `คุณคือผู้เชี่ยวชาญด
 2. **คะแนนรวม (0-100)** — พร้อมเหตุผล
 3. **จุดเด่น** — ทักษะและประสบการณ์ที่โดดเด่น  
 4. **จุดที่ควรพัฒนา** — สิ่งที่ยังขาดหรือควรปรับปรุง
-5. **ความเหมาะสมกับตำแหน่ง** — ถ้ามี JD ให้เทียบกับ JD
+5. **ความเหมาะสมกับตำแหน่ง** — ถ้ามี JD ให้เทียบกับ JD และเปรียบเทียบกับเกณฑ์การคัดเลือก (Criteria)
 6. **ข้อแนะนำ** — สำหรับ HR ในการตัดสินใจ
 
 ตอบเป็นภาษาไทย ใช้ headers และ bullet points ให้ชัดเจน`;
@@ -23,6 +24,9 @@ interface AnalysisResult {
 export default function ScreeningPage() {
     const [resumeText, setResumeText] = useState("");
     const [jobDesc, setJobDesc] = useState("");
+    const [jobCriteria, setJobCriteria] = useState("");
+    const [jobs, setJobs] = useState<any[]>([]);
+    const [selectedJobId, setSelectedJobId] = useState<string>("");
     const [result, setResult] = useState<AnalysisResult | null>(null);
     const [loading, setLoading] = useState(false);
     const [jdOpen, setJdOpen] = useState(false);
@@ -40,8 +44,36 @@ export default function ScreeningPage() {
         }
     };
 
-    // Run on mount
-    useState(() => { checkOnline(); });
+    // Load jobs & check online status on mount
+    useEffect(() => {
+        checkOnline();
+        const loadJobs = async () => {
+            try {
+                const data = await getalljobs();
+                if (data && data.data) {
+                    setJobs(data.data);
+                }
+            } catch {
+                // ignore
+            }
+        };
+        loadJobs();
+    }, []);
+
+    const handleJobChange = (jobId: string) => {
+        setSelectedJobId(jobId);
+        if (jobId === "custom") {
+            setJobDesc("");
+            setJobCriteria("");
+        } else {
+            const job = jobs.find(j => j.ID.toString() === jobId);
+            if (job) {
+                setJobDesc(job.description);
+                setJobCriteria(job.criteria);
+                setJdOpen(true); // Auto-open collapsible
+            }
+        }
+    };
 
     // ── Handle file upload (txt) ─────────────────────────────────────
     const handleFile = (file: File) => {
@@ -62,9 +94,13 @@ export default function ScreeningPage() {
         if (!resumeText.trim()) return;
         setLoading(true);
 
-        const userContent = jobDesc.trim()
-            ? `วิเคราะห์ Resume นี้อย่างละเอียด:\n\n${resumeText}\n\n===ตำแหน่งงาน / JD===\n${jobDesc}`
-            : `วิเคราะห์ Resume นี้อย่างละเอียด:\n\n${resumeText}`;
+        let userContent = `วิเคราะห์ Resume นี้อย่างละเอียด:\n\n${resumeText}`;
+        if (jobDesc.trim()) {
+            userContent += `\n\n=== ตำแหน่งงาน / JD ===\n${jobDesc}`;
+        }
+        if (jobCriteria.trim()) {
+            userContent += `\n\n=== เกณฑ์ในการคัดเลือก (Criteria) ===\n${jobCriteria}`;
+        }
 
         setResult({ resumeName: "Resume", content: "", streaming: true });
 
@@ -112,19 +148,18 @@ export default function ScreeningPage() {
                 {/* AI Status */}
                 <button
                     onClick={checkOnline}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${
-                        online === true
-                            ? "bg-emerald-50 text-emerald-600 border-emerald-100"
-                            : online === false
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${online === true
+                        ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+                        : online === false
                             ? "bg-red-50 text-red-500 border-red-100"
                             : "bg-slate-50 text-slate-400 border-slate-100"
-                    }`}
+                        }`}
                 >
                     {online === true
                         ? <><Wifi className="w-4 h-4" /> AI พร้อมใช้</>
                         : online === false
-                        ? <><WifiOff className="w-4 h-4" /> AI ออฟไลน์</>
-                        : <><Sparkles className="w-4 h-4" /> ตรวจสอบ...</>}
+                            ? <><WifiOff className="w-4 h-4" /> AI ออฟไลน์</>
+                            : <><Sparkles className="w-4 h-4" /> ตรวจสอบ...</>}
                 </button>
             </div>
 
@@ -135,12 +170,12 @@ export default function ScreeningPage() {
                     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                                <FileText className="w-4 h-4 text-[#6C63FF]" />
+                                <FileText className="w-4 h-4 text-[#4169E1]" />
                                 <h3 className="font-bold text-slate-700 text-sm">ข้อความ Resume</h3>
                             </div>
                             <button
                                 onClick={() => fileInputRef.current?.click()}
-                                className="flex items-center gap-1.5 text-xs text-[#6C63FF] font-semibold hover:underline"
+                                className="flex items-center gap-1.5 text-xs text-[#4169E1] font-semibold hover:underline"
                             >
                                 <Upload className="w-3.5 h-3.5" />
                                 อัปโหลด .txt
@@ -165,9 +200,26 @@ export default function ScreeningPage() {
                                 onChange={e => setResumeText(e.target.value)}
                                 placeholder="วางข้อความ Resume ที่นี่ หรือลาก .txt มาวาง..."
                                 rows={14}
-                                className="w-full bg-slate-50 rounded-xl px-4 py-3 text-sm text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#6C63FF]/20 resize-none leading-relaxed"
+                                className="w-full bg-slate-50 rounded-xl px-4 py-3 text-sm text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20 resize-none leading-relaxed"
                             />
                         </div>
+                    </div>
+
+                    {/* Job Position Dropdown */}
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3">
+                        <label className="block text-slate-700 font-bold text-sm">
+                            เลือกตำแหน่งงานที่รับสมัคร
+                        </label>
+                        <select
+                            value={selectedJobId}
+                            onChange={e => handleJobChange(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20 font-sans"
+                        >
+                            <option value="custom">-- กำหนดลักษณะงานและเกณฑ์คัดสรรเอง --</option>
+                            {jobs.map(job => (
+                                <option key={job.ID} value={job.ID.toString()}>{job.title}</option>
+                            ))}
+                        </select>
                     </div>
 
                     {/* JD collapsible */}
@@ -178,20 +230,37 @@ export default function ScreeningPage() {
                         >
                             <div className="flex items-center gap-2">
                                 <Briefcase className="w-4 h-4 text-slate-400" />
-                                <span className="font-bold text-slate-700 text-sm">ตำแหน่งงาน / JD</span>
+                                <span className="font-bold text-slate-700 text-sm">ลักษณะงาน / เกณฑ์คัดเลือก</span>
                                 <span className="text-xs text-slate-400">(ไม่บังคับ)</span>
                             </div>
                             {jdOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                         </button>
                         {jdOpen && (
-                            <div className="px-4 pb-4">
-                                <textarea
-                                    value={jobDesc}
-                                    onChange={e => setJobDesc(e.target.value)}
-                                    placeholder="วาง Job Description เพื่อให้ AI เทียบความเหมาะสม..."
-                                    rows={6}
-                                    className="w-full bg-slate-50 rounded-xl px-4 py-3 text-sm text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#6C63FF]/20 resize-none leading-relaxed"
-                                />
+                            <div className="px-5 pb-5 space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">
+                                        ลักษณะงานที่ทำ (Job Description):
+                                    </label>
+                                    <textarea
+                                        value={jobDesc}
+                                        onChange={e => setJobDesc(e.target.value)}
+                                        placeholder="วาง Job Description เพื่อให้ AI เทียบความเหมาะสม..."
+                                        rows={5}
+                                        className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20 resize-none leading-relaxed font-sans"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">
+                                        เกณฑ์ในการคัดเลือก (Criteria):
+                                    </label>
+                                    <textarea
+                                        value={jobCriteria}
+                                        onChange={e => setJobCriteria(e.target.value)}
+                                        placeholder="วางเกณฑ์คัดสรรผู้สมัครเพื่อใช้ในการประเมินและให้คะแนน..."
+                                        rows={5}
+                                        className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20 resize-none leading-relaxed font-sans"
+                                    />
+                                </div>
                             </div>
                         )}
                     </div>
@@ -200,7 +269,7 @@ export default function ScreeningPage() {
                     <button
                         onClick={analyze}
                         disabled={loading || !resumeText.trim()}
-                        className="w-full flex items-center justify-center gap-2 bg-[#6C63FF] hover:bg-[#5a52e0] text-white font-bold py-4 rounded-2xl shadow-md shadow-indigo-200 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:scale-100 disabled:cursor-not-allowed"
+                        className="w-full flex items-center justify-center gap-2 bg-[#4169E1] hover:bg-[#5a52e0] text-white font-bold py-4 rounded-2xl shadow-md shadow-indigo-200 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:scale-100 disabled:cursor-not-allowed"
                     >
                         {loading ? (
                             <>
@@ -223,7 +292,7 @@ export default function ScreeningPage() {
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col min-h-[500px]">
                     <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                            <Sparkles className="w-4 h-4 text-[#6C63FF]" />
+                            <Sparkles className="w-4 h-4 text-[#4169E1]" />
                             <h3 className="font-bold text-slate-700 text-sm">ผลการวิเคราะห์</h3>
                         </div>
                         {result && !result.streaming && (
@@ -240,7 +309,7 @@ export default function ScreeningPage() {
                         {!result ? (
                             <div className="h-full flex flex-col items-center justify-center gap-3 text-center">
                                 <div className="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center">
-                                    <Sparkles className="w-7 h-7 text-[#6C63FF]" />
+                                    <Sparkles className="w-7 h-7 text-[#4169E1]" />
                                 </div>
                                 <p className="text-slate-500 font-semibold text-sm">
                                     วาง Resume แล้วกด "วิเคราะห์"
@@ -250,7 +319,7 @@ export default function ScreeningPage() {
                         ) : (
                             <div className="space-y-2">
                                 {result.streaming && (
-                                    <div className="flex items-center gap-2 mb-4 text-xs text-[#6C63FF] font-semibold">
+                                    <div className="flex items-center gap-2 mb-4 text-xs text-[#4169E1] font-semibold">
                                         <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
                                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -261,7 +330,7 @@ export default function ScreeningPage() {
                                 <pre className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-sans">
                                     {result.content}
                                     {result.streaming && (
-                                        <span className="inline-block w-0.5 h-4 bg-[#6C63FF] ml-1 animate-pulse align-middle" />
+                                        <span className="inline-block w-0.5 h-4 bg-[#4169E1] ml-1 animate-pulse align-middle" />
                                     )}
                                 </pre>
                             </div>

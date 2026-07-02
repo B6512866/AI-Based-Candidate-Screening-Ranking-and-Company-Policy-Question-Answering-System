@@ -7,20 +7,20 @@ export function Navbar() {
     return (
         <nav className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-xl border-b border-slate-200/50 flex justify-between items-center px-6 md:px-12 py-4">
             <div className="flex items-center gap-2">
-                <div className="w-9 h-9 bg-gradient-to-tr from-[#6C63FF] to-[#4834d4] rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
+                <div className="w-9 h-9 bg-gradient-to-tr from-[#4169E1] to-[#4834d4] rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
                     <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                 </div>
-                <div className="text-slate-900 font-bold text-2xl tracking-tight font-sans">Hire<span className="text-[#6C63FF]">AI</span></div>
+                <div className="text-slate-900 font-bold text-2xl tracking-tight font-sans">Hire<span className="text-[#4169E1]">AI</span></div>
             </div>
             <div className="hidden md:flex gap-10 items-center">
-                <a href="#hero" className="text-slate-600 hover:text-[#6C63FF] text-sm font-semibold transition-colors font-sans">หน้าแรก</a>
-                <a href="#solution" className="text-slate-600 hover:text-[#6C63FF] text-sm font-semibold transition-colors font-sans">ปัญหา</a>
-                <a href="#features" className="text-slate-600 hover:text-[#6C63FF] text-sm font-semibold transition-colors font-sans">ฟีเจอร์</a>
-                <a href="#how-it-works" className="text-slate-600 hover:text-[#6C63FF] text-sm font-semibold transition-colors font-sans">วิธีการทำงาน</a>
+                <a href="#hero" className="text-slate-600 hover:text-[#4169E1] text-sm font-semibold transition-colors font-sans">หน้าแรก</a>
+                <a href="#solution" className="text-slate-600 hover:text-[#4169E1] text-sm font-semibold transition-colors font-sans">ปัญหา</a>
+                <a href="#features" className="text-slate-600 hover:text-[#4169E1] text-sm font-semibold transition-colors font-sans">ฟีเจอร์</a>
+                <a href="#how-it-works" className="text-slate-600 hover:text-[#4169E1] text-sm font-semibold transition-colors font-sans">วิธีการทำงาน</a>
             </div>
             <button
                 onClick={() => navigate("/login")}
-                className="bg-[#6C63FF] hover:bg-[#5a52e0] text-white font-bold px-6 py-2.5 rounded-full text-sm shadow-xl shadow-indigo-100 transition-all active:scale-95 font-sans"
+                className="bg-[#4169E1] hover:bg-[#5a52e0] text-white font-bold px-6 py-2.5 rounded-full text-sm shadow-xl shadow-indigo-100 transition-all active:scale-95 font-sans"
             >
                 เข้าสู่ระบบ
             </button>
@@ -43,17 +43,17 @@ export function Hero() {
             </div>
 
             <div className="animate-fadeIn max-w-5xl mx-auto pt-20">
-                <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50/80 backdrop-blur-md text-[#6C63FF] rounded-full text-xs font-bold mb-8 border border-indigo-100 font-sans shadow-sm">
+                <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50/80 backdrop-blur-md text-[#4169E1] rounded-full text-xs font-bold mb-8 border border-indigo-100 font-sans shadow-sm">
                     <span className="relative flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-[#6C63FF]"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-[#4169E1]"></span>
                     </span>
                     ระบบคัดกรองบุคลากรอัจฉริยะด้วย AI
                 </div>
 
                 <h1 className="text-4xl md:text-8xl font-black text-slate-900 leading-tight md:leading-tight mb-8 font-sans tracking-tight">
                     สรรหาบุคลากรฉลาดกว่าเดิมด้วย AI — <br />
-                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-[#6C63FF] to-[#3f37c9]">
+                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-[#4169E1] to-[#3f37c9]">
                         คัดกรอง ให้คะแนน และรวดเร็ว
                     </span>
                 </h1>
@@ -64,10 +64,10 @@ export function Hero() {
                 </p>
 
                 <div className="flex flex-col sm:flex-row gap-6 justify-center">
-                    <button className="bg-[#6C63FF] hover:bg-[#5a52e0] text-white font-bold px-12 py-5 rounded-2xl text-xl shadow-2xl shadow-indigo-200 transition-all hover:-translate-y-1 active:scale-95 font-sans">
+                    <button className="bg-[#4169E1] hover:bg-[#5a52e0] text-white font-bold px-12 py-5 rounded-2xl text-xl shadow-2xl shadow-indigo-200 transition-all hover:-translate-y-1 active:scale-95 font-sans">
                         เริ่มใช้งานฟรี
                     </button>
-                    <button className="bg-white/80 backdrop-blur-md hover:bg-white text-slate-900 font-bold px-12 py-5 rounded-2xl text-xl border-2 border-slate-200 transition-all hover:border-[#6C63FF]/20 active:scale-95 font-sans">
+                    <button className="bg-white/80 backdrop-blur-md hover:bg-white text-slate-900 font-bold px-12 py-5 rounded-2xl text-xl border-2 border-slate-200 transition-all hover:border-[#4169E1]/20 active:scale-95 font-sans">
                         ดูตัวอย่าง Demo
                     </button>
                 </div>
@@ -101,12 +101,12 @@ export function ProblemSection() {
             <div className="max-w-6xl mx-auto">
                 <div className="text-center mb-16">
                     <h2 className="text-3xl md:text-5xl font-bold text-slate-900 mb-6 font-sans">ปัญหาของการสรรหาบุคลากรแบบเดิม</h2>
-                    <div className="w-20 h-1.5 bg-[#6C63FF] mx-auto rounded-full"></div>
+                    <div className="w-20 h-1.5 bg-[#4169E1] mx-auto rounded-full"></div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
                     {problems.map((p, i) => (
-                        <div key={i} className="p-10 rounded-3xl bg-[#f8fafc] border border-slate-100 hover:border-[#6C63FF]/30 transition-all hover:shadow-xl group">
+                        <div key={i} className="p-10 rounded-3xl bg-[#f8fafc] border border-slate-100 hover:border-[#4169E1]/30 transition-all hover:shadow-xl group">
                             <div className="text-5xl mb-6 grayscale group-hover:grayscale-0 transition-all">{p.icon}</div>
                             <h3 className="text-xl font-bold text-slate-900 mb-4 font-sans">{p.title}</h3>
                             <p className="text-slate-500 leading-relaxed font-sans">{p.desc}</p>
@@ -220,7 +220,7 @@ export function TechStack() {
 export function CTASection() {
     return (
         <div className="px-6 pb-24">
-            <div className="max-w-6xl mx-auto rounded-[3rem] bg-gradient-to-br from-[#6C63FF] to-[#3f37c9] p-12 md:p-24 text-center text-white shadow-2xl shadow-indigo-200 relative overflow-hidden">
+            <div className="max-w-6xl mx-auto rounded-[3rem] bg-gradient-to-br from-[#4169E1] to-[#3f37c9] p-12 md:p-24 text-center text-white shadow-2xl shadow-indigo-200 relative overflow-hidden">
                 <div className="absolute top-[-20%] right-[-10%] w-96 h-96 bg-white/10 rounded-full blur-[80px]"></div>
 
                 <h2 className="text-4xl md:text-6xl font-black mb-8 relative z-10 font-sans">
@@ -229,7 +229,7 @@ export function CTASection() {
                 <p className="text-indigo-100 text-xl max-w-2xl mx-auto mb-12 relative z-10 font-sans">
                     เข้าร่วมกับทีม HR ยุคใหม่ที่ใช้ HireAI เพื่อสรรหาบุคลากรคุณภาพได้รวดเร็วขึ้นเป็นเท่าตัว
                 </p>
-                <button className="bg-white text-[#6C63FF] font-black px-12 py-5 rounded-2xl text-xl shadow-xl hover:bg-slate-50 transition-all hover:scale-105 active:scale-95 relative z-10 font-sans">
+                <button className="bg-white text-[#4169E1] font-black px-12 py-5 rounded-2xl text-xl shadow-xl hover:bg-slate-50 transition-all hover:scale-105 active:scale-95 relative z-10 font-sans">
                     ลงทะเบียนแจ้งความสนใจ
                 </button>
             </div>

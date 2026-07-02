@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { BookOpen, Upload, Plus, Edit3, Save, Trash2, FileText, CheckCircle2, AlertCircle } from "lucide-react";
+import { getallknowledge, getbyidknowledge, createknowledge, updateknowledge, deleteknowledge } from "../../services/knowledgeService";
 
 interface Document {
     ID: number;
@@ -25,19 +26,16 @@ export default function KnowledgePage() {
     const fetchDocs = async () => {
         setLoading(true);
         try {
-            const res = await fetch("http://localhost:8080/api/knowledge");
-            const data = await res.json();
-            if (res.ok && data.data) {
+            const data = await getallknowledge();
+            if (data && data.data) {
                 setDocs(data.data);
-                if (data.data.length > 0 && !selectedDoc) {
+                if (data.data.length > 0) {
                     selectDoc(data.data[0]);
-                } else if (selectedDoc) {
-                    const updated = data.data.find((d: Document) => d.ID === selectedDoc.ID);
-                    if (updated) selectDoc(updated);
                 }
+                console.log(data);
             }
-        } catch {
-            setMessage({ text: "ไม่สามารถดึงข้อมูลเอกสารจากระบบได้", type: "error" });
+        } catch (err: unknown) {
+            setMessage({ text: "เกิดข้อผิดพลาดในการโหลดข้อมูล", type: "error" });
         } finally {
             setLoading(false);
         }
@@ -66,13 +64,8 @@ export default function KnowledgePage() {
         try {
             if (isCreating) {
                 // POST Create
-                const res = await fetch("http://localhost:8080/api/knowledge", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ filename: editFilename, content: editContent }),
-                });
-                const data = await res.json();
-                if (res.ok) {
+                const data = await createknowledge(editFilename, editContent)
+                if (data) {
                     setMessage({ text: "สร้างเอกสารใหม่สำเร็จ! ข้อมูลถูกเก็บลง Database แล้ว", type: "success" });
                     setIsCreating(false);
                     await fetchDocs();
@@ -82,13 +75,8 @@ export default function KnowledgePage() {
                 }
             } else if (selectedDoc) {
                 // PUT Update
-                const res = await fetch(`http://localhost:8080/api/knowledge/${selectedDoc.ID}`, {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ filename: editFilename, content: editContent }),
-                });
-                const data = await res.json();
-                if (res.ok) {
+                const data = await updateknowledge(selectedDoc.ID, editFilename, editContent);
+                if (data) {
                     setMessage({ text: "บันทึกแก้ไขเอกสารลง Database สำเร็จแล้ว!", type: "success" });
                     await fetchDocs();
                 } else {
@@ -106,8 +94,8 @@ export default function KnowledgePage() {
     const handleDelete = async (id: number) => {
         if (!window.confirm("คุณต้องการลบเอกสารนี้ใช่หรือไม่?")) return;
         try {
-            const res = await fetch(`http://localhost:8080/api/knowledge/${id}`, { method: "DELETE" });
-            if (res.ok) {
+            const data = await deleteknowledge(id);
+            if (data) {
                 setMessage({ text: "ลบเอกสารสำเร็จ", type: "success" });
                 setSelectedDoc(null);
                 fetchDocs();
@@ -152,7 +140,7 @@ export default function KnowledgePage() {
                         onClick={() => fileInputRef.current?.click()}
                         className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 font-bold px-4 py-2.5 rounded-xl border border-slate-200 transition-all shadow-sm text-sm"
                     >
-                        <Upload className="w-4 h-4 text-[#6C63FF]" />
+                        <Upload className="w-4 h-4 text-[#4169E1]" />
                         อัปโหลดไฟล์ .txt
                     </button>
                     <input
@@ -164,7 +152,7 @@ export default function KnowledgePage() {
                     />
                     <button
                         onClick={startNewDoc}
-                        className="flex items-center gap-2 bg-[#6C63FF] hover:bg-[#5a52e0] text-white font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm shadow-indigo-200 text-sm"
+                        className="flex items-center gap-2 bg-[#4169E1] hover:bg-[#5a52e0] text-white font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm shadow-indigo-200 text-sm"
                     >
                         <Plus className="w-4 h-4" />
                         เพิ่มเอกสารใหม่
@@ -174,9 +162,8 @@ export default function KnowledgePage() {
 
             {/* Notification message */}
             {message && (
-                <div className={`p-4 rounded-2xl flex items-center gap-3 font-semibold text-sm animate-fadeIn ${
-                    message.type === "success" ? "bg-emerald-50 border border-emerald-100 text-emerald-700" : "bg-red-50 border border-red-100 text-red-700"
-                }`}>
+                <div className={`p-4 rounded-2xl flex items-center gap-3 font-semibold text-sm animate-fadeIn ${message.type === "success" ? "bg-emerald-50 border border-emerald-100 text-emerald-700" : "bg-red-50 border border-red-100 text-red-700"
+                    }`}>
                     {message.type === "success" ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <AlertCircle className="w-5 h-5 shrink-0" />}
                     {message.text}
                 </div>
@@ -188,10 +175,10 @@ export default function KnowledgePage() {
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col h-[600px]">
                     <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                            <BookOpen className="w-4 h-4 text-[#6C63FF]" />
+                            <BookOpen className="w-4 h-4 text-[#4169E1]" />
                             <h3 className="font-bold text-slate-700 text-sm">รายการเอกสารใน Database</h3>
                         </div>
-                        <span className="text-xs font-bold bg-indigo-50 text-[#6C63FF] px-2.5 py-1 rounded-full">
+                        <span className="text-xs font-bold bg-indigo-50 text-[#4169E1] px-2.5 py-1 rounded-full">
                             {docs.length} รายการ
                         </span>
                     </div>
@@ -208,16 +195,15 @@ export default function KnowledgePage() {
                                     <div
                                         key={doc.ID}
                                         onClick={() => selectDoc(doc)}
-                                        className={`p-3.5 rounded-xl cursor-pointer transition-all flex items-start justify-between gap-3 ${
-                                            isSelected ? "bg-indigo-50/70 border border-indigo-100" : "hover:bg-slate-50"
-                                        }`}
+                                        className={`p-3.5 rounded-xl cursor-pointer transition-all flex items-start justify-between gap-3 ${isSelected ? "bg-indigo-50/70 border border-indigo-100" : "hover:bg-slate-50"
+                                            }`}
                                     >
                                         <div className="flex items-start gap-3 min-w-0">
-                                            <div className={`p-2 rounded-lg shrink-0 ${isSelected ? "bg-[#6C63FF] text-white" : "bg-slate-100 text-slate-500"}`}>
+                                            <div className={`p-2 rounded-lg shrink-0 ${isSelected ? "bg-[#4169E1] text-white" : "bg-slate-100 text-slate-500"}`}>
                                                 <FileText className="w-4 h-4" />
                                             </div>
                                             <div className="min-w-0">
-                                                <p className={`font-bold text-sm truncate ${isSelected ? "text-[#6C63FF]" : "text-slate-800"}`}>
+                                                <p className={`font-bold text-sm truncate ${isSelected ? "text-[#4169E1]" : "text-slate-800"}`}>
                                                     {doc.filename}
                                                 </p>
                                                 <p className="text-xs text-slate-400 mt-1 line-clamp-1">
@@ -243,7 +229,7 @@ export default function KnowledgePage() {
                     {!selectedDoc && !isCreating ? (
                         <div className="h-full flex flex-col items-center justify-center gap-3 text-center p-8">
                             <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center">
-                                <Edit3 className="w-8 h-8 text-[#6C63FF]" />
+                                <Edit3 className="w-8 h-8 text-[#4169E1]" />
                             </div>
                             <p className="text-slate-700 font-bold text-lg">เลือกเอกสารเพื่อดูหรือแก้ไข</p>
                             <p className="text-slate-400 text-sm">คลิกที่รายการเอกสารทางซ้าย หรือกด "เพิ่มเอกสารใหม่"</p>
@@ -253,19 +239,19 @@ export default function KnowledgePage() {
                             {/* Editor Header */}
                             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                                 <div className="flex items-center gap-3 flex-1 mr-4">
-                                    <FileText className="w-5 h-5 text-[#6C63FF] shrink-0" />
+                                    <FileText className="w-5 h-5 text-[#4169E1] shrink-0" />
                                     <input
                                         type="text"
                                         value={editFilename}
                                         onChange={e => setEditFilename(e.target.value)}
                                         placeholder="ชื่อไฟล์เอกสาร (เช่น นโยบายการลา.txt)"
-                                        className="font-bold text-slate-800 bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm w-full outline-none focus:ring-2 focus:ring-[#6C63FF]/30"
+                                        className="font-bold text-slate-800 bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm w-full outline-none focus:ring-2 focus:ring-[#4169E1]/30"
                                     />
                                 </div>
                                 <button
                                     onClick={handleSave}
                                     disabled={saving}
-                                    className="flex items-center gap-2 bg-[#6C63FF] hover:bg-[#5a52e0] text-white font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm shadow-indigo-200 text-sm shrink-0 disabled:opacity-50"
+                                    className="flex items-center gap-2 bg-[#4169E1] hover:bg-[#5a52e0] text-white font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm shadow-indigo-200 text-sm shrink-0 disabled:opacity-50"
                                 >
                                     <Save className="w-4 h-4" />
                                     {saving ? "กำลังบันทึก..." : isCreating ? "บันทึกสร้างใหม่" : "บันทึกแก้ไขใน DB"}
@@ -281,7 +267,7 @@ export default function KnowledgePage() {
                                     value={editContent}
                                     onChange={e => setEditContent(e.target.value)}
                                     placeholder="กรอกเนื้อหานโยบายบริษัทที่นี่..."
-                                    className="flex-1 w-full bg-slate-50/60 border border-slate-100 rounded-xl p-5 text-sm text-slate-800 leading-relaxed font-sans outline-none focus:bg-white focus:ring-2 focus:ring-[#6C63FF]/20 resize-none"
+                                    className="flex-1 w-full bg-slate-50/60 border border-slate-100 rounded-xl p-5 text-sm text-slate-800 leading-relaxed font-sans outline-none focus:bg-white focus:ring-2 focus:ring-[#4169E1]/20 resize-none"
                                 />
                             </div>
                         </div>

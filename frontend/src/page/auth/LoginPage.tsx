@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { login as loginService } from "../../services/authService";
 
 interface LoginModalProps {
   open: boolean;
@@ -25,32 +26,21 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
     setError("");
 
     try {
-      const res = await fetch("http://localhost:8080/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "อีเมลหรือรหัสผ่านไม่ถูกต้อง");
-        return;
-      }
-
-      // ใช้ login จาก context
+      // 1. เรียกใช้งาน Service (ซึ่งใช้พอร์ตตาม .env หรือพอร์ตจริงเวลา Deploy อัตโนมัติ)
+      const data = await loginService({ email, password });
+      // 2. ใช้ login จาก context เพื่อบันทึก Session
       login(data.token, data.role, data.first_name, data.last_name);
-
       onOpenChange(false);
-
-      // Redirect ตาม Role (Backend ส่งมาเป็น "HRManager" หรือ "Employee")
+      // Redirect ตาม Role
       if (data.role === "HRManager") {
         navigate("/hr/dashboard");
       } else {
         navigate("/employee/chat");
       }
-    } catch {
-      setError("ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่ภายหลัง");
+    } catch (err: any) {
+      // ดึงข้อความ Error ที่ส่งมาจาก Backend ผ่าน Axios
+      const errMsg = err.response?.data?.error || "ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่ภายหลัง";
+      setError(errMsg);
     } finally {
       setLoading(false);
     }
@@ -96,7 +86,7 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
                 placeholder="example@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-[#6C63FF]/30 focus:bg-white transition-all font-sans"
+                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/30 focus:bg-white transition-all font-sans"
               />
             </div>
             <div>
@@ -107,7 +97,7 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-[#6C63FF]/30 focus:bg-white transition-all font-sans"
+                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/30 focus:bg-white transition-all font-sans"
               />
             </div>
           </div>
@@ -115,7 +105,7 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
           <button
             onClick={handleLogin}
             disabled={loading}
-            className="w-full bg-[#6C63FF] hover:bg-[#5a52e0] text-white font-black py-5 rounded-[1.5rem] shadow-xl shadow-indigo-100 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 font-sans text-lg flex items-center justify-center gap-3"
+            className="w-full bg-[#4169E1] hover:bg-[#5a52e0] text-white font-black py-5 rounded-[1.5rem] shadow-xl shadow-indigo-100 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 font-sans text-lg flex items-center justify-center gap-3"
           >
             {loading ? (
               <>
@@ -126,7 +116,7 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
           </button>
 
           <p className="mt-8 text-center text-slate-400 text-sm font-sans">
-            มีปัญหาในการเข้าใช้งาน? <a href="#" className="text-[#6C63FF] font-bold hover:underline">ติดต่อผู้ดูแลระบบ</a>
+            มีปัญหาในการเข้าใช้งาน? <a href="#" className="text-[#4169E1] font-bold hover:underline">ติดต่อผู้ดูแลระบบ</a>
           </p>
         </div>
       </div>

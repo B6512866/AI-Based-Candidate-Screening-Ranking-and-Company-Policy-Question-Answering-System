@@ -25,7 +25,7 @@ export const hrMenuItems: MenuItem[] = [
     },
     {
         id: "screening",
-        label: "คัดกรอง Resume",
+        label: "จัดลำดับผู้สมัคร",
         icon: FileSearch,
         path: "/hr/screening",
     },
@@ -37,7 +37,7 @@ export const hrMenuItems: MenuItem[] = [
     },
     {
         id: "positions",
-        label: "ตำแหน่งงาน",
+        label: "ตำแหน่งงานองค์กร",
         icon: Briefcase,
         path: "/hr/positions",
     },
@@ -55,7 +55,7 @@ export const hrMenuItems: MenuItem[] = [
     },
     {
         id: "cases",
-        label: "ทะเบียนของกรณี",
+        label: "กฎระเบียบองค์กร",
         icon: FolderOpen,
         path: "/hr/cases",
     },

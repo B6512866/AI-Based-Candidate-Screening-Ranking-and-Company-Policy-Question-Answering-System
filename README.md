@@ -46,7 +46,7 @@
 | สิทธิ์การใช้งาน (Role) | อีเมล (Email) | รหัสผ่าน (Password) | หน้าเริ่มต้น |
 | ---------------------- | ------------- | -------------------- | ------------ |
 | **HR Manager**         | `hr@gmail.com` | `password123`        | `/hr/dashboard` |
-| **Employee (พนักงาน)**  | `emp@gmail.com`| `password123`        | `/employee/chat` |
+| **Employee (พนักงาน)**  | `test@gmail.com`| `password123`        | `/employee/chat` |
 ---
 
 ## สิ่งที่ต้องติดตั้งก่อนเริ่ม

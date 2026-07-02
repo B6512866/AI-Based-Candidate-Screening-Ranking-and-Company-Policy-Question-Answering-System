@@ -29,7 +29,7 @@ export default function CasesPage() {
                     <h1 className="text-2xl font-black text-slate-800">ทะเบียนของกรณี</h1>
                     <p className="text-slate-400 text-sm mt-1">บันทึก ติดตาม และจัดการกรณีข้อร้องเรียนและคำขอจากพนักงาน</p>
                 </div>
-                <button className="flex items-center gap-2 bg-[#6C63FF] hover:bg-[#5a52e0] text-white font-bold px-5 py-2.5 rounded-xl transition-all shadow-md shadow-indigo-200 active:scale-95 text-sm">
+                <button className="flex items-center gap-2 bg-[#4169E1] hover:bg-[#5a52e0] text-white font-bold px-5 py-2.5 rounded-xl transition-all shadow-md shadow-indigo-200 active:scale-95 text-sm">
                     <Plus className="w-4 h-4" />
                     เพิ่มกรณีใหม่
                 </button>
@@ -41,16 +41,15 @@ export default function CasesPage() {
                     <div key={c.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:shadow-md transition-all">
                         <div className="space-y-2">
                             <div className="flex items-center gap-3">
-                                <span className="text-xs font-mono font-bold text-[#6C63FF] bg-indigo-50 px-2.5 py-1 rounded-md">
+                                <span className="text-xs font-mono font-bold text-[#4169E1] bg-indigo-50 px-2.5 py-1 rounded-md">
                                     {c.caseNumber}
                                 </span>
-                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-                                    c.status === "เสร็จสิ้นแล้ว"
-                                        ? "bg-emerald-50 text-emerald-600"
-                                        : c.status === "กำลังดำเนินการ"
+                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${c.status === "เสร็จสิ้นแล้ว"
+                                    ? "bg-emerald-50 text-emerald-600"
+                                    : c.status === "กำลังดำเนินการ"
                                         ? "bg-blue-50 text-blue-600"
                                         : "bg-amber-50 text-amber-600"
-                                }`}>
+                                    }`}>
                                     {c.status === "เสร็จสิ้นแล้ว" ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
                                     {c.status}
                                 </span>

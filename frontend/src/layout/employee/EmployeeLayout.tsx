@@ -39,16 +39,14 @@ export default function EmployeeLayout() {
                                 <Link
                                     key={item.id}
                                     to={item.path}
-                                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all group ${
-                                        isActive
-                                            ? "bg-indigo-50 text-[#6C63FF]"
-                                            : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
-                                    }`}
+                                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all group ${isActive
+                                        ? "bg-indigo-50 text-[#4169E1]"
+                                        : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                                        }`}
                                 >
                                     <Icon
-                                        className={`w-[18px] h-[18px] flex-shrink-0 ${
-                                            isActive ? "text-[#6C63FF]" : "text-slate-400 group-hover:text-slate-600"
-                                        }`}
+                                        className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? "text-[#4169E1]" : "text-slate-400 group-hover:text-slate-600"
+                                            }`}
                                     />
                                     <span>{item.label}</span>
                                 </Link>
