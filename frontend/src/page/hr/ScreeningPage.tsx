@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { Upload, FileText, Briefcase, Sparkles, X, ChevronDown, ChevronUp, Wifi, WifiOff } from "lucide-react";
 import { getalljobs } from "../../services/jobPositionService";
 
@@ -22,6 +23,7 @@ interface AnalysisResult {
 }
 
 export default function ScreeningPage() {
+    const location = useLocation();
     const [resumeText, setResumeText] = useState("");
     const [jobDesc, setJobDesc] = useState("");
     const [jobCriteria, setJobCriteria] = useState("");
@@ -59,6 +61,25 @@ export default function ScreeningPage() {
         };
         loadJobs();
     }, []);
+
+    // ── Auto-populate from navigation state (when HR clicks screening from PositionsPage) ──
+    useEffect(() => {
+        if (location.state && jobs.length > 0) {
+            const { resumeText: stateResume, jobId: stateJobId } = location.state as { resumeText?: string; jobId?: number };
+            if (stateResume) {
+                setResumeText(stateResume);
+            }
+            if (stateJobId) {
+                const matchedJob = jobs.find(j => j.ID === stateJobId);
+                if (matchedJob) {
+                    setSelectedJobId(stateJobId.toString());
+                    setJobDesc(matchedJob.description || "");
+                    setJobCriteria(matchedJob.criteria || "");
+                    setJdOpen(true);
+                }
+            }
+        }
+    }, [location.state, jobs]);
 
     const handleJobChange = (jobId: string) => {
         setSelectedJobId(jobId);

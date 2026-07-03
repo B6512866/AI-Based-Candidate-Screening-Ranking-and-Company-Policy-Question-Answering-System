@@ -17,7 +17,7 @@ type Candidate struct {
 	Email     string `json:"email" gorm:"unique"`
 	Phone     string `json:"phone"`
 	Skills    string `json:"skills"`
-
+	ResumeText string `json:"resume_text"`
 	// One Candidate can have many Applications
 	Applications []Application `gorm:"foreignKey:CandidateID"`
 }
