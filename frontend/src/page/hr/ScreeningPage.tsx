@@ -31,6 +31,7 @@ export default function ScreeningPage() {
     const [selectedJobId, setSelectedJobId] = useState<string>("");
     const [result, setResult] = useState<AnalysisResult | null>(null);
     const [loading, setLoading] = useState(false);
+    const [ocrLoading, setOcrLoading] = useState(false);
     const [jdOpen, setJdOpen] = useState(false);
     const [online, setOnline] = useState<boolean | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -96,12 +97,47 @@ export default function ScreeningPage() {
         }
     };
 
-    // ── Handle file upload (txt) ─────────────────────────────────────
-    const handleFile = (file: File) => {
+    // ── Handle file upload (txt, pdf, images) ────────────────────────
+    const handleFile = async (file: File) => {
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = e => setResumeText(e.target?.result as string || "");
-        reader.readAsText(file, "utf-8");
+        const fileExt = file.name.toLowerCase();
+        
+        // 1. ถ้าเป็นไฟล์ .txt ดึงข้อความได้ทันที
+        if (fileExt.endsWith(".txt")) {
+            const reader = new FileReader();
+            reader.onload = e => setResumeText(e.target?.result as string || "");
+            reader.readAsText(file, "utf-8");
+        } 
+        // 2. ถ้าเป็นไฟล์ PDF หรือรูปภาพ ส่งไปประมวลผลด้วย OCR ของ AI
+        else if (fileExt.endsWith(".pdf") || file.type.startsWith("image/")) {
+            setOcrLoading(true);
+            setResumeText("กำลังสแกนและแปลงข้อความด้วย OCR... กรุณารอสักครู่");
+            try {
+                const formData = new FormData();
+                formData.append("file", file);
+                
+                const res = await fetch(`${TYPHOON_API}/ocr`, {
+                    method: "POST",
+                    body: formData
+                });
+                
+                if (!res.ok) throw new Error("ไม่สามารถประมวลผลไฟล์นี้ได้");
+                
+                const data = await res.json();
+                if (data && data.text) {
+                    setResumeText(data.text);
+                } else {
+                    throw new Error("แกะข้อความจากไฟล์ล้มเหลว");
+                }
+            } catch (err: any) {
+                alert(err.message || "เกิดข้อผิดพลาดในการดึงข้อความ");
+                setResumeText("");
+            } finally {
+                setOcrLoading(false);
+            }
+        } else {
+            alert("รองรับเฉพาะไฟล์ .txt, .pdf หรือรูปภาพของ Resume เท่านั้น");
+        }
     };
 
     const handleDrop = (e: React.DragEvent) => {
@@ -196,15 +232,16 @@ export default function ScreeningPage() {
                             </div>
                             <button
                                 onClick={() => fileInputRef.current?.click()}
-                                className="flex items-center gap-1.5 text-xs text-[#4169E1] font-semibold hover:underline"
+                                disabled={ocrLoading}
+                                className="flex items-center gap-1.5 text-xs text-[#4169E1] font-semibold hover:underline disabled:opacity-50"
                             >
                                 <Upload className="w-3.5 h-3.5" />
-                                อัปโหลด .txt
+                                {ocrLoading ? "กำลังวิเคราะห์ OCR..." : "อัปโหลดไฟล์ (.txt, .pdf, รูปภาพ)"}
                             </button>
                             <input
                                 ref={fileInputRef}
                                 type="file"
-                                accept=".txt"
+                                accept=".txt,.pdf,image/*"
                                 className="hidden"
                                 onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
                             />
@@ -219,9 +256,10 @@ export default function ScreeningPage() {
                             <textarea
                                 value={resumeText}
                                 onChange={e => setResumeText(e.target.value)}
-                                placeholder="วางข้อความ Resume ที่นี่ หรือลาก .txt มาวาง..."
+                                placeholder={ocrLoading ? "กำลังประมวลผลข้อความด้วย OCR..." : "วางข้อความ Resume ที่นี่ หรือลากไฟล์ .txt, .pdf, รูปภาพ มาวาง..."}
+                                disabled={ocrLoading}
                                 rows={14}
-                                className="w-full bg-slate-50 rounded-xl px-4 py-3 text-sm text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20 resize-none leading-relaxed"
+                                className="w-full bg-slate-50 rounded-xl px-4 py-3 text-sm text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20 resize-none leading-relaxed disabled:opacity-60"
                             />
                         </div>
                     </div>
@@ -289,7 +327,7 @@ export default function ScreeningPage() {
                     {/* Analyze button */}
                     <button
                         onClick={analyze}
-                        disabled={loading || !resumeText.trim()}
+                        disabled={loading || ocrLoading || !resumeText.trim() || resumeText.startsWith("กำลังอ่านประมวลผลไฟล์")}
                         className="w-full flex items-center justify-center gap-2 bg-[#4169E1] hover:bg-[#5a52e0] text-white font-bold py-4 rounded-2xl shadow-md shadow-indigo-200 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:scale-100 disabled:cursor-not-allowed"
                     >
                         {loading ? (
