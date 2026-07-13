@@ -6,16 +6,12 @@ import apiClient from "../../services/apiClient";
 
 const TYPHOON_API = import.meta.env.VITE_TYPHOON_API_URL || "http://localhost:8000";
 
-const SYSTEM_PROMPT = `คุณคือผู้เชี่ยวชาญด้าน HR วิเคราะห์ Resume ภาษาไทย กรุณาวิเคราะห์อย่างละเอียดครอบคลุม:
+const SYSTEM_PROMPT = `คุณคือผู้เชี่ยวชาญด้าน HR วิเคราะห์ Resume ภาษาไทย กรุณาวิเคราะห์อย่างกระชับและรวดเร็ว:
 
-1. **ข้อมูลผู้สมัคร** — ชื่อ, ประสบการณ์, การศึกษา, ทักษะ
-2. **คะแนนรวม (0-100)** — พร้อมเหตุผล
-3. **จุดเด่น** — ทักษะและประสบการณ์ที่โดดเด่น  
-4. **จุดที่ควรพัฒนา** — สิ่งที่ยังขาดหรือควรปรับปรุง
-5. **ความเหมาะสมกับตำแหน่ง** — ถ้ามี JD ให้เทียบกับ JD และเปรียบเทียบกับเกณฑ์การคัดเลือก (Criteria)
-6. **ข้อแนะนำ** — สำหรับ HR ในการตัดสินใจ
+1. **ข้อมูลผู้สมัคร** — ชื่อ-สกุล, อายุ (ปีที่จบ), สถานภาพ, ที่อยู่, เบอร์ติดต่อ, อีเมล, โซเชียลมีเดีย
+2. **คะแนนรวม (0-100)** — ให้คะแนนผู้สมัครเป็นตารางสรุปคะแนนตามเกณฑ์ประเมินที่ระบุเท่านั้น พร้อมเหตุผลสั้นๆ
 
-ตอบเป็นภาษาไทย ใช้ headers และ bullet points ให้ชัดเจน`;
+ตอบเป็นภาษาไทย ใช้ headers และ bullet points ให้ชัดเจน ห้ามวิเคราะห์ส่วนอื่นๆ เช่น จุดเด่น จุดที่ควรพัฒนา หรือข้อแนะนำเพิ่มเติมเด็ดขาด`;
 
 interface AnalysisResult {
     resumeName: string;
@@ -47,6 +43,7 @@ export default function ScreeningPage() {
     // GORM integration states
     const [applicants, setApplicants] = useState<any[]>([]);
     const [loadingApplicants, setLoadingApplicants] = useState(false);
+    const [batchAnalyzing, setBatchAnalyzing] = useState(false);
     const [analyzingStates, setAnalyzingStates] = useState<{ [key: number]: "idle" | "ocr" | "ai" | "saving" | "done" | "error" }>({});
     const [openRawText, setOpenRawText] = useState<{ [key: number]: boolean }>({});
     const activeJobIdRef = useRef<string>("");
@@ -58,23 +55,201 @@ export default function ScreeningPage() {
         }
         const lines = text.split("\n");
         let count = 1;
+        const tempItems: string[] = [];
+        
         for (const line of lines) {
-            const m = line.match(/(\d+\..+?)\s*\((\d+)\s*(คะแนน|คะแนนเต็ม)\)/);
-            if (m) {
-                criteriaMap[`cat_${count}`] = { name: m[1].trim(), max: parseInt(m[2]) };
+            const cleanLine = line.trim();
+            if (!cleanLine) continue;
+            
+            const bulletMatch = cleanLine.match(/^(?:[-*+•]|\d+[.)])\s*(.+)$/);
+            const content = bulletMatch ? bulletMatch[1].trim() : cleanLine;
+            
+            const scoreMatch = content.match(/^(.+?)\s*\((\d+)\s*(คะแนน|คะแนนเต็ม)?\)$/);
+            if (scoreMatch) {
+                criteriaMap[`cat_${count}`] = { name: scoreMatch[1].trim(), max: parseInt(scoreMatch[2]) };
                 count++;
+            } else if (content && !content.startsWith("เกณฑ์การ") && !content.startsWith("เกณฑ์คัดสรร")) {
+                tempItems.push(content);
             }
         }
+        
+        if (tempItems.length > 0 && Object.keys(criteriaMap).length === 0) {
+            const distributedMax = Math.floor(100 / tempItems.length);
+            tempItems.forEach((item, idx) => {
+                criteriaMap[`cat_${idx + 1}`] = { name: item, max: distributedMax };
+            });
+        }
+        
         if (Object.keys(criteriaMap).length === 0) {
             return { cat_1: { name: "ความเหมาะสมโดยรวม", max: 100 } };
         }
         return criteriaMap;
     };
 
+    const parseScoresFromMarkdown = (content: string) => {
+        const lines = content.split("\n");
+        const parsedRows: { name: string; score: number; max: number }[] = [];
+        let totalScore = 0;
+        let totalMax = 100;
+        let hasTotalRow = false;
+        let inTable = false;
+        let inScoreSection = false;
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            const cleanLine = trimmed.replace(/\*\*/g, "");
+
+            // Detect score table structure
+            if (trimmed.startsWith("|")) {
+                inScoreSection = true;
+            }
+
+            // Detect header sections to toggle scope
+            const isScoreHeader = cleanLine.includes("คะแนนรวม") || 
+                                  cleanLine.toLowerCase().includes("scores") ||
+                                  cleanLine.includes("เกณฑ์การประเมิน");
+            if (isScoreHeader) {
+                inScoreSection = true;
+                continue;
+            }
+
+            if (inScoreSection && (cleanLine.startsWith("#") || cleanLine.startsWith("---"))) {
+                if (cleanLine.match(/^##?\s+[^2]/) || cleanLine.includes("จุดเด่น") || cleanLine.includes("ข้อมูลผู้สมัคร")) {
+                    inScoreSection = false;
+                }
+            }
+
+            if (!inScoreSection) {
+                continue;
+            }
+
+            if (trimmed.startsWith("|")) {
+                inTable = true;
+                const cols = trimmed.split("|").map(c => c.trim()).filter(c => c !== "");
+                if (cols.length < 2 || cols[0].startsWith("---") || cols[0].includes("เกณฑ์")) {
+                    continue;
+                }
+                const name = cols[0].replace(/\*\*/g, "").trim();
+                const scoreStr = cols[1].replace(/\*\*/g, "").trim();
+                const scoreMatch = scoreStr.match(/^(\d+)(?:\s*[-–—/]\s*(\d+))?/);
+                if (scoreMatch) {
+                    const scoreVal = parseFloat(scoreMatch[1]);
+                    const maxVal = scoreMatch[2] ? parseFloat(scoreMatch[2]) : 100;
+                    const isTotal = name.includes("รวม") || name.includes("Total");
+                    if (isTotal) {
+                        totalScore = scoreVal;
+                        totalMax = maxVal;
+                        hasTotalRow = true;
+                    } else {
+                        parsedRows.push({ name, score: scoreVal, max: maxVal });
+                    }
+                }
+            } else {
+                const listMatch = cleanLine.match(/^(?:[-*+•]|\d+[.)])?\s*(.+?)\s*:\s*(\d+)\s*[-–—/]\s*(\d+)/);
+                if (listMatch) {
+                    const name = listMatch[1].trim();
+                    const scoreVal = parseFloat(listMatch[2]);
+                    const maxVal = parseFloat(listMatch[3]);
+                    const isTotal = name.includes("รวม") || name.includes("Total");
+                    if (isTotal) {
+                        totalScore = scoreVal;
+                        totalMax = maxVal;
+                        hasTotalRow = true;
+                    } else {
+                        parsedRows.push({ name, score: scoreVal, max: maxVal });
+                    }
+                }
+            }
+        }
+
+        let average = 0;
+        if (parsedRows.length > 0) {
+            const sumPercent = parsedRows.reduce((sum, row) => sum + (row.score / row.max) * 100, 0);
+            average = Math.round(sumPercent / parsedRows.length);
+        } else if (hasTotalRow) {
+            average = Math.round((totalScore / totalMax) * 100);
+        }
+
+        return {
+            scores: parsedRows,
+            average,
+            total: hasTotalRow ? totalScore : null,
+            max: hasTotalRow ? totalMax : null
+        };
+    };
+
+    const matchParsedScoresToCriteria = (parsedScores: any[], criteriaMap: any) => {
+        const scores: Record<string, number> = {};
+        const criteriaKeys = Object.keys(criteriaMap);
+
+        if (parsedScores.length === criteriaKeys.length) {
+            parsedScores.forEach((row, idx) => {
+                const key = criteriaKeys[idx];
+                const criteriaMax = criteriaMap[key].max;
+                let finalScore = row.score;
+                if (row.max !== criteriaMax && row.max > 0) {
+                    finalScore = Math.round((row.score / row.max) * criteriaMax);
+                }
+                scores[key] = Math.min(finalScore, criteriaMax);
+            });
+        } else {
+            const nameToKey: Record<string, string> = {};
+            Object.entries(criteriaMap).forEach(([key, info]: any) => {
+                nameToKey[info.name.toLowerCase()] = key;
+            });
+
+            parsedScores.forEach(row => {
+                const nameLower = row.name.toLowerCase();
+                let matchedKey: string | undefined;
+                
+                for (const [n, k] of Object.entries(nameToKey)) {
+                    if (nameLower.includes(n) || n.includes(nameLower)) {
+                        matchedKey = k;
+                        break;
+                    }
+                }
+
+                if (!matchedKey) {
+                    const keywords = ["api", "git", "docker", "database", "sql", "experience", "เรียนรู้", "กระตือรือร้น", "1-3", "ประสบการณ์", "ความปลอดภัย", "security"];
+                    let bestMatchKey: string | undefined;
+                    let maxOverlap = 0;
+                    
+                    Object.entries(criteriaMap).forEach(([key, info]: any) => {
+                        const infoLower = info.name.toLowerCase();
+                        let overlap = 0;
+                        keywords.forEach(kw => {
+                            if (nameLower.includes(kw) && infoLower.includes(kw)) {
+                                overlap++;
+                            }
+                        });
+                        if (overlap > maxOverlap) {
+                            maxOverlap = overlap;
+                            bestMatchKey = key;
+                        }
+                    });
+                    
+                    if (maxOverlap > 0) {
+                        matchedKey = bestMatchKey;
+                    }
+                }
+
+                if (matchedKey) {
+                    const criteriaMax = criteriaMap[matchedKey].max;
+                    let finalScore = row.score;
+                    if (row.max !== criteriaMax && row.max > 0) {
+                        finalScore = Math.round((row.score / row.max) * criteriaMax);
+                    }
+                    scores[matchedKey] = Math.min(finalScore, criteriaMax);
+                }
+            });
+        }
+        return scores;
+    };
+
     const parseBreakdownFromStrengths = (strengths: string, criteriaMap: any) => {
         const scores: { [key: string]: number } = {};
-        const match = strengths?.match(/^\[SCORES:\s*(.*?)\]/);
         
+        const match = strengths?.match(/^\[SCORES:\s*(.*?)\]/);
         if (match) {
             const pairs = match[1].split(",");
             pairs.forEach(p => {
@@ -83,13 +258,17 @@ export default function ScreeningPage() {
                     scores[k] = parseFloat(v);
                 }
             });
+        } else if (strengths) {
+            const parsed = parseScoresFromMarkdown(strengths);
+            const matchedScores = matchParsedScoresToCriteria(parsed.scores, criteriaMap);
+            Object.assign(scores, matchedScores);
         }
         
         const breakdown: { [key: string]: { score: number; max: number } } = {};
         Object.keys(criteriaMap).forEach(key => {
             const info = criteriaMap[key];
             breakdown[info.name] = {
-                score: scores[key] !== undefined ? scores[key] : Math.round(info.max * (match ? 0 : 0.5)),
+                score: scores[key] !== undefined ? scores[key] : (strengths ? 0 : Math.round(info.max * 0.5)),
                 max: info.max
             };
         });
@@ -165,14 +344,21 @@ export default function ScreeningPage() {
         activeJobIdRef.current = selectedJobId;
     }, [selectedJobId]);
 
-    const runSingleAnalysis = async (app: any) => {
-        let resumeText = app.ResumeText || app.resume_text || "";
+    const runSingleAnalysis = async (app: any, forceReOcr = false) => {
+        let resumeText = forceReOcr ? "" : (app.ResumeText || app.resume_text || "");
+        if (resumeText && (resumeText.trim().startsWith("ข้อมูลประวัติย่อ") || resumeText.includes("/api/upload/"))) {
+            resumeText = "";
+        }
         
         try {
             if (!resumeText && app.resume_url) {
                 setAnalyzingStates(prev => ({ ...prev, [app.ID]: "ocr" }));
                 
-                const response = await apiClient.get(app.resume_url, {
+                const cleanResumeUrl = app.resume_url.startsWith("/api") 
+                    ? app.resume_url.slice(4) 
+                    : app.resume_url;
+                    
+                const response = await apiClient.get(cleanResumeUrl, {
                     responseType: "blob"
                 });
                 const blob = response.data;
@@ -202,31 +388,90 @@ export default function ScreeningPage() {
             const criteriaText = matchedJob?.criteria || "";
             const criteriaMap = parseCriteria(criteriaText);
 
-            const scoreRes = await fetch(`${TYPHOON_API}/api/score`, {
+            console.log("[Score] calling /chat for streaming scores with criteria:", criteriaMap);
+
+            let userContent = `วิเคราะห์ Resume นี้อย่างละเอียด:\n\n${resumeText}`;
+            if (jdText) {
+                userContent += `\n\n=== ตำแหน่งงาน / JD ===\n${jdText}`;
+            }
+            if (criteriaText) {
+                userContent += `\n\n=== เกณฑ์ในการคัดเลือก (Criteria) ===\n${criteriaText}`;
+                
+                const listStr = Object.values(criteriaMap)
+                    .map((info, idx) => `- ${info.name} (คะแนนเต็ม ${info.max} คะแนน)`)
+                    .join("\n");
+                
+                const tableRowsExample = Object.values(criteriaMap)
+                    .map(info => `| ${info.name} | [คะแนนที่ได้]/${info.max} | [เหตุผลประเมินสั้นๆ] |`)
+                    .join("\n");
+
+                userContent += `\n\n=== ข้อกำหนดเกณฑ์การประเมินที่ต้องแสดงในตารางคะแนน ===
+คุณต้องประเมินและให้คะแนนผู้สมัครภายใต้หัวข้อ "## 2. คะแนนรวม (0–100)" ในรูปแบบตาราง Markdown ตามหัวข้อเกณฑ์เหล่านี้เท่านั้น:
+${listStr}
+
+สำคัญที่สุด: ให้ตอบกลับในรูปแบบตารางตามเทมเพลตด้านล่างนี้เป๊ะๆ (แทนที่ [คะแนนที่ได้] และ [เหตุผลประเมินสั้นๆ] ด้วยข้อมูลจริง):
+
+| เกณฑ์ | คะแนน | เหตุผล |
+|---|---|---|
+${tableRowsExample}
+| **รวมทั้งหมด** | [คะแนนรวมทั้งหมด]/100 | [คำสรุปโดยรวมสั้นๆ] |
+
+ห้ามย่อหรือเปลี่ยนชื่อเกณฑ์โดยเด็ดขาด เพื่อให้ระบบดึงข้อมูลคะแนนแสดงผลบนหน้าจอได้อย่างถูกต้อง`;
+            }
+
+            const response = await fetch(`${TYPHOON_API}/chat`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    resume_text: resumeText,
-                    jd_text: jdText,
-                    criteria_map: criteriaMap
-                })
+                    messages: [{ role: "user", content: userContent }],
+                    system_prompt: SYSTEM_PROMPT,
+                    max_new_tokens: 1024,
+                    temperature: 0,
+                }),
             });
 
-            if (!scoreRes.ok) throw new Error("AI ประเมินคะแนนไม่สำเร็จ");
-            const scoreData = await scoreRes.json();
+            if (!response.ok) throw new Error("AI ประเมินคะแนนไม่สำเร็จ");
 
+            const reader = response.body!.getReader();
+            const decoder = new TextDecoder();
+            let fullText = "";
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                fullText += decoder.decode(value, { stream: true });
+                
+                setApplicants(prev => prev.map(a => {
+                    if (a.ID === app.ID) {
+                        return {
+                            ...a,
+                            AIScreening: {
+                                skill_score: 0,
+                                strengths: fullText,
+                                model_used: "typhoon2.5-qwen3-4b"
+                            }
+                        };
+                    }
+                    return a;
+                }));
+            }
+
+            const finalParsed = parseScoresFromMarkdown(fullText);
+            const finalScores = matchParsedScoresToCriteria(finalParsed.scores, criteriaMap);
             let totalScore = 0;
-            const breakdown = scoreData.scores || {};
+
             Object.keys(criteriaMap).forEach(key => {
-                const info = criteriaMap[key];
-                const val = breakdown[key] || 0;
-                totalScore += Math.min(val, info.max);
+                if (finalScores[key] === undefined) {
+                    finalScores[key] = 0;
+                }
+                totalScore += Math.min(finalScores[key], criteriaMap[key].max);
             });
 
             setAnalyzingStates(prev => ({ ...prev, [app.ID]: "saving" }));
 
-            const scoresStr = `[SCORES: ${Object.keys(breakdown).map(k => `${k}=${breakdown[k]}`).join(",")}]`;
-            const strengthsText = `${scoresStr}\n\nจุดเด่น:\n${scoreData.strengths || ""}\n\nบทสรุป:\n${scoreData.summary || ""}`;
+            const scoresStr = `[SCORES: ${Object.keys(finalScores).map(k => `${k}=${finalScores[k]}`).join(",")}]`;
+            const strengthsText = `${scoresStr}\n\n${fullText}`;
 
             await updateApplicationScreening(app.ID, totalScore, strengthsText, "typhoon2.5-qwen3-4b", resumeText);
 
@@ -257,6 +502,21 @@ export default function ScreeningPage() {
         for (const app of pendingApps) {
             if (activeJobIdRef.current !== selectedJobId) break;
             await runSingleAnalysis(app);
+        }
+    };
+
+    const analyzeAllApplicants = async () => {
+        if (applicants.length === 0) return;
+        setBatchAnalyzing(true);
+        try {
+            for (const app of applicants) {
+                if (activeJobIdRef.current !== selectedJobId) break;
+                await runSingleAnalysis(app);
+            }
+        } catch (error) {
+            console.error("Batch analysis failed:", error);
+        } finally {
+            setBatchAnalyzing(false);
         }
     };
 
@@ -359,6 +619,28 @@ export default function ScreeningPage() {
         }
         if (jobCriteria.trim()) {
             userContent += `\n\n=== เกณฑ์ในการคัดเลือก (Criteria) ===\n${jobCriteria}`;
+            
+            const parsedMap = parseCriteria(jobCriteria);
+            const listStr = Object.values(parsedMap)
+                .map((info, idx) => `- ${info.name} (คะแนนเต็ม ${info.max} คะแนน)`)
+                .join("\n");
+            
+            const tableRowsExample = Object.values(parsedMap)
+                .map(info => `| ${info.name} | [คะแนนที่ได้]/${info.max} | [เหตุผลประเมินสั้นๆ] |`)
+                .join("\n");
+
+            userContent += `\n\n=== ข้อกำหนดเกณฑ์การประเมินที่ต้องแสดงในตารางคะแนน ===
+คุณต้องประเมินและให้คะแนนผู้สมัครภายใต้หัวข้อ "## 2. คะแนนรวม (0–100)" ในรูปแบบตาราง Markdown ตามหัวข้อเกณฑ์เหล่านี้เท่านั้น:
+${listStr}
+
+สำคัญที่สุด: ให้ตอบกลับในรูปแบบตารางตามเทมเพลตด้านล่างนี้เป๊ะๆ (แทนที่ [คะแนนที่ได้] และ [เหตุผลประเมินสั้นๆ] ด้วยข้อมูลจริง):
+
+| เกณฑ์ | คะแนน | เหตุผล |
+|---|---|---|
+${tableRowsExample}
+| **รวมทั้งหมด** | [คะแนนรวมทั้งหมด]/100 | [คำสรุปโดยรวมสั้นๆ] |
+
+ห้ามย่อหรือเปลี่ยนชื่อเกณฑ์โดยเด็ดขาด เพื่อให้ระบบดึงข้อมูลคะแนนแสดงผลบนหน้าจอได้อย่างถูกต้อง`;
         }
 
         setResult({ resumeName: "Resume", content: "", streaming: true });
@@ -371,6 +653,7 @@ export default function ScreeningPage() {
                     messages: [{ role: "user", content: userContent }],
                     system_prompt: SYSTEM_PROMPT,
                     max_new_tokens: 2048,
+                    temperature: 0,
                 }),
             });
 
@@ -616,20 +899,99 @@ export default function ScreeningPage() {
                                     <p className="text-slate-500 font-semibold text-sm">
                                         วาง Resume แล้วกด "วิเคราะห์"
                                     </p>
-                                    <p className="text-slate-300 text-xs">AI จะวิเคราะห์คะแนน จุดเด่น และข้อแนะนำ</p>
+                                    <p className="text-slate-300 text-xs">AI จะวิเคราะห์ประเมินและคำนวณคะแนนตามเกณฑ์</p>
                                 </div>
                             ) : (
-                                <div className="space-y-2">
+                                <div className="space-y-5">
                                     {result.streaming && (
-                                        <div className="flex items-center gap-2 mb-4 text-xs text-[#4169E1] font-semibold">
+                                        <div className="flex items-center gap-2 mb-4 text-xs text-[#4169E1] font-semibold bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100/60 animate-pulse font-sans">
                                             <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
                                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                                             </svg>
-                                            กำลังวิเคราะห์...
+                                            กำลังรันวิเคราะห์ประเมินผลคะแนนแบบเรียลไทม์...
                                         </div>
                                     )}
-                                    <pre className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-sans">
+
+                                    {/* Render dynamic score bars in Single Mode */}
+                                    {(() => {
+                                        const parsed = parseScoresFromMarkdown(result.content);
+                                        if (parsed.scores.length === 0 && !result.streaming) return null;
+
+                                        const criteriaMap = parseCriteria(jobCriteria);
+                                        const scores = matchParsedScoresToCriteria(parsed.scores, criteriaMap);
+
+                                        const breakdown: Record<string, { score: number; max: number }> = {};
+                                        Object.entries(criteriaMap).forEach(([key, info]: any) => {
+                                            breakdown[info.name] = {
+                                                score: scores[key] !== undefined ? scores[key] : 0,
+                                                max: info.max
+                                            };
+                                        });
+
+                                        return (
+                                            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 space-y-4 font-sans">
+                                                <div className="space-y-3">
+                                                    {Object.entries(breakdown).map(([cName, info]: any, idx) => {
+                                                        const pct = info.max > 0 ? (info.score / info.max) * 100 : 0;
+                                                        const clr = pct >= 80 ? "emerald" : pct >= 50 ? "amber" : "rose";
+                                                        const styles = {
+                                                            emerald: { bar: "bg-emerald-500", bg: "bg-emerald-50/20", border: "border-emerald-500/30" },
+                                                            amber: { bar: "bg-amber-500", bg: "bg-amber-50/20", border: "border-amber-500/30" },
+                                                            rose: { bar: "bg-rose-500", bg: "bg-rose-50/20", border: "border-rose-500/30" }
+                                                        }[clr];
+
+                                                        return (
+                                                            <div key={idx} className="space-y-1">
+                                                                <div className="flex justify-between text-[11px] font-bold text-slate-600">
+                                                                    <span>{idx + 1}. {cName}</span>
+                                                                    <span>{info.score}/{info.max} PTS</span>
+                                                                </div>
+                                                                <div className={`w-full ${styles.bg} border ${styles.border} h-3.5 rounded-full overflow-hidden p-0.5`}>
+                                                                    <div 
+                                                                        className={`h-full rounded-full transition-all duration-500 ${styles.bar}`}
+                                                                        style={{ width: `${pct}%` }}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+
+                                                {/* Total Average Bar */}
+                                                {(() => {
+                                                    const entries = Object.values(breakdown) as { score: number; max: number }[];
+                                                    const totalScore = entries.reduce((s, e) => s + e.score, 0);
+                                                    const totalMax = entries.reduce((s, e) => s + e.max, 0);
+                                                    const avgPercent = totalMax > 0 ? (totalScore / totalMax) * 100 : 0;
+                                                    
+                                                    const avgColor = avgPercent >= 80 ? "emerald" : avgPercent >= 50 ? "amber" : "rose";
+                                                    const avgBarStyles = {
+                                                        emerald: { bar: "from-emerald-400 to-emerald-600", text: "text-emerald-600" },
+                                                        amber: { bar: "from-amber-400 to-amber-500", text: "text-amber-600" },
+                                                        rose: { bar: "from-rose-400 to-rose-600", text: "text-rose-600" },
+                                                    }[avgColor];
+                                                    
+                                                    return (
+                                                        <div className="mt-3 pt-3 border-t border-slate-200/60 space-y-1">
+                                                            <div className="flex justify-between text-[12px] font-black text-slate-700">
+                                                                <span>คะแนนรวม</span>
+                                                                <span className={avgBarStyles.text}>{totalScore}/{totalMax} PTS ({Math.round(avgPercent)}%)</span>
+                                                            </div>
+                                                            <div className="w-full bg-slate-100 h-4 rounded-full overflow-hidden p-0.5">
+                                                                <div 
+                                                                    className={`h-full rounded-full bg-gradient-to-r ${avgBarStyles.bar} transition-all duration-500`}
+                                                                    style={{ width: `${avgPercent}%` }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </div>
+                                        );
+                                    })()}
+
+                                    <pre className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-sans bg-slate-50/30 rounded-2xl p-4 border border-slate-100/60">
                                         {result.content}
                                         {result.streaming && (
                                             <span className="inline-block w-0.5 h-4 bg-[#4169E1] ml-1 animate-pulse align-middle" />
@@ -649,17 +1011,29 @@ export default function ScreeningPage() {
                                 <h3 className="font-bold text-slate-800 text-sm">การคัดกรองเรซูเม่แยกตามตำแหน่งงาน (GORM Role Screening)</h3>
                                 <p className="text-slate-400 text-xs">เลือกตำแหน่งงานด้านขวา ระบบจะดึงเรซูเม่ของผู้สมัครทุกคนและรันการวิเคราะห์คะแนนอัตโนมัติทันที</p>
                             </div>
-                            <div className="min-w-[280px]">
-                                <select
-                                    value={selectedJobId}
-                                    onChange={e => handleJobChange(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-700 font-bold focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20 font-sans"
-                                >
-                                    <option value="">-- เลือกตำแหน่งงานขององค์กร --</option>
-                                    {jobs.map(job => (
-                                        <option key={job.ID} value={job.ID.toString()}>{job.title}</option>
-                                    ))}
-                                </select>
+                            <div className="flex flex-col sm:flex-row items-center gap-3">
+                                <div className="min-w-[240px] w-full">
+                                    <select
+                                        value={selectedJobId}
+                                        onChange={e => handleJobChange(e.target.value)}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-700 font-bold focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20 font-sans"
+                                    >
+                                        <option value="">-- เลือกตำแหน่งงานขององค์กร --</option>
+                                        {jobs.map(job => (
+                                            <option key={job.ID} value={job.ID.toString()}>{job.title}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                {selectedJobId && selectedJobId !== "custom" && applicants.length > 0 && (
+                                    <button
+                                        onClick={analyzeAllApplicants}
+                                        disabled={batchAnalyzing}
+                                        className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-[#4169E1] hover:from-indigo-600 hover:to-[#3558c7] text-white text-xs font-bold transition-all shadow-sm hover:shadow active:scale-95 disabled:opacity-50 select-none whitespace-nowrap cursor-pointer"
+                                    >
+                                        <RefreshCw className={`w-3.5 h-3.5 ${batchAnalyzing ? "animate-spin" : ""}`} />
+                                        {batchAnalyzing ? "กำลังวิเคราะห์..." : "วิเคราะห์ผู้สมัครทั้งหมด"}
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -781,16 +1155,22 @@ export default function ScreeningPage() {
                                                     </button>
                                                 </div>
 
-                                                {status !== "done" ? (
+                                                {status === "idle" || status === "ocr" || status === "error" ? (
                                                     <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 text-center text-slate-400 text-xs font-sans mt-2">
                                                         {status === "ocr" && "⏳ กำลังสแกนไฟล์ด้วย OCR..."}
-                                                        {status === "ai" && "🧠 กำลังประเมินข้อมูลและให้คะแนนด้วย AI..."}
-                                                        {status === "saving" && "💾 กำลังบันทึกผลการคัดกรอง..."}
                                                         {status === "error" && "⚠️ เกิดข้อผิดพลาดในการประเมินผลลัพธ์"}
                                                         {status === "idle" && "⏳ รอการวิเคราะห์ (กำลังจัดเตรียมคิวประมวลผล...)"}
                                                     </div>
                                                 ) : (
                                                     <>
+                                                        {/* Streaming indicator while AI is running */}
+                                                        {(status === "ai" || status === "saving") && (
+                                                            <div className="flex items-center gap-2 mb-3 text-xs text-[#4169E1] font-bold animate-pulse font-sans bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100">
+                                                                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> 
+                                                                <span>{status === "ai" ? "🧠 AI กำลังสตรีมวิเคราะห์และให้คะแนน..." : "💾 กำลังบันทึกผลลัพธ์..."}</span>
+                                                            </div>
+                                                        )}
+
                                                         {/* Criteria progress bars */}
                                                         <div className="space-y-3 pt-3 border-t border-slate-50">
                                                             {Object.entries(breakdown).map(([cName, info]: any, cIdx) => {
@@ -836,25 +1216,78 @@ export default function ScreeningPage() {
                                                             })}
                                                         </div>
 
+                                                        {/* Summary Total Bar */}
+                                                        {(() => {
+                                                            const entries = Object.values(breakdown) as { score: number; max: number }[];
+                                                            const totalScore = entries.reduce((s, e) => s + e.score, 0);
+                                                            const totalMax = entries.reduce((s, e) => s + e.max, 0);
+                                                            const avgPercent = totalMax > 0 ? (totalScore / totalMax) * 100 : 0;
+                                                            const avgColor = avgPercent >= 80 ? "emerald" : avgPercent >= 50 ? "amber" : "rose";
+                                                            const avgBarStyles = {
+                                                                emerald: { bar: "from-emerald-400 to-emerald-600", text: "text-emerald-600" },
+                                                                amber: { bar: "from-amber-400 to-amber-500", text: "text-amber-600" },
+                                                                rose: { bar: "from-rose-400 to-rose-600", text: "text-rose-600" },
+                                                            }[avgColor];
+                                                            return (
+                                                                <div className="mt-3 pt-3 border-t border-slate-100 space-y-1">
+                                                                    <div className="flex justify-between text-[12px] font-black text-slate-700">
+                                                                        <span>คะแนนรวม</span>
+                                                                        <span className={avgBarStyles.text}>{totalScore}/{totalMax} PTS ({Math.round(avgPercent)}%)</span>
+                                                                    </div>
+                                                                    <div className="w-full bg-slate-100 h-4 rounded-full overflow-hidden p-0.5">
+                                                                        <div 
+                                                                            className={`h-full rounded-full bg-gradient-to-r ${avgBarStyles.bar} transition-all duration-700`}
+                                                                            style={{ width: `${avgPercent}%` }}
+                                                                        ></div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })()}
+
                                                         {/* Text OCR raw display collapsible */}
                                                         <div className="pt-1">
                                                             <details className="text-[11px] border border-slate-100 rounded-xl p-2 bg-slate-50/50 cursor-pointer">
                                                                 <summary className="font-bold text-slate-500 select-none">ดูข้อความดิบจากการสแกน (OCR Raw Text)</summary>
                                                                 <textarea
                                                                     readOnly
-                                                                    value={app.ResumeText || app.resume_text || ""}
+                                                                    value={(() => {
+                                                                        const txt = app.ResumeText || app.resume_text || "";
+                                                                        if (txt.trim().startsWith("ข้อมูลประวัติย่อ") || txt.includes("/api/upload/")) {
+                                                                            return "ยังไม่ได้ทำการสแกนข้อความ OCR (กรุณากด 'วิเคราะห์ใหม่' หรือ 'วิเคราะห์ผู้สมัครทั้งหมด' เพื่อเริ่มสแกนรูปภาพและถอดข้อความ)";
+                                                                        }
+                                                                        return txt;
+                                                                    })()}
                                                                     rows={4}
                                                                     className="w-full bg-white border border-slate-100 rounded-lg p-2 mt-2 font-mono text-[9px] resize-none outline-none leading-normal text-slate-600"
                                                                 />
                                                             </details>
                                                         </div>
 
-                                                        {/* Strengths & Summary */}
-                                                        {cleanStrengths && (
-                                                            <div className="pt-2 border-t border-slate-50 text-xs leading-relaxed whitespace-pre-wrap text-slate-600 font-sans">
-                                                                {cleanStrengths}
-                                                            </div>
-                                                        )}
+                                                        {/* ─── AI Detailed Analysis Panel ─── */}
+                                                        {app.AIScreening?.strengths && (() => {
+                                                            const rawStr = app.AIScreening.strengths as string;
+                                                            const cleanText = getCleanStrengths(rawStr);
+
+                                                            return (
+                                                                <details className="group text-[11px] border border-indigo-100 rounded-xl bg-indigo-50/20 cursor-pointer overflow-hidden font-sans">
+                                                                    <summary className="font-bold text-indigo-600 select-none px-3 py-2.5 flex items-center gap-1.5 list-none hover:bg-indigo-50/40 transition-all">
+                                                                        <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
+                                                                        รายละเอียดผลการวิเคราะห์อย่างละเอียด (AI Detailed Analysis)
+                                                                    </summary>
+
+                                                                    <div className="px-4 pb-4 pt-2 border-t border-indigo-100 bg-white">
+                                                                        <pre className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap font-sans">
+                                                                            {cleanText}
+                                                                        </pre>
+                                                                        {app.AIScreening.model_used && (
+                                                                            <p className="text-[9px] text-slate-400 pt-2 mt-2 border-t border-slate-100">
+                                                                                🔧 Model: <span className="font-mono font-bold">{app.AIScreening.model_used}</span>
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                </details>
+                                                            );
+                                                        })()}
                                                     </>
                                                 )}
                                             </div>

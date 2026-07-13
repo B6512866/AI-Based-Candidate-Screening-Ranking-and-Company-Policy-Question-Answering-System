@@ -170,11 +170,8 @@ func SeedKnowledgeBase() {
 func SeedChatMessage()   {}
 
 func SeedJobPositions() {
-	var count int64
-	DB.Model(&entity.JobPosition{}).Count(&count)
-	if count == 0 {
-		var hrUser entity.User
-		DB.Where("email = ?", "hr@gmail.com").First(&hrUser)
+	var hrUser entity.User
+	DB.Where("email = ?", "hr@gmail.com").First(&hrUser)
 
 		jobs := []entity.JobPosition{
 			{
@@ -231,14 +228,41 @@ Email: jobs-hr@hireai.co.th
 - มีความคุ้นเคยกับการใช้เทคโนโลยีหรือระบบ ATS (Applicant Tracking System) จะพิจารณาเป็นพิเศษ`,
 				UserID: hrUser.ID,
 			},
+			{
+				Title:       "เจ้าหน้าที่ประสานงานทั่วไป (Administrative Officer)",
+				Department:  "ฝ่ายบริหารและธุรการ",
+				Location:    "กรุงเทพและปริมณฑล (นนทบุรี)",
+				Salary:      "20,000 บาท",
+				Type:        "งานเต็มเวลา (Full-time)",
+				Status:      "เปิดรับสมัคร",
+				Benefits:    `- ประกันสังคม
+- โบนัสตามผลงาน
+- ตรวจสุขภาพประจำปี`,
+				ContactInfo: `ส่ง Resume และผลงานมาทาง:
+Email: recruitment@hireai.co.th`,
+				Description: `ลักษณะงาน:
+- ประสานงานทั่วไปทั้งภายในและภายนอกองค์กร เพื่อสนับสนุนการทำงานของแผนกต่างๆ
+- จัดทำเอกสาร บันทึกข้อความ รายงานการประชุม และเอกสารธุรการอื่นๆ ที่เกี่ยวข้อง
+- จัดเตรียมและตรวจสอบความถูกต้องของเอกสารในแผนก
+- ต้อนรับผู้มาติดต่อ จัดตารางนัดหมาย และดูแลความเรียบร้อยของการประชุมต่างๆ ของแผนก`,
+				Criteria: `เกณฑ์การคัดสรรผู้สมัคร:
+- มีประสบการณ์ในงานธุรการ ประสานงาน หรือตำแหน่งที่เกี่ยวข้อง 1-3 ปีขึ้นไป (25 คะแนน)
+- สำเร็จการศึกษาในสาขาบริหารธุรกิจ หรือสาขาที่เกี่ยวข้อง (25 คะแนน)
+- สามารถใช้งานโปรแกรมคอมพิวเตอร์พื้นฐาน เช่น MS Office (Word, Excel, PPT) และ Google Workspace ได้เป็นอย่างดี (25 คะแนน)
+- มีมนุษยสัมพันธ์ดี ทำงานร่วมกับผู้อื่นได้ดี และมีทักษะในการสื่อสารประสานงานอย่างมีประสิทธิภาพ (25 คะแนน)`,
+				UserID: hrUser.ID,
+			},
 		}
 
 		for _, job := range jobs {
-			if err := DB.Create(&job).Error; err != nil {
-				log.Println("SeedJobPositions failed for", job.Title, ":", err)
-			} else {
-				log.Println("✅ Seeded job position:", job.Title)
+			var existing entity.JobPosition
+			err := DB.Where("title = ?", job.Title).First(&existing).Error
+			if err != nil {
+				if err := DB.Create(&job).Error; err != nil {
+					log.Println("SeedJobPositions failed for", job.Title, ":", err)
+				} else {
+					log.Println("✅ Seeded job position:", job.Title)
+				}
 			}
 		}
-	}
 }

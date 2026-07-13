@@ -35,6 +35,13 @@ models = {}
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
+# --- Dynamic project path bases (production-ready, no absolute windows paths) ---
+current_dir = os.path.dirname(os.path.abspath(__file__))
+JOBS_BASE   = os.path.join(current_dir, "jobs")
+RESUME_BASE = os.path.join(current_dir, "resumes")
+COMPANY_DOCS_BASE = os.path.join(current_dir, "create_sample_docs", "company_docs")
+TYPHOON_BACKEND_BASE = current_dir
+
 # ─── OCR Prompt ───────────────────────────────────────────────────────────────
 OCR_PROMPT = """Extract all text from the image.
 Instructions:
@@ -311,11 +318,15 @@ async def chat_endpoint(req: ChatRequest):
             **inputs,
             streamer=streamer,
             max_new_tokens=req.max_new_tokens,
-            do_sample=True,
-            temperature=req.temperature,
-            top_p=req.top_p,
             repetition_penalty=1.05,
         )
+        if req.temperature == 0:
+            generation_kwargs["do_sample"] = False
+        else:
+            generation_kwargs["do_sample"] = True
+            generation_kwargs["temperature"] = req.temperature
+            generation_kwargs["top_p"] = req.top_p
+        
 
         # Run generation in a separate thread
         thread = threading.Thread(target=model.generate, kwargs=generation_kwargs)
@@ -336,7 +347,7 @@ async def chat_endpoint(req: ChatRequest):
 @app.get("/list-docs")
 async def list_docs():
     """List text files in the sample docs directory."""
-    base_dir = r"c:\Users\Win11\Desktop\La\create_sample_docs\company_docs"
+    base_dir = COMPANY_DOCS_BASE
     try:
         if not os.path.exists(base_dir):
             return {"files": []}
@@ -348,7 +359,7 @@ async def list_docs():
 @app.get("/list-resumes")
 async def list_resumes():
     """List image files in the resumes folder."""
-    base_dir = r"c:\Users\Win11\Desktop\Typhoon\backend\resumes"
+    base_dir = RESUME_BASE
     try:
         import os
         if not os.path.exists(base_dir):
@@ -361,7 +372,7 @@ async def list_resumes():
 @app.get("/get-resume/{filename}")
 async def get_resume(filename: str):
     """Get the binary content of a resume file."""
-    base_dir = r"c:\Users\Win11\Desktop\Typhoon\backend\resumes"
+    base_dir = RESUME_BASE
     file_path = os.path.join(base_dir, filename)
     if not os.path.exists(file_path):
         raise HTTPException(404, "File not found")
@@ -371,7 +382,7 @@ async def get_resume(filename: str):
 @app.get("/list-jobs")
 async def list_jobs():
     """List directory names in the jobs folder."""
-    base_dir = r"c:\Users\Win11\Desktop\Typhoon\backend\jobs"
+    base_dir = JOBS_BASE
     try:
         import os
         if not os.path.exists(base_dir):
@@ -385,7 +396,7 @@ async def list_jobs():
 @app.get("/get-doc-path")
 async def get_doc_path(path: str):
     """Read content of a file by relative path inside backend/ directory."""
-    base_dir = r"c:\Users\Win11\Desktop\Typhoon\backend"
+    base_dir = TYPHOON_BACKEND_BASE
     target_path = os.path.join(base_dir, path)
 
     # Path traversal protection
@@ -405,7 +416,7 @@ async def get_doc_path(path: str):
 @app.get("/get-doc/{filename}")
 async def get_doc(filename: str):
     """Read content of a specific knowledge file."""
-    base_dir = r"c:\Users\Win11\Desktop\La\create_sample_docs\company_docs"
+    base_dir = COMPANY_DOCS_BASE
     target_path = os.path.join(base_dir, filename)
     
     # Path traversal protection
@@ -451,9 +462,7 @@ async def analyze_resume(req: ResumeAnalysisRequest):
 
 # ─── Llama-style Dashboard API ────────────────────────────────────────────────
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-JOBS_BASE   = os.path.join(current_dir, "jobs")
-RESUME_BASE = os.path.join(current_dir, "resumes")
+
 
 class ScoreRequest(BaseModel):
     resume_text: str
@@ -464,7 +473,7 @@ class ScoreRequest(BaseModel):
 async def _score_resume(resume_text: str, jd_text: str, criteria_map: dict) -> dict:
     """
     Call Typhoon AI to score a single resume against a criteria_map.
-    Returns: { scores: {cat_1: 80, cat_2: 60, ...}, strengths: "...", summary: "..." }
+    Returns: { scores: {cat_1: X, ...}, strengths: "...", summary: "..." }
     """
     if "chat_model" not in models:
         raise HTTPException(503, "Chat model not loaded")
@@ -473,18 +482,21 @@ async def _score_resume(resume_text: str, jd_text: str, criteria_map: dict) -> d
     import json as _json_inner
     import re as _re_inner
 
-    # Build criteria list string with keys
+    # Build readable criteria list
     criteria_lines = []
-    keys_list = []
     for key, info in criteria_map.items():
-        criteria_lines.append(f'  "{key}": <คะแนนตัวเลขจาก 1-{info["max"]}> /* {info["name"]} */')
-        keys_list.append(f'- key="{key}" ชื่อ="{info["name"]}" คะแนนเต็ม={info["max"]}')
-    criteria_str = "\n".join(keys_list)
-    scores_template = "{\n" + ",\n".join(criteria_lines) + "\n}"
+        criteria_lines.append(f'  - {info["name"]} (คะแนนเต็ม {info["max"]})')
+    criteria_str = "\n".join(criteria_lines)
 
     jd_section = f"\n\nคำอธิบายตำแหน่งงาน (Job Description):\n{jd_text}" if jd_text else ""
 
-    user_msg = f"""คุณคือผู้เชี่ยวชาญ HR กรุณาประเมินเรซูเม่ผู้สมัครงานต่อไปนี้และให้คะแนนตามเกณฑ์แต่ละข้อ
+    # Build the expected answer format as example (with 0 as placeholders)
+    answer_format = "\n".join(
+        f'{info["name"]}: 0/{info["max"]}'
+        for key, info in criteria_map.items()
+    )
+
+    user_msg = f"""คุณคือผู้เชี่ยวชาญ HR กรุณาวิเคราะห์และให้คะแนน Resume ต่อไปนี้ตามเกณฑ์ที่กำหนด
 
 === เรซูเม่ผู้สมัคร ===
 {resume_text}{jd_section}
@@ -493,23 +505,25 @@ async def _score_resume(resume_text: str, jd_text: str, criteria_map: dict) -> d
 {criteria_str}
 
 กฎการให้คะแนน:
-- ให้คะแนนตามทักษะ ประสบการณ์ และความเหมาะสมที่พบในเรซูเม่จริงๆ
-- ถ้าพบทักษะบางส่วนที่ตรง ให้คะแนนตามสัดส่วน (ไม่ใช่ 0 หากมีทักษะที่ใกล้เคียง)
-- คะแนนขั้นต่ำ 10 สำหรับผู้สมัครที่มีพื้นฐานด้านนั้นอยู่บ้าง
-- ให้คะแนนเต็มเฉพาะผู้ที่มีคุณสมบัติตรงทุกข้อ
+- ให้คะแนนตามข้อมูลที่พบในเรซูเม่จริงๆ
+- ถ้ามีทักษะที่ใกล้เคียงให้คะแนนตามสัดส่วน (อย่าให้ 0 ถ้ามีพื้นฐาน)
+- ให้คะแนนเต็มเฉพาะผู้ที่คุณสมบัติตรงทุกข้อ
 
-ตอบกลับด้วย JSON เท่านั้น ห้ามมีข้อความอื่นก่อนหรือหลัง JSON:
-{{
-  "scores": {scores_template},
-  "strengths": "<สรุปจุดเด่นของผู้สมัคร 2-3 ประโยค>",
-  "summary": "<สรุปความเหมาะสมกับตำแหน่งโดยรวม 2-3 ประโยค>"
-}}"""
+ตอบกลับในรูปแบบนี้เท่านั้น (แทนที่ 0 ด้วยคะแนนจริง):
+SCORES:
+{answer_format}
+
+STRENGTHS:
+(จุดเด่นของผู้สมัคร 2-3 ประโยค)
+
+SUMMARY:
+(สรุปความเหมาะสมกับตำแหน่ง 2-3 ประโยค)"""
 
     tokenizer = models["chat_tokenizer"]
     model_obj = models["chat_model"]
 
     messages = [
-        {"role": "system", "content": "คุณเป็นผู้เชี่ยวชาญ HR ที่มีประสบการณ์ประเมินผู้สมัครงาน ตอบกลับด้วย JSON เท่านั้น ห้ามใส่ข้อความอื่นนอกจาก JSON"},
+        {"role": "system", "content": "คุณเป็นผู้เชี่ยวชาญ HR ที่มีประสบการณ์ประเมินผู้สมัครงาน ตอบกลับตามรูปแบบที่กำหนดเท่านั้น"},
         {"role": "user", "content": user_msg},
     ]
 
@@ -529,61 +543,106 @@ async def _score_resume(resume_text: str, jd_text: str, criteria_map: dict) -> d
             top_p=0.9,
             repetition_penalty=1.05,
         )
-        # Strip input tokens
         generated = output_ids[0][inputs["input_ids"].shape[1]:]
         return tokenizer.decode(generated, skip_special_tokens=True)
 
     raw_text = await asyncio.to_thread(_run_inference)
-    logger.info(f"[_score_resume] raw AI output (first 500 chars): {raw_text[:500]}")
+    logger.info(f"[_score_resume] raw AI output:\n{raw_text[:800]}")
 
-    # Parse JSON from AI response — try multiple strategies
-    result = None
-    try:
-        # Strategy 1: find first { ... } block
-        json_start = raw_text.find("{")
-        json_end = raw_text.rfind("}") + 1
-        if json_start != -1 and json_end > json_start:
-            result = _json_inner.loads(raw_text[json_start:json_end])
-    except Exception:
-        pass
+    # ── Parse plain-text format: search line by line from the entire raw_text ──
+    scores: dict = {}
+    
+    # We map names to keys
+    name_to_key = {info["name"]: key for key, info in criteria_map.items()}
+    
+    # Split into lines
+    lines = raw_text.split("\n")
+    for line in lines:
+        line_clean = line.strip().replace("**", "")
+        
+        # 1. Check if it's a markdown table row (e.g. starts/ends with | or contains multiple |)
+        if line_clean.count("|") >= 2:
+            cols = [c.strip() for c in line_clean.split("|") if c.strip() != ""]
+            if len(cols) >= 2:
+                name_part = cols[0]
+                score_part = cols[1]
+                m = _re_inner.match(r"^\s*(\d+)(?:\s*[-–—/]\s*(\d+))?", score_part)
+                if m:
+                    val = int(m.group(1))
+                    key = name_to_key.get(name_part)
+                    if not key:
+                        name_part_lower = name_part.lower()
+                        for n, k in name_to_key.items():
+                            n_lower = n.lower()
+                            if name_part_lower in n_lower or n_lower in name_part_lower:
+                                key = k
+                                break
+                    if key:
+                        scores[key] = val
+            continue
 
-    if result is None:
-        try:
-            # Strategy 2: extract json code block ```json ... ```
-            m = _re_inner.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw_text, _re_inner.DOTALL)
+        # 2. Check if it has a colon like "เกณฑ์: คะแนน/เต็ม" or "เกณฑ์: คะแนน"
+        line_clean_bullet = line_clean.lstrip("-•* ")
+        if ":" in line_clean_bullet:
+            parts = line_clean_bullet.split(":", 1)
+            name_part = parts[0].strip()
+            score_part = parts[1].strip()
+            
+            m = _re_inner.match(r"^\s*(\d+)(?:\s*[-–—/]\s*(\d+))?", score_part)
             if m:
-                result = _json_inner.loads(m.group(1))
+                val = int(m.group(1))
+                key = name_to_key.get(name_part)
+                if not key:
+                    name_part_lower = name_part.lower()
+                    for n, k in name_to_key.items():
+                        n_lower = n.lower()
+                        if name_part_lower in n_lower or n_lower in name_part_lower:
+                            key = k
+                            break
+                if key:
+                    scores[key] = val
+
+    # If we couldn't parse scores, try JSON fallback
+    if not scores:
+        try:
+            json_start = raw_text.find("{")
+            json_end = raw_text.rfind("}") + 1
+            if json_start != -1 and json_end > json_start:
+                parsed = _json_inner.loads(raw_text[json_start:json_end])
+                scores = parsed.get("scores", {})
+                strengths_text = parsed.get("strengths", "")
+                summary_text = parsed.get("summary", "")
         except Exception:
             pass
 
-    if result is None:
-        # Fallback — give 50% scores and include raw text as strengths
-        logger.warning(f"[_score_resume] JSON parse failed. Raw: {raw_text[:300]}")
-        result = {
-            "scores": {key: max(10, info["max"] // 2) for key, info in criteria_map.items()},
-            "strengths": raw_text[:400] if raw_text.strip() else "ไม่สามารถแปลงผลการประเมินได้",
-            "summary": "ระบบไม่สามารถแปลงผลการประเมินเป็น JSON ได้ กรุณาลองวิเคราะห์ใหม่อีกครั้ง"
-        }
+    # Extract strengths and summary using regex
+    strengths_match = _re_inner.search(r"(?:STRENGTHS|จุดเด่น|จุดเด่นของผู้สมัคร)[\s:]*\n*(.*?)(?=\n*(?:SUMMARY|บทสรุป|ข้อเสนอแนะ|$))", raw_text, _re_inner.DOTALL | _re_inner.IGNORECASE)
+    summary_match = _re_inner.search(r"(?:SUMMARY|บทสรุป|สรุปความเหมาะสม)[\s:]*\n*(.*?)$", raw_text, _re_inner.DOTALL | _re_inner.IGNORECASE)
+    
+    strengths_text = strengths_text or (strengths_match.group(1).strip() if strengths_match else "")
+    summary_text = summary_text or (summary_match.group(1).strip() if summary_match else "")
 
-    # Validate & fix scores — ensure every key exists and score is within range
-    scores = result.get("scores", {})
+    # Validate scores — fill missing keys with half of max
     for key, info in criteria_map.items():
-        raw_score = scores.get(key, info["max"] // 2)
-        # Clamp to valid range, ensure never exactly 0 (unless intended max is 0)
-        if info["max"] > 0:
-            scores[key] = max(0, min(info["max"], int(raw_score)))
+        if key not in scores:
+            scores[key] = info["max"] // 2
         else:
-            scores[key] = 0
+            scores[key] = max(0, min(info["max"], int(scores[key])))
 
-    result["scores"] = scores
+    # Ensure non-empty text
+    if not strengths_text.strip():
+        strengths_text = "ผู้สมัครมีทักษะและประสบการณ์ที่เกี่ยวข้องกับตำแหน่งนี้"
+    if not summary_text.strip():
+        summary_text = "กรุณาตรวจสอบรายละเอียดในเรซูเม่เพิ่มเติม"
 
-    # Ensure strengths and summary are non-empty strings
-    if not result.get("strengths", "").strip():
-        result["strengths"] = "ผู้สมัครมีประสบการณ์และทักษะที่เกี่ยวข้องกับตำแหน่งนี้"
-    if not result.get("summary", "").strip():
-        result["summary"] = "กรุณาตรวจสอบรายละเอียดในเรซูเม่เพิ่มเติม"
-
+    result = {
+        "scores": scores,
+        "strengths": strengths_text,
+        "summary": summary_text,
+    }
+    logger.info(f"[_score_resume] parsed result: {result}")
     return result
+
 
 
 @app.post("/api/score")
