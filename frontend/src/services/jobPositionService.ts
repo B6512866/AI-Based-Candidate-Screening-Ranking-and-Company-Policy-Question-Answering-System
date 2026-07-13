@@ -96,3 +96,20 @@ export async function getapplications(jobId: number) {
   const res = await apiClient.get(`/job-positions/${jobId}/applications`);
   return res.data;
 }
+
+// ── บันทึก/อัปเดตผลคัดกรอง AI สำหรับใบสมัครรายคน
+export async function updateApplicationScreening(
+  appId: number,
+  score: number,
+  strengths: string,
+  modelUsed: string = "typhoon2.5-qwen3-4b",
+  resumeText: string = ""
+) {
+  const res = await apiClient.put(`/applications/${appId}/screening`, {
+    score,
+    strengths,
+    model_used: modelUsed,
+    resume_text: resumeText
+  });
+  return res.data;
+}

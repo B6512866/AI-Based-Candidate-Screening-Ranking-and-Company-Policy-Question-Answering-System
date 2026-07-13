@@ -18,7 +18,7 @@ import (
 func startTyphoonAI() {
 	go func() {
 		fmt.Println("🤖 Starting Typhoon AI Service on port 8000...")
-		cmd := exec.Command("python", "-u", "-m", "uvicorn", "typhoon.main:app", "--host", "0.0.0.0", "--port", "8000")
+		cmd := exec.Command("python", "-u", "-m", "uvicorn", "typhoon.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		err := cmd.Run()

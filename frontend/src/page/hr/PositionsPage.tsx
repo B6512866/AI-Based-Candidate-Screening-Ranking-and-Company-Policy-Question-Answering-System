@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"; 
 import { useNavigate } from "react-router-dom";
 import { Briefcase, Plus, Save, Trash2, FileText, CheckCircle2, AlertCircle, MapPin, DollarSign, Clock, Users, Eye, Sparkles, X, Download } from "lucide-react";
-import { getalljobs, createjob, updatejob, deletejob, getapplications } from "../../services/jobPositionService";
+import { getalljobs, createjob, updatejob, deletejob, getapplications, updateApplicationScreening } from "../../services/jobPositionService";
 import apiClient from "../../services/apiClient";
 
 interface JobPosition {
@@ -68,6 +68,9 @@ export default function PositionsPage() {
     const [applicants, setApplicants] = useState<any[]>([]);
     const [loadingApplicants, setLoadingApplicants] = useState(false);
     const [viewingResume, setViewingResume] = useState<string | null>(null); // เก็บข้อความ Resume ที่ต้องการเปิดดู
+    const [isAnalyzingBulk, setIsAnalyzingBulk] = useState(false);
+    const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
+    const [viewingAIScreening, setViewingAIScreening] = useState<any | null>(null); // เก็บผลประเมิน AI สำหรับกดดูรายละเอียด
 
     const fetchApplicants = async (jobId: number) => {
         setLoadingApplicants(true);
@@ -81,6 +84,81 @@ export default function PositionsPage() {
         } finally {
             setLoadingApplicants(false);
         }
+    };
+
+    const TYPHOON_API = import.meta.env.VITE_TYPHOON_API_URL || "http://localhost:8000";
+
+    const runBulkAnalysis = async () => {
+        if (!selectedJob || applicants.length === 0) return;
+        
+        setIsAnalyzingBulk(true);
+        setBulkProgress({ current: 0, total: applicants.length });
+
+        for (let i = 0; i < applicants.length; i++) {
+            const app = applicants[i];
+            
+            // อัปเดตความคืบหน้าคนปัจจุบัน
+            setBulkProgress(prev => ({ ...prev, current: i }));
+
+            // ดึงข้อความ Resume
+            const resumeText = app.ResumeText || app.resume_text || "";
+            if (!resumeText.trim()) {
+                continue;
+            }
+
+            try {
+                // สร้าง Prompt สำหรับส่งให้ AI วิเคราะห์
+                let userContent = `วิเคราะห์ Resume นี้อย่างละเอียด:\n\n${resumeText}`;
+                if (editDescription.trim()) {
+                    userContent += `\n\n=== ลักษณะงาน / JD ===\n${editDescription}`;
+                }
+                if (editCriteria.trim()) {
+                    userContent += `\n\n=== เกณฑ์ในการคัดเลือก (Criteria) ===\n${editCriteria}`;
+                }
+
+                const SYSTEM_PROMPT = `คุณคือผู้เชี่ยวชาญด้านการสรรหาทรัพยากรบุคคล (HR Recruitment Expert)
+วิเคราะห์ผู้สมัครงานเทียบกับลักษณะงาน (JD) และเกณฑ์การคัดเลือก (Criteria) ด้านบนนี้
+
+กรุณาตอบกลับในรูปแบบภาษาไทยโดยระบุสิ่งนี้ใน 2 บรรทัดแรกเท่านั้น:
+SCORE: [ใส่คะแนนความสอดคล้องเป็นตัวเลขจำนวนเต็มระหว่าง 0 ถึง 100 เช่น SCORE: 85]
+SUMMARY: [ใส่สรุปสั้นๆ จุดเด่น/จุดด้อยใน 1-2 ประโยค เช่น SUMMARY: มีทักษะ React/Go ครบถ้วน แต่อาจต้องพัฒนาภาษาอังกฤษเพิ่ม]
+
+หลังจาก 2 บรรทัดแรกแล้ว ให้เขียนการวิเคราะห์อย่างละเอียด (จุดเด่น, จุดที่ควรพัฒนา, คำถามแนะนำสำหรับการสัมภาษณ์) โดยใช้หัวข้อและ bullet points เพื่อให้อ่านง่าย`;
+
+                // ส่งวิเคราะห์หา Typhoon
+                const response = await fetch(`${TYPHOON_API}/chat`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        messages: [{ role: "user", content: userContent }],
+                        system_prompt: SYSTEM_PROMPT,
+                        max_new_tokens: 2048,
+                    }),
+                });
+
+                if (!response.ok) throw new Error("AI ไม่ตอบสนอง");
+
+                // โหลดผลลัพธ์แบบ Text รวดเดียว
+                const aiResultText = await response.text();
+
+                // แกะ SCORE
+                let score = 50; 
+                const scoreMatch = aiResultText.match(/SCORE:\s*(\d+)/i);
+                if (scoreMatch) {
+                    score = parseInt(scoreMatch[1], 10);
+                }
+
+                // บันทึกผลลัพธ์ลงหลังบ้าน
+                await updateApplicationScreening(app.ID, score, aiResultText);
+
+            } catch (err) {
+                console.error("เกิดข้อผิดพลาดในการประเมินผู้สมัคร ID: " + app.ID, err);
+            }
+        }
+
+        setBulkProgress({ current: applicants.length, total: applicants.length });
+        await fetchApplicants(selectedJob.ID);
+        setIsAnalyzingBulk(false);
     };
     // คอยโหลดรายชื่อผู้สมัครเมื่อมีการสลับแท็บ
     useEffect(() => {
@@ -512,77 +590,117 @@ export default function PositionsPage() {
                                         </div>
                                     </div>
                                 ) : (
-                                    /* 📌 หน้ารายชื่อผู้สมัครตำแหน่งนี้ */
-                                    <div className="space-y-4">
-                                        {loadingApplicants ? (
-                                            <div className="py-12 text-center text-slate-400 text-sm">กำลังโหลดรายชื่อผู้สมัคร...</div>
-                                        ) : applicants.length === 0 ? (
-                                            <div className="py-12 text-center text-slate-400 text-sm">ยังไม่มีผู้สมัครส่ง Resume เข้ามาในตำแหน่งนี้</div>
-                                        ) : (
-                                            <div className="overflow-x-auto">
-                                                <table className="w-full text-sm text-left text-slate-500">
-                                                    <thead className="text-xs text-slate-400 uppercase bg-slate-50 rounded-lg">
-                                                        <tr>
-                                                            <th className="px-4 py-3">ผู้สมัคร</th>
-                                                            <th className="px-4 py-3">ข้อมูลติดต่อ</th>
-                                                            <th className="px-4 py-3 text-right">การจัดการ</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-slate-100">
-                                                        {applicants.map(app => (
-                                                            <tr key={app.ID} className="hover:bg-slate-50/50">
-                                                                <td className="px-4 py-4 font-bold text-slate-800">
-                                                                    {app.Candidate ? `${app.Candidate.first_name} ${app.Candidate.last_name}` : "ไม่ระบุชื่อ"}
-                                                                </td>
-                                                                <td className="px-4 py-4 space-y-1 text-xs">
-                                                                    <p>{app.Candidate?.email}</p>
-                                                                    <p className="text-slate-400">{app.Candidate?.phone}</p>
-                                                                </td>
-                                                                <td className="px-4 py-4 text-right space-x-2 shrink-0">
-                                                                    {app.resume_url && (
-                                                                        <a
-                                                                            href={`${apiClient.defaults.baseURL?.replace("/api", "")}${app.resume_url}`}
-                                                                            target="_blank"
-                                                                            rel="noreferrer"
-                                                                            className="inline-flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-600 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-                                                                        >
-                                                                            <Download className="w-3.5 h-3.5" /> เปิดไฟล์ Resume
-                                                                        </a>
-                                                                    )}
-                                                                    <button
-                                                                        onClick={() => setViewingResume(app.ResumeText || app.resume_text)}
-                                                                        className="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-                                                                    >
-                                                                        <Eye className="w-3.5 h-3.5" /> ดู Resume
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            // วิ่งไปหน้าคัดกรองประเมินอัตโนมัติพร้อมส่งข้อความ Resume และ ID ของตำแหน่งงาน
-                                                                            navigate("/hr/screening", { 
-                                                                                state: { 
-                                                                                    resumeText: app.ResumeText || app.resume_text,
-                                                                                    jobId: selectedJob?.ID 
-                                                                                } 
-                                                                            });
-                                                                        }}
-                                                                        className="inline-flex items-center gap-1 bg-blue-50 hover:bg-blue-100 text-[#4169E1] px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-                                                                    >
-                                                                        <Sparkles className="w-3.5 h-3.5" /> ส่งให้ AI คัดกรอง
-                                                                    </button>
-                                                                </td>
+                                     <div className="space-y-4 font-sans">
+                                         {applicants.length > 0 && (
+                                             <div className="flex items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-4">
+                                                 <div>
+                                                     <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider block">การวิเคราะห์กลุ่ม</span>
+                                                     <span className="text-sm font-bold text-slate-700 mt-0.5 block">ประเมินเรซูเม่ของผู้สมัครในตำแหน่งนี้ทั้งหมด</span>
+                                                 </div>
+                                                 <button
+                                                     onClick={runBulkAnalysis}
+                                                     disabled={isAnalyzingBulk}
+                                                     className="inline-flex items-center gap-2 bg-[#4169E1] hover:bg-[#3152c4] text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm"
+                                                 >
+                                                     <Sparkles className="w-4 h-4" />
+                                                     วิเคราะห์ทุกคนด้วย AI ({applicants.length} คน)
+                                                 </button>
+                                             </div>
+                                         )}
+                                         {loadingApplicants ? (
+                                                <div className="py-12 text-center text-slate-400 text-sm">กำลังโหลดรายชื่อผู้สมัคร...</div>
+                                            ) : applicants.length === 0 ? (
+                                                <div className="py-12 text-center text-slate-400 text-sm">ยังไม่มีผู้สมัครส่ง Resume เข้ามาในตำแหน่งนี้</div>
+                                            ) : (
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full text-sm text-left text-slate-500">
+                                                        <thead className="text-xs text-slate-400 uppercase bg-slate-50 rounded-lg">
+                                                            <tr>
+                                                                <th className="px-4 py-3">ผู้สมัคร</th>
+                                                                <th className="px-4 py-3">ข้อมูลติดต่อ</th>
+                                                                <th className="px-4 py-3 text-center">คะแนน AI</th>
+                                                                <th className="px-4 py-3 text-right">การจัดการ</th>
                                                             </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-100">
+                                                            {applicants.map(app => (
+                                                                <tr key={app.ID} className="hover:bg-slate-50/50">
+                                                                    <td className="px-4 py-4 font-bold text-slate-800">
+                                                                        {app.Candidate ? `${app.Candidate.first_name} ${app.Candidate.last_name}` : "ไม่ระบุชื่อ"}
+                                                                    </td>
+                                                                    <td className="px-4 py-4 space-y-1 text-xs">
+                                                                        <p>{app.Candidate?.email}</p>
+                                                                        <p className="text-slate-400">{app.Candidate?.phone}</p>
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-center">
+                                                                        {app.AIScreening ? (
+                                                                            <div className="inline-flex items-center gap-2">
+                                                                                <span className={"inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white " + (
+                                                                                    app.AIScreening.skill_score >= 80 
+                                                                                        ? "bg-emerald-500" 
+                                                                                        : app.AIScreening.skill_score >= 50 
+                                                                                            ? "bg-amber-500" 
+                                                                                            : "bg-rose-500"
+                                                                                )}>
+                                                                                    {Math.round(app.AIScreening.skill_score)}
+                                                                                </span>
+                                                                                <button
+                                                                                    onClick={() => setViewingAIScreening(app.AIScreening)}
+                                                                                    className="text-xs text-[#4169E1] hover:underline font-bold"
+                                                                                >
+                                                                                    ดูผลวิเคราะห์
+                                                                                </button>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <span className="text-xs text-slate-400 font-medium bg-slate-100 px-2 py-1 rounded-md">
+                                                                                ยังไม่ได้ประเมิน
+                                                                            </span>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="px-4 py-4 text-right space-x-2 shrink-0">
+                                                                        {app.resume_url && (
+                                                                            <a
+                                                                                href={(apiClient.defaults.baseURL || "").replace("/api", "") + app.resume_url}
+                                                                                target="_blank"
+                                                                                rel="noreferrer"
+                                                                                className="inline-flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-600 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                                                                            >
+                                                                                <Download className="w-3.5 h-3.5" /> เปิดไฟล์ Resume
+                                                                            </a>
+                                                                        )}
+                                                                        <button
+                                                                            onClick={() => setViewingResume(app.ResumeText || app.resume_text)}
+                                                                            className="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                                                                        >
+                                                                            <Eye className="w-3.5 h-3.5" /> ดู Resume
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                navigate("/hr/screening", { 
+                                                                                    state: { 
+                                                                                        resumeText: app.ResumeText || app.resume_text,
+                                                                                        jobId: selectedJob?.ID 
+                                                                                    } 
+                                                                                });
+                                                                            }}
+                                                                            className="inline-flex items-center gap-1 bg-blue-50 hover:bg-blue-100 text-[#4169E1] px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                                                                        >
+                                                                            <Sparkles className="w-3.5 h-3.5" /> ส่งให้ AI คัดกรอง
+                                                                        </button>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )}
+                                        </div>
+                                     )}
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
-            </div>
 
             {/* 📌 MODAL: เปิดอ่านข้อความ Resume ผู้สมัคร */}
             {viewingResume && (
@@ -605,6 +723,82 @@ export default function PositionsPage() {
                         <div className="mt-4 pt-3 border-t border-slate-100 text-right">
                             <button
                                 onClick={() => setViewingResume(null)}
+                                className="bg-[#4169E1] hover:bg-[#3152c4] text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-all"
+                            >
+                                ปิดหน้าต่าง
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 📌 MODAL: โหลดดิ้งประมวลผลประเมินกลุ่มด้วย AI */}
+            {isAnalyzingBulk && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl p-6 text-center space-y-4 font-sans">
+                        <div className="flex justify-center">
+                            <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-100 border-t-[#4169E1]"></div>
+                        </div>
+                        <h3 className="font-bold text-slate-800 text-lg">กำลังประเมินผู้สมัครด้วย AI</h3>
+                        <p className="text-slate-500 text-sm">กรุณาเปิดหน้าต่างนี้ไว้ ระบบกำลังทยอยวิเคราะห์ข้อมูลผู้สมัครรายบุคคล...</p>
+                        
+                        {/* Progress bar */}
+                        <div className="space-y-1">
+                            <div className="flex justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
+                                <span>ความคืบหน้า</span>
+                                <span>{bulkProgress.current} / {bulkProgress.total} คน ({Math.round((bulkProgress.current / bulkProgress.total) * 100)}%)</span>
+                            </div>
+                            <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                                <div 
+                                    className="bg-[#4169E1] h-2.5 rounded-full transition-all duration-300"
+                                    style={{ width: ((bulkProgress.current / (bulkProgress.total || 1)) * 100) + "%" }}
+                                ></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 📌 MODAL: แสดงผลประเมินจาก AI เต็มรูปแบบ */}
+            {viewingAIScreening && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+                    <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl p-6 flex flex-col max-h-[85vh] font-sans">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                            <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                                <Sparkles className="w-5 h-5 text-amber-500" /> ผลการวิเคราะห์โดยละเอียดด้วย AI
+                            </h3>
+                            <button
+                                onClick={() => setViewingAIScreening(null)}
+                                className="text-slate-400 hover:text-slate-600 hover:bg-slate-50 p-1.5 rounded-full"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto space-y-4">
+                            {/* Score & Model summary */}
+                            <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                <div>
+                                    <span className="text-xs text-slate-400 font-semibold block uppercase">คะแนนความเหมาะสม</span>
+                                    <span className="text-2xl font-black text-slate-800 mt-1 block">
+                                        {Math.round(viewingAIScreening.skill_score)} <span className="text-sm font-normal text-slate-400">/ 100 คะแนน</span>
+                                    </span>
+                                </div>
+                                <div className="text-right">
+                                    <span className="text-xs text-slate-400 font-semibold block uppercase">โมเดลประมวลผล</span>
+                                    <span className="text-sm font-bold text-slate-700 mt-2.5 block">{viewingAIScreening.model_used || "typhoon2.5-qwen3-4b"}</span>
+                                </div>
+                            </div>
+
+                            {/* Detailed assessment text */}
+                            <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-sans">
+                                {viewingAIScreening.strengths}
+                            </div>
+                        </div>
+
+                        <div className="mt-4 pt-3 border-t border-slate-100 text-right">
+                            <button
+                                onClick={() => setViewingAIScreening(null)}
                                 className="bg-[#4169E1] hover:bg-[#3152c4] text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-all"
                             >
                                 ปิดหน้าต่าง

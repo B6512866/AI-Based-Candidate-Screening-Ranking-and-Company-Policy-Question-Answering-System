@@ -20,4 +20,7 @@ func JobPositionRoutes(api *gin.RouterGroup, db *gorm.DB) {
 		j.DELETE("/:id", middleware.AuthMiddleware(), jobPositionController.Delete)
 		j.GET("/:id/applications",middleware.AuthMiddleware(),jobPositionController.GetApplications)
 	}
+
+	// บันทึกการคัดกรองผู้สมัครรายบุคคล
+	api.PUT("/applications/:appId/screening", middleware.AuthMiddleware(), jobPositionController.UpdateApplicationScreening)
 }

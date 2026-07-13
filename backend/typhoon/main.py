@@ -451,8 +451,144 @@ async def analyze_resume(req: ResumeAnalysisRequest):
 
 # ─── Llama-style Dashboard API ────────────────────────────────────────────────
 
-JOBS_BASE   = r"c:\Users\Win11\Desktop\Typhoon\backend\jobs"
-RESUME_BASE = r"c:\Users\Win11\Desktop\Typhoon\backend\resumes"
+current_dir = os.path.dirname(os.path.abspath(__file__))
+JOBS_BASE   = os.path.join(current_dir, "jobs")
+RESUME_BASE = os.path.join(current_dir, "resumes")
+
+class ScoreRequest(BaseModel):
+    resume_text: str
+    jd_text: str
+    criteria_map: dict
+
+
+async def _score_resume(resume_text: str, jd_text: str, criteria_map: dict) -> dict:
+    """
+    Call Typhoon AI to score a single resume against a criteria_map.
+    Returns: { scores: {cat_1: 80, cat_2: 60, ...}, strengths: "...", summary: "..." }
+    """
+    if "chat_model" not in models:
+        raise HTTPException(503, "Chat model not loaded")
+
+    import asyncio
+    import json as _json_inner
+    import re as _re_inner
+
+    # Build criteria list string with keys
+    criteria_lines = []
+    keys_list = []
+    for key, info in criteria_map.items():
+        criteria_lines.append(f'  "{key}": <คะแนนตัวเลขจาก 1-{info["max"]}> /* {info["name"]} */')
+        keys_list.append(f'- key="{key}" ชื่อ="{info["name"]}" คะแนนเต็ม={info["max"]}')
+    criteria_str = "\n".join(keys_list)
+    scores_template = "{\n" + ",\n".join(criteria_lines) + "\n}"
+
+    jd_section = f"\n\nคำอธิบายตำแหน่งงาน (Job Description):\n{jd_text}" if jd_text else ""
+
+    user_msg = f"""คุณคือผู้เชี่ยวชาญ HR กรุณาประเมินเรซูเม่ผู้สมัครงานต่อไปนี้และให้คะแนนตามเกณฑ์แต่ละข้อ
+
+=== เรซูเม่ผู้สมัคร ===
+{resume_text}{jd_section}
+
+=== เกณฑ์การประเมิน ===
+{criteria_str}
+
+กฎการให้คะแนน:
+- ให้คะแนนตามทักษะ ประสบการณ์ และความเหมาะสมที่พบในเรซูเม่จริงๆ
+- ถ้าพบทักษะบางส่วนที่ตรง ให้คะแนนตามสัดส่วน (ไม่ใช่ 0 หากมีทักษะที่ใกล้เคียง)
+- คะแนนขั้นต่ำ 10 สำหรับผู้สมัครที่มีพื้นฐานด้านนั้นอยู่บ้าง
+- ให้คะแนนเต็มเฉพาะผู้ที่มีคุณสมบัติตรงทุกข้อ
+
+ตอบกลับด้วย JSON เท่านั้น ห้ามมีข้อความอื่นก่อนหรือหลัง JSON:
+{{
+  "scores": {scores_template},
+  "strengths": "<สรุปจุดเด่นของผู้สมัคร 2-3 ประโยค>",
+  "summary": "<สรุปความเหมาะสมกับตำแหน่งโดยรวม 2-3 ประโยค>"
+}}"""
+
+    tokenizer = models["chat_tokenizer"]
+    model_obj = models["chat_model"]
+
+    messages = [
+        {"role": "system", "content": "คุณเป็นผู้เชี่ยวชาญ HR ที่มีประสบการณ์ประเมินผู้สมัครงาน ตอบกลับด้วย JSON เท่านั้น ห้ามใส่ข้อความอื่นนอกจาก JSON"},
+        {"role": "user", "content": user_msg},
+    ]
+
+    def _run_inference():
+        inputs = tokenizer.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            return_dict=True,
+        ).to(model_obj.device)
+
+        output_ids = model_obj.generate(
+            **inputs,
+            max_new_tokens=1024,
+            do_sample=True,
+            temperature=0.3,
+            top_p=0.9,
+            repetition_penalty=1.05,
+        )
+        # Strip input tokens
+        generated = output_ids[0][inputs["input_ids"].shape[1]:]
+        return tokenizer.decode(generated, skip_special_tokens=True)
+
+    raw_text = await asyncio.to_thread(_run_inference)
+    logger.info(f"[_score_resume] raw AI output (first 500 chars): {raw_text[:500]}")
+
+    # Parse JSON from AI response — try multiple strategies
+    result = None
+    try:
+        # Strategy 1: find first { ... } block
+        json_start = raw_text.find("{")
+        json_end = raw_text.rfind("}") + 1
+        if json_start != -1 and json_end > json_start:
+            result = _json_inner.loads(raw_text[json_start:json_end])
+    except Exception:
+        pass
+
+    if result is None:
+        try:
+            # Strategy 2: extract json code block ```json ... ```
+            m = _re_inner.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw_text, _re_inner.DOTALL)
+            if m:
+                result = _json_inner.loads(m.group(1))
+        except Exception:
+            pass
+
+    if result is None:
+        # Fallback — give 50% scores and include raw text as strengths
+        logger.warning(f"[_score_resume] JSON parse failed. Raw: {raw_text[:300]}")
+        result = {
+            "scores": {key: max(10, info["max"] // 2) for key, info in criteria_map.items()},
+            "strengths": raw_text[:400] if raw_text.strip() else "ไม่สามารถแปลงผลการประเมินได้",
+            "summary": "ระบบไม่สามารถแปลงผลการประเมินเป็น JSON ได้ กรุณาลองวิเคราะห์ใหม่อีกครั้ง"
+        }
+
+    # Validate & fix scores — ensure every key exists and score is within range
+    scores = result.get("scores", {})
+    for key, info in criteria_map.items():
+        raw_score = scores.get(key, info["max"] // 2)
+        # Clamp to valid range, ensure never exactly 0 (unless intended max is 0)
+        if info["max"] > 0:
+            scores[key] = max(0, min(info["max"], int(raw_score)))
+        else:
+            scores[key] = 0
+
+    result["scores"] = scores
+
+    # Ensure strengths and summary are non-empty strings
+    if not result.get("strengths", "").strip():
+        result["strengths"] = "ผู้สมัครมีประสบการณ์และทักษะที่เกี่ยวข้องกับตำแหน่งนี้"
+    if not result.get("summary", "").strip():
+        result["summary"] = "กรุณาตรวจสอบรายละเอียดในเรซูเม่เพิ่มเติม"
+
+    return result
+
+
+@app.post("/api/score")
+async def api_score(req: ScoreRequest):
+    return await _score_resume(req.resume_text, req.jd_text, req.criteria_map)
 
 @app.get("/api/roles")
 async def api_roles():
