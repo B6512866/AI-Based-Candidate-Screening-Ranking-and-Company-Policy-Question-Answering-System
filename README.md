@@ -55,6 +55,7 @@
 * **Go 1.20+** (สำหรับ Backend API)
 * **Node.js 18+ & npm** (สำหรับ Frontend React)
 * **Python 3.10+** (สำหรับ Typhoon AI Engine)
+* **Torch 2.5.1** (คำสั่ง pip install torch)
 
 ---
 
