@@ -34,6 +34,7 @@ func ConnectDatabase() {
 		&entity.Application{},
 		&entity.Resumes{},
 		&entity.KnowledgeBase{},
+		&entity.Interview{},
 		&entity.ChatMessage{},
 		&entity.Report{},
 		&entity.JobPosition{},
