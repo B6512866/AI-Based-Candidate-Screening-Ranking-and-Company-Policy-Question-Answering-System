@@ -71,7 +71,7 @@ async def lifespan(app: FastAPI):
     """Load models on startup with CPU fallback for compatibility."""
 
     # ── Skip model loading if SKIP_MODEL_LOAD=true ──────────────────────────
-    if os.environ.get("SKIP_MODEL_LOAD", "").lower() == "true":
+    if os.environ.get("SKIP_MODEL_LOAD", "").lower() == "":
         logger.info("⚠️ SKIP_MODEL_LOAD=true — AI models will NOT be loaded. DB/file features only.")
         yield
         models.clear()
