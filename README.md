@@ -108,13 +108,7 @@ go run main.go
 > 💡 **หมายเหตุ:** `go run main.go` จะทำการสตาร์ททั้ง **Go Backend (Port 8080)** และ **Typhoon AI Service (Port 8000)** ควบคู่กันไปให้อัตโนมัติ
 
 ### 4. รัน Frontend Service (React Vite)
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
+สร้างไฟล์ .env ใน frontend
 ```bash
 แบบปกติ
 VITE_API_URL=http://localhost:8080/api
@@ -127,7 +121,12 @@ VITE_WS_URL=ws://100.123.193.113:5173/ws
 VITE_TYPHOON_API_URL=http://100.123.193.113:5173
 ```
 
-Frontend จะ run ที่ `http://localhost:5173`
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
 
 ---
 
