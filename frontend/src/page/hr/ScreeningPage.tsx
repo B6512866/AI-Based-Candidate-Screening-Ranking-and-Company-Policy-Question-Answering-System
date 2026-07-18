@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { Upload, FileText, Briefcase, Sparkles, X, ChevronDown, ChevronUp, Wifi, WifiOff, RefreshCw, Eye, FileCheck } from "lucide-react";
-import { getalljobs, getapplications, updateApplicationScreening } from "../../services/jobPositionService";
+import { getalljobs, getapplications, updateApplicationScreening, deleteapplication } from "../../services/jobPositionService";
 import apiClient from "../../services/apiClient";
 
 const TYPHOON_API = import.meta.env.VITE_TYPHOON_API_URL || "http://localhost:8000";
@@ -517,6 +517,17 @@ ${tableRowsExample}
             console.error("Batch analysis failed:", error);
         } finally {
             setBatchAnalyzing(false);
+        }
+    };
+
+    const handleDeleteApplicant = async (appId: number) => {
+        if (!window.confirm("คุณต้องการลบข้อมูลผู้สมัครรายนี้ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้")) return;
+        try {
+            await deleteapplication(appId);
+            setApplicants(prev => prev.filter(a => a.ID !== appId));
+        } catch (err) {
+            console.error("ลบข้อมูลผู้สมัครล้มเหลว:", err);
+            alert("เกิดข้อผิดพลาดในการลบข้อมูลผู้สมัคร");
         }
     };
 
@@ -1152,6 +1163,13 @@ ${tableRowsExample}
                                                         className="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all"
                                                     >
                                                         <RefreshCw className={`w-3 h-3 ${status === "ocr" || status === "ai" ? "animate-spin" : ""}`} /> วิเคราะห์ใหม่
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteApplicant(app.ID)}
+                                                        className="inline-flex items-center gap-1 bg-rose-50 hover:bg-rose-100 text-rose-600 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ml-auto cursor-pointer"
+                                                        title="ลบข้อมูลผู้สมัคร"
+                                                    >
+                                                        <X className="w-3 h-3" /> ลบผู้สมัคร
                                                     </button>
                                                 </div>
 
