@@ -78,6 +78,7 @@ func main() {
 		routes.AuthRoutes(api, config.DB)
 		routes.KnowledgeRoutes(api, config.DB)
 		routes.JobPositionRoutes(api, config.DB)
+		routes.ChatRoutes(api, config.DB)
 	}
 
 	fmt.Println("🚀 Server running on port:", config.Env.BackendPort)
