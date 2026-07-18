@@ -69,7 +69,15 @@ def resize_if_needed(img: Image.Image, max_size: int = 1024) -> Image.Image:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load models on startup with CPU fallback for compatibility."""
-    
+
+    # ── Skip model loading if SKIP_MODEL_LOAD=true ──────────────────────────
+    if os.environ.get("SKIP_MODEL_LOAD", "").lower() == "true":
+        logger.info("⚠️ SKIP_MODEL_LOAD=true — AI models will NOT be loaded. DB/file features only.")
+        yield
+        models.clear()
+        return
+    # ────────────────────────────────────────────────────────────────────────
+
     # 1. OCR Model
     logger.info("Loading Typhoon OCR model...")
     try:
@@ -91,7 +99,7 @@ async def lifespan(app: FastAPI):
         try:
             models["ocr_model"] = AutoModelForImageTextToText.from_pretrained(
                 OCR_MODEL_ID,
-                torch_dtype=torch.float32,
+                dtype=torch.float32,
                 device_map={"": "cpu"},
             )
             models["ocr_processor"] = AutoProcessor.from_pretrained(OCR_MODEL_ID)
@@ -109,7 +117,7 @@ async def lifespan(app: FastAPI):
             bnb_4bit_quant_type="nf4",
             bnb_4bit_use_double_quant=True,
         )
-        
+
         models["chat_tokenizer"] = AutoTokenizer.from_pretrained(CHAT_MODEL_ID)
         models["chat_model"] = AutoModelForCausalLM.from_pretrained(
             CHAT_MODEL_ID,
@@ -122,7 +130,7 @@ async def lifespan(app: FastAPI):
         try:
             models["chat_model"] = AutoModelForCausalLM.from_pretrained(
                 CHAT_MODEL_ID,
-                torch_dtype=torch.float32,
+                dtype=torch.float32,
                 device_map={"": "cpu"},
             )
             logger.info("✅ Chat model loaded on CPU.")
