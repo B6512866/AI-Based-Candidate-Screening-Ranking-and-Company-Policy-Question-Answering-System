@@ -101,7 +101,7 @@ pip install python-multipart
 
 วิธีเปิดปิด model
  # ── Skip model loading if SKIP_MODEL_LOAD=true ──────────────────────────
-    if os.environ.get("SKIP_MODEL_LOAD", "").lower() == "false": #<== ture is on or false is out
+    if os.environ.get("SKIP_MODEL_LOAD", "").lower() == "false": #<== true is on or false is out
         logger.info("⚠️ SKIP_MODEL_LOAD=true — AI models will NOT be loaded. DB/file features only.")
         yield
         models.clear()
