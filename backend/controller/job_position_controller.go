@@ -283,3 +283,26 @@ func (c *JobPositionController) UpdateApplicationScreening(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{"message": "วิเคราะห์ผู้สมัครและบันทึกคะแนน AI สำเร็จ", "data": scr})
 }
+
+// DELETE /api/applications/:appId
+func (c *JobPositionController) DeleteApplication(ctx *gin.Context) {
+	idStr := ctx.Param("appId")
+	appID, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ID ใบสมัครไม่ถูกต้อง"})
+		return
+	}
+
+	var app entity.Application
+	if err := c.db.First(&app, appID).Error; err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบใบสมัครนี้"})
+		return
+	}
+
+	if err := c.db.Delete(&app).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ลบใบสมัครไม่สำเร็จ"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"message": "ลบผู้สมัครเรียบร้อยแล้ว"})
+}

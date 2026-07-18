@@ -113,3 +113,9 @@ export async function updateApplicationScreening(
   });
   return res.data;
 }
+
+// ── ลบใบสมัครผู้สมัคร
+export async function deleteapplication(appId: number) {
+  const res = await apiClient.delete(`/applications/${appId}`);
+  return res.data;
+}

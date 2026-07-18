@@ -23,4 +23,5 @@ func JobPositionRoutes(api *gin.RouterGroup, db *gorm.DB) {
 
 	// บันทึกการคัดกรองผู้สมัครรายบุคคล
 	api.PUT("/applications/:appId/screening", middleware.AuthMiddleware(), jobPositionController.UpdateApplicationScreening)
+	api.DELETE("/applications/:appId", middleware.AuthMiddleware(), jobPositionController.DeleteApplication)
 }
