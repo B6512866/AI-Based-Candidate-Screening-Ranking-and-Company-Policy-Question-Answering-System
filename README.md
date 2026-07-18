@@ -96,6 +96,8 @@ JWT_SECRET=mysecretkey123
 
 ```bash
 cd backend
+pip install uvicorn fastapi
+pip install python-multipart
 go run main.go
 ```
 > 💡 **หมายเหตุเกี่ยวกับการดาวน์โหลดโมเดล AI:**
