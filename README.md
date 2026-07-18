@@ -114,6 +114,15 @@ cd frontend
 npm install
 npm run dev
 ```
+แบบปกติ
+VITE_API_URL=http://localhost:8080/api
+VITE_WS_URL=ws://localhost:8080
+VITE_TYPHOON_API_URL=http://localhost:8000
+
+แบบ Tailscale
+VITE_API_URL=http://100.123.193.113:5173/api
+VITE_WS_URL=ws://100.123.193.113:5173/ws
+VITE_TYPHOON_API_URL=http://100.123.193.113:5173
 
 Frontend จะ run ที่ `http://localhost:5173`
 
