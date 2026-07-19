@@ -97,8 +97,8 @@ JWT_SECRET=mysecretkey123
 
 ```bash
 cd backend
-pip install uvicorn fastapi
-pip install python-multipart
+pip install -r "c:\Users\เจษฎา\Desktop\Final\AI-Based-Candidate-Screening-Ranking-and-Company-Policy-Question-Answering-System\backend\typhoon\requirements.txt"
+go run main.go
 
 วิธีเปิดปิด model
 LOAD_MODELS = False #line 33
