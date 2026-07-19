@@ -69,14 +69,15 @@ export default function EmployeeChat() {
     const loadSessions = async (selectLatest = true) => {
         try {
             const sRes = await getChatSessions();
-            if (sRes && sRes.data) {
-                setSessions(sRes.data);
+            if (sRes) {
+                const data = sRes.data || [];
+                setSessions(data);
                 
                 // หากดึงข้อมูลครั้งแรก ให้ดึงประวัติห้องแชตล่าสุดมาเปิดให้เลย
-                if (selectLatest && sRes.data.length > 0 && !currentSessionId) {
-                    const latest = sRes.data[0];
+                if (selectLatest && data.length > 0 && !currentSessionId) {
+                    const latest = data[0];
                     handleSelectSession(latest.session_id, latest.session_title);
-                } else if (selectLatest && sRes.data.length === 0) {
+                } else if (selectLatest && data.length === 0) {
                     // หากยังไม่มีห้องแชตเลย ให้สร้างเธรดห้องแชตใหม่เริ่มแรกขึ้นมา
                     setCurrentSessionId(generateSessionId());
                     setCurrentSessionTitle("แชตใหม่");
@@ -103,8 +104,9 @@ export default function EmployeeChat() {
         setLoading(true);
         try {
             const hRes = await getChatHistory(sessId);
-            if (hRes && hRes.data) {
-                const formatted = hRes.data.flatMap((msg) => [
+            if (hRes) {
+                const data = hRes.data || [];
+                const formatted = data.flatMap((msg) => [
                     { id: msg.ID * 2, from: "user" as const, text: msg.question },
                     { id: msg.ID * 2 + 1, from: "bot" as const, text: msg.answer }
                 ]);
@@ -115,7 +117,7 @@ export default function EmployeeChat() {
                         text: `สวัสดีครับ${firstName ? " คุณ" + firstName : ""}! ยินดีต้อนรับกลับเข้าสู่เธรด: ${sessTitle} 🤖\nต้องการสนทนาเรื่องอะไรเพิ่มเติมสอบถามได้เลยครับ`,
                     }
                 ]);
-                chatHistory.current = hRes.data.flatMap((msg) => [
+                chatHistory.current = data.flatMap((msg) => [
                     { role: "user", content: msg.question },
                     { role: "assistant", content: msg.answer }
                 ]);

@@ -32,7 +32,7 @@ func (cc *ChatController) GetChatSessions(ctx *gin.Context) {
 		CreatedAt    string `json:"created_at"`
 	}
 
-	var sessions []SessionResult
+	sessions := []SessionResult{}
 	// ใช้คำสั่งหาข้อมูล SessionID และ SessionTitle ล่าสุดของผู้ใช้
 	query := `
 		SELECT DISTINCT ON (session_id) session_id, session_title, created_at
@@ -65,7 +65,7 @@ func (cc *ChatController) GetChatHistory(ctx *gin.Context) {
 		return
 	}
 
-	var messages []entity.ChatMessage
+	messages := []entity.ChatMessage{}
 	if err := cc.db.Where("user_id = ? AND session_id = ?", userID, sessionID).Order("id asc").Find(&messages).Error; err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงประวัติแชตห้องนี้ได้"})
 		return

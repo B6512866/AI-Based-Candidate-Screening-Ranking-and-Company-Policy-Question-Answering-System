@@ -11,6 +11,7 @@ func CORSMiddleware() gin.HandlerFunc {
 		"http://localhost:5173",
 		"http://127.0.0.1:5173",
 		"http://100.123.193.113:5173",
+		"http://100.98.81.67:5173",
 	}
 	if config.Env.FrontendURL != "" && config.Env.FrontendURL != "http://localhost:5173" {
 		origins = append(origins, config.Env.FrontendURL)
