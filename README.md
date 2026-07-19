@@ -101,13 +101,7 @@ pip install uvicorn fastapi
 pip install python-multipart
 
 วิธีเปิดปิด model
- # ── Skip model loading if SKIP_MODEL_LOAD=true ──────────────────────────
-    if os.environ.get("SKIP_MODEL_LOAD", "").lower() == "false": #<== true is on or false is out
-        logger.info("⚠️ SKIP_MODEL_LOAD=true — AI models will NOT be loaded. DB/file features only.")
-        yield
-        models.clear()
-        return
-
+LOAD_MODELS = False #line 33
 ```
 > 💡 **หมายเหตุเกี่ยวกับการดาวน์โหลดโมเดล AI:**
 > - ไฟล์โมเดลมีขนาดใหญ่ จึงไม่ได้ถูก commit ขึ้น GitHub 
