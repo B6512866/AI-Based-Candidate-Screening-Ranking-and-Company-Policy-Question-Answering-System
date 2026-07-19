@@ -28,6 +28,11 @@ logger = logging.getLogger(__name__)
 CHAT_MODEL_ID = "typhoon-ai/typhoon2.5-qwen3-4b"
 OCR_MODEL_ID  = "typhoon-ai/typhoon-ocr1.5-2b"
 
+# ─── Toggle AI Models ─────────────────────────────────────────────────────────
+# เปลี่ยน False → True เมื่อต้องการโหลด AI models
+LOAD_MODELS = False
+# ──────────────────────────────────────────────────────────────────────────────
+
 # ─── Global holders ───────────────────────────────────────────────────────────
 models = {}
 
@@ -70,9 +75,9 @@ def resize_if_needed(img: Image.Image, max_size: int = 1024) -> Image.Image:
 async def lifespan(app: FastAPI):
     """Load models on startup with CPU fallback for compatibility."""
 
-    # ── Skip model loading if SKIP_MODEL_LOAD=true ──────────────────────────
-    if os.environ.get("SKIP_MODEL_LOAD", "").lower() == "":
-        logger.info("⚠️ SKIP_MODEL_LOAD=true — AI models will NOT be loaded. DB/file features only.")
+    # ── ควบคุมด้วย LOAD_MODELS ที่ด้านบนไฟล์ ────────────────────────────────
+    if not LOAD_MODELS:
+        logger.info("⚠️ LOAD_MODELS=False — AI models will NOT be loaded. DB/file features only.")
         yield
         models.clear()
         return
