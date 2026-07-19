@@ -47,15 +47,15 @@
 | ---------------------- | ------------- | -------------------- | ------------ |
 | **HR Manager**         | `hr@gmail.com` | `password123`        | `/hr/dashboard` |
 | **Employee (พนักงาน)**  | `test@gmail.com`| `password123`        | `/employee/chat` |
+
 ---
 
-## สิ่งที่ต้องติดตั้งก่อนเริ่ม
+## สิ่งที่ต้องติดตั้งก่อนเริ่ม (Prerequisites)
 
-* **Docker & Docker Compose** (สำหรับ PostgreSQL Database)
-* **Go 1.20+** (สำหรับ Backend API)
-* **Node.js 18+ & npm** (สำหรับ Frontend React)
-* **Python 3.10+** (สำหรับ Typhoon AI Engine)
-* **Torch 2.5.1** (คำสั่ง pip install torch)
+* **Python 3.10+** (สำหรับรัน Typhoon AI Engine)
+* **Node.js LTS** เช่น เวอร์ชัน 20.x หรือ 22.x (สำหรับรัน Frontend React)
+* **Go 1.20+** (สำหรับรัน Backend API)
+* **Docker & Docker Compose** (สำหรับรัน PostgreSQL Database - แนะนำให้ติดตั้งพร้อมกับเปิดใช้งาน WSL 2)
 
 ---
 
@@ -67,12 +67,90 @@
 | ------- | ---------------------- | ------------------------ |
 | **CPU** | Intel Core i5 (Gen 10+) / Ryzen 5 (3000+) | Intel Core i7 (Gen 12+) / Ryzen 7 (5000+) |
 | **RAM** | 16 GB | 32 GB |
-| **GPU** | NVIDIA GTX 1660 Ti / RTX 2060 (VRAM 6 GB) | NVIDIA RTX 3060 (VRAM 12 GB+) ขึ้นไป |
+| **GPU** | NVIDIA GTX 1660 Ti / RTX 2060 (VRAM 6 GB) | NVIDIA RTX 3060 (VRAM 12 GB+) ขึ้นไป (ตระกูล RTX 40/50 รองรับสมบูรณ์) |
 | **Storage** | SSD พื้นที่ว่าง 20 GB | NVMe M.2 SSD พื้นที่ว่าง 30 GB |
 
 ---
 
-## ขั้นตอนการใช้งาน
+## ขั้นตอนการเริ่มใช้งาน (Step-by-Step Installation)
+
+### ขั้นตอนที่ 1: ตั้งค่าระบบฐานข้อมูล (Database Setup)
+1. เปิดโปรแกรม Docker Desktop ให้เรียบร้อย
+2. รันคำสั่งเชื่อมต่อฐานข้อมูลโดย PostgreSQL ด้วย Docker Compose ในหน้าโฟลเดอร์หลักของโปรเจกต์:
+   ```bash
+   docker compose up -d
+   ```
+3. สร้างไฟล์ `.env` ในโฟลเดอร์ `backend/` และตั้งค่าดังนี้:
+   ```env
+   DB_HOST=127.0.0.1
+   DB_PORT=5432
+   DB_USER=postgres
+   DB_PASSWORD=postgres123
+   DB_NAME=hr_system
+   JWT_SECRET=mysecretkey123
+   ```
+
+### ขั้นตอนที่ 2: ติดตั้งและตั้งค่า Python AI Engine
+*(หากใช้ระบบ Windows แนะนำให้เปิดสิทธิ์สคริปต์บน PowerShell ก่อนโดยรัน `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`)*
+
+1. สร้าง Virtual Environment (แนะนำเพื่อไม่ให้ปะปนกับ Python หลักของเครื่อง):
+   ```bash
+   python -m venv backend/.venv
+   ```
+2. เปิดใช้งาน (Activate) Virtual Environment:
+   * **สำหรับ CMD:** `backend\.venv\Scripts\activate.bat`
+   * **สำหรับ PowerShell:** `backend\.venv\Scripts\Activate.ps1`
+3. ติดตั้งแพ็กเกจไลบรารี:
+   * **กรณีใช้งานร่วมกับการ์ดจอ GPU (NVIDIA RTX 40/50 series เช่น RTX 5060):**
+     ```bash
+     # ลบ torch ตัวเก่าออกก่อนเพื่อป้องกันการชนกันของเวอร์ชัน
+     pip uninstall torch torchvision torchaudio -y
+     
+     # ติดตั้ง PyTorch เวอร์ชัน CUDA 12.8 (cu128)
+     pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
+     
+     # ติดตั้ง bitsandbytes เวอร์ชันทดสอบล่าสุด
+     pip install --upgrade --pre bitsandbytes
+     
+     # อัปเดต transformers เพื่อให้รู้จักโครงสร้าง ocr (qwen3_vl)
+     pip install --upgrade transformers
+     
+     # ติดตั้ง dependencies อื่นๆ
+     pip install -r backend/typhoon/requirements.txt
+     ```
+   * **กรณีใช้งานบน CPU-only (ไม่แนะนำเพราะรันช้ามาก):**
+     ```bash
+     pip install -r backend/typhoon/requirements.txt
+     ```
+4. ดาวน์โหลดโมเดล AI ของ Typhoon จาก Hugging Face ล่วงหน้าก่อนเปิดระบบ:
+   ```bash
+   python backend/typhoon/download_models.py
+   ```
+5. ในไฟล์ [backend/typhoon/main.py](file:///c:/Users/เจษฎา/Desktop/Final/AI-Based-Candidate-Screening-Ranking-and-Company-Policy-Question-Answering-System/backend/typhoon/main.py) ตั้งค่าบรรทัดที่ 33 ให้เป็น `LOAD_MODELS = True` เพื่อสั่งให้โหลดโมเดล AI ตอนสตาร์ทระบบ
+
+### ขั้นตอนที่ 3: สตาร์ท Backend API (Go API & Python AI Engine)
+รันคำสั่งด้านล่างนี้ในโฟลเดอร์ `backend/`:
+```bash
+cd backend
+go run main.go
+```
+*💡 **หมายเหตุ:** `go run main.go` จะทำการสตาร์ททั้ง **Go Backend (Port 8080)** และ **Typhoon AI Service (Port 8000)** ควบคู่กันไปให้อัตโนมัติ*
+
+### ขั้นตอนที่ 4: ติดตั้งและสตาร์ท Frontend (React Vite)
+1. สร้างไฟล์ `.env` ในโฟลเดอร์ `frontend/` และตั้งค่าดังนี้:
+   ```env
+   VITE_API_URL=http://localhost:8080/api
+   VITE_WS_URL=ws://localhost:8080
+   VITE_TYPHOON_API_URL=http://localhost:8000
+   ```
+2. รันคำสั่งด้านล่างนี้ในโฟลเดอร์ `frontend/`:
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+
+---ขั้นตอนการใช้งาน
 
 ### 1. เริ่มเชื่อมต่อฐานข้อมูลโดย PostgreSQL ต่อเข้ากับ Docker Compose
 

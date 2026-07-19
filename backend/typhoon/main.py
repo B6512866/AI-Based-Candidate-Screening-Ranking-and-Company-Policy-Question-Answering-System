@@ -30,7 +30,7 @@ OCR_MODEL_ID  = "typhoon-ai/typhoon-ocr1.5-2b"
 
 # ─── Toggle AI Models ─────────────────────────────────────────────────────────
 # เปลี่ยน False → True เมื่อต้องการโหลด AI models
-LOAD_MODELS = False
+LOAD_MODELS = True
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ─── Global holders ───────────────────────────────────────────────────────────
@@ -104,7 +104,7 @@ async def lifespan(app: FastAPI):
         try:
             models["ocr_model"] = AutoModelForImageTextToText.from_pretrained(
                 OCR_MODEL_ID,
-                dtype=torch.float32,
+                torch_dtype=torch.float32,
                 device_map={"": "cpu"},
             )
             models["ocr_processor"] = AutoProcessor.from_pretrained(OCR_MODEL_ID)
@@ -135,7 +135,7 @@ async def lifespan(app: FastAPI):
         try:
             models["chat_model"] = AutoModelForCausalLM.from_pretrained(
                 CHAT_MODEL_ID,
-                dtype=torch.float32,
+                torch_dtype=torch.float32,
                 device_map={"": "cpu"},
             )
             logger.info("✅ Chat model loaded on CPU.")
