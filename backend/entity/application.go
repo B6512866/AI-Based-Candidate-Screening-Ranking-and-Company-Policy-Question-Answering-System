@@ -9,6 +9,8 @@ type Application struct {
 	Position  string  `json:"position"`
 	ResumeURL string  `json:"resume_url"`
 	ResumeText  string  `json:"resume_text" gorm:"type:text"` // <-- เพิ่มตัวนี้เพื่อเก็บเนื้อหา Resume
+	TranscriptURL string  `json:"transcript_url"`
+	TranscriptText string  `json:"transcript_text" gorm:"type:text"`
 
 	// Link to Candidate instead of User
 	CandidateID uint      `json:"candidate_id"`

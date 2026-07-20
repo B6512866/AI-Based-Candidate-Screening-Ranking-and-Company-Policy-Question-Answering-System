@@ -78,7 +78,9 @@ export async function applyjob(
   email: string,
   phone: string,
   resumeText: string,
-  resumeUrl: string
+  resumeUrl: string,
+  transcriptUrl: string = "",
+  transcriptText: string = ""
 ){
   const res = await apiClient.post(`/job-positions/${jobId}/apply`, {
     first_name: firstName,
@@ -86,7 +88,9 @@ export async function applyjob(
     email: email,
     phone: phone,
     resume_text: resumeText,
-    resume_url: resumeUrl
+    resume_url: resumeUrl,
+    transcript_url: transcriptUrl,
+    transcript_text: transcriptText
   });
   return res.data;
 }
