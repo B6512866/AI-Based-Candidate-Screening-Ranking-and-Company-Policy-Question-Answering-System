@@ -159,10 +159,12 @@ func (c *JobPositionController) Apply(ctx *gin.Context) {
 	}
 	var req struct {
 		entity.Candidate
-		ResumeURL string `json:"resume_url"`
+		ResumeURL      string `json:"resume_url"`
+		TranscriptURL  string `json:"transcript_url"`
+		TranscriptText string `json:"transcript_text"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "กรุณากรอกข้อมูลและอัปโหลด Resume ให้ครบถ้วน"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "กรุณากรอกข้อมูลและอัปโหลดเอกสารให้ครบถ้วน"})
 		return
 	}
 	// 2. ค้นหา Candidate เดิม หรือถ้าไม่มีให้สร้างขึ้นใหม่ (Find or Create by Email)
@@ -183,18 +185,20 @@ func (c *JobPositionController) Apply(ctx *gin.Context) {
 	}
 	// 3. สร้างข้อมูลใบสมัคร (Application) บันทึกคู่กับ JobPositionID
 	app := entity.Application{
-		Status:        "รอพิจารณา",
-		Position:      job.Title,
-		ResumeText:    req.ResumeText,
-		ResumeURL:     req.ResumeURL,
-		CandidateID:   candidate.ID,
-		JobPositionID: job.ID,
+		Status:         "รอพิจารณา",
+		Position:       job.Title,
+		ResumeText:     req.ResumeText,
+		ResumeURL:      req.ResumeURL,
+		TranscriptURL:  req.TranscriptURL,
+		TranscriptText: req.TranscriptText,
+		CandidateID:    candidate.ID,
+		JobPositionID:  job.ID,
 	}
 	if err := c.db.Create(&app).Error; err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ส่งใบสมัครไม่สำเร็จ"})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"message": "ส่งใบสมัครและอัปโหลด Resume สำเร็จ!"})
+	ctx.JSON(http.StatusOK, gin.H{"message": "ส่งใบสมัครสำเร็จ!"})
 }
 
 // ── สำหรับ HR ดึงรายชื่อผู้สมัครแยกตามตำแหน่งงาน

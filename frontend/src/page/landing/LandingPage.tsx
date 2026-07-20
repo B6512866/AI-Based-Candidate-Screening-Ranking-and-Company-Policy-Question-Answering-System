@@ -10,10 +10,10 @@ import {
     CTASection,
     Footer,
 } from "./landing-components";
-import { LoginModal } from "../auth/LoginPage";
 import { getalljobs, applyjob } from "../../services/jobPositionService";
 import apiClient from "../../services/apiClient";
-import { Briefcase, MapPin, DollarSign, Clock, Search, X, Building2, ShieldCheck, Mail, Upload, AlertCircle } from "lucide-react";
+import { Briefcase, MapPin, DollarSign, Clock, Search, X, Building2, ShieldCheck, Mail, AlertCircle, Upload } from "lucide-react";
+import { LoginModal } from "../auth/LoginPage";
 
 interface JobPosition {
     ID: number;
@@ -42,9 +42,8 @@ function LandingPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedDept, setSelectedDept] = useState("all");
     const [selectedJob, setSelectedJob] = useState<JobPosition | null>(null);
+    const [activeDetailJob, setActiveDetailJob] = useState<JobPosition | null>(null);
     const [showApplySuccess, setShowApplySuccess] = useState(false);
-
-    // States สำหรับควบคุมฟอร์มสมัครงาน
     const [showApplyForm, setShowApplyForm] = useState(false);
     const [applyFirstName, setApplyFirstName] = useState("");
     const [applyLastName, setApplyLastName] = useState("");
@@ -53,10 +52,13 @@ function LandingPage() {
     const [applyResumeText, setApplyResumeText] = useState("");
     const [applyResumeUrl, setApplyResumeUrl] = useState("");
     const [applyFileName, setApplyFileName] = useState("");
+    const [applyTranscriptUrl, setApplyTranscriptUrl] = useState("");
+    const [applyTranscriptFileName, setApplyTranscriptFileName] = useState("");
+    const [applyTranscriptText, setApplyTranscriptText] = useState("");
     const [submittingApply, setSubmittingApply] = useState(false);
     const [applyError, setApplyError] = useState("");
 
-    // ฟังก์ชันอัปโหลดไฟล์ Resume ไปที่ Go Backend (เก็บรูปภาพ/เอกสารไว้เฉยๆ ไม่ใช้ AI)
+    // ฟังก์ชันอัปโหลดไฟล์ Resume ไปที่ Go Backend
     const handleResumeUpload = async (file: File) => {
         if (!file) return;
         setApplyFileName(file.name + " (กำลังอัปโหลด...)");
@@ -99,11 +101,54 @@ function LandingPage() {
             setApplyResumeUrl("");
         }
     };
+
+    // ฟังก์ชันอัปโหลดไฟล์ Transcript ไปที่ Go Backend
+    const handleTranscriptUpload = async (file: File) => {
+        if (!file) return;
+        setApplyTranscriptFileName(file.name + " (กำลังอัปโหลด...)");
+        setApplyError("");
+        setApplyTranscriptText("");
+        setApplyTranscriptUrl("");
+
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+            
+            // อัปโหลดไฟล์ไปที่ Go Backend
+            const res = await apiClient.post("/upload", formData, {
+                headers: {
+                    "Content-Type": "multipart/form-data"
+                }
+            });
+            
+            if (res.data && res.data.url) {
+                setApplyTranscriptUrl(res.data.url);
+                setApplyTranscriptFileName(file.name + " (อัปโหลดสำเร็จ)");
+                
+                if (file.name.toLowerCase().endsWith(".txt")) {
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                        setApplyTranscriptText(e.target?.result as string || "");
+                    };
+                    reader.readAsText(file, "utf-8");
+                } else {
+                    setApplyTranscriptText(`ข้อมูลทรานสคริปต์ ถูกบันทึกไว้ในระบบ: ${res.data.url}`);
+                }
+            } else {
+                throw new Error("อัปโหลดไฟล์ไม่สำเร็จ");
+            }
+        } catch (err: any) {
+            setApplyError(err.response?.data?.error || "เกิดข้อผิดพลาดในการอัปโหลดไฟล์ Transcript");
+            setApplyTranscriptFileName("");
+            setApplyTranscriptUrl("");
+        }
+    };
+
     // ฟังก์ชันยิง API ส่งข้อมูลใบสมัครไปบันทึกที่หลังบ้าน
     const handleApplySubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!applyFirstName.trim() || !applyLastName.trim() || !applyEmail.trim() || !applyPhone.trim() || !applyResumeText.trim()) {
-            setApplyError("กรุณากรอกข้อมูลให้ครบถ้วนและอัปโหลดไฟล์ Resume");
+        if (!applyFirstName.trim() || !applyLastName.trim() || !applyEmail.trim() || !applyPhone.trim() || !applyResumeText.trim() || !applyTranscriptUrl.trim()) {
+            setApplyError("กรุณากรอกข้อมูลให้ครบถ้วน อัปโหลดไฟล์ Resume และไฟล์ Transcript");
             return;
         }
         setSubmittingApply(true);
@@ -117,10 +162,12 @@ function LandingPage() {
                     applyEmail,
                     applyPhone,
                     applyResumeText,
-                    applyResumeUrl
+                    applyResumeUrl,
+                    applyTranscriptUrl,
+                    applyTranscriptText
                 );
-                setShowApplyForm(false);
                 setShowApplySuccess(true);
+                setShowApplyForm(false); // ปิดฟอร์มสมัครงาน
                 // เคลียร์ค่าในฟอร์มเมื่อส่งสำเร็จ
                 setApplyFirstName("");
                 setApplyLastName("");
@@ -128,6 +175,9 @@ function LandingPage() {
                 setApplyPhone("");
                 setApplyResumeText("");
                 setApplyFileName("");
+                setApplyTranscriptUrl("");
+                setApplyTranscriptFileName("");
+                setApplyTranscriptText("");
             }
         } catch (err: any) {
             setApplyError(err.response?.data?.error || "เกิดข้อผิดพลาดในการส่งใบสมัคร");
@@ -184,7 +234,110 @@ function LandingPage() {
             <Navbar />
             <main className="grow">
                 <section id="hero" className="animate-fadeIn">
-                    <Hero />
+                    <Hero 
+                        jobBoardContent={
+                            <div className="text-left space-y-6">
+                                {/* Search and Filters */}
+                                <div className="bg-white/90 backdrop-blur-md p-4 rounded-2xl border border-slate-200/60 shadow-sm flex flex-col md:flex-row gap-4 mb-4">
+                                    <div className="flex-1 relative">
+                                        <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                                        <input
+                                            type="text"
+                                            placeholder="ค้นหาชื่อตำแหน่งงาน คีย์เวิร์ด หรือแผนก..."
+                                            value={searchQuery}
+                                            onChange={e => setSearchQuery(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-200/50 rounded-xl pl-12 pr-4 py-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans"
+                                        />
+                                    </div>
+                                    <div className="w-full md:w-60">
+                                        <select
+                                            value={selectedDept}
+                                            onChange={e => setSelectedDept(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-200/50 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans"
+                                        >
+                                            <option value="all">ทุกแผนก / ฝ่าย</option>
+                                            {departments.map(dept => (
+                                                <option key={dept} value={dept}>{dept}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {/* Jobs Grid */}
+                                {loading ? (
+                                    <div className="py-12 text-center text-slate-400 text-sm">กำลังโหลดข้อมูลตำแหน่งงานว่าง...</div>
+                                ) : filteredJobs.length === 0 ? (
+                                    <div className="py-12 text-center bg-white rounded-2xl border border-slate-200 shadow-sm p-8 flex flex-col items-center justify-center gap-3">
+                                        <Briefcase className="w-10 h-10 text-slate-300 animate-pulse" />
+                                        <p className="text-slate-500 font-bold">ไม่พบตำแหน่งงานที่คุณค้นหาในขณะนี้</p>
+                                        <p className="text-slate-300 text-xs">กรุณาลองระบุคำค้นหาใหม่อีกครั้ง</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {filteredJobs.map(job => (
+                                            <div
+                                                key={job.ID}
+                                                className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:scale-[1.01] transition-all p-6 flex flex-col justify-between"
+                                            >
+                                                <div className="space-y-4">
+                                                    {/* Category & Status */}
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-blue-50 text-[#4169E1]">
+                                                            {job.department || "General"}
+                                                        </span>
+                                                        <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                                                            เปิดรับสมัคร
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Job Title */}
+                                                    <div>
+                                                        <h3 className="font-extrabold text-slate-800 text-base leading-snug line-clamp-2 min-h-[44px]">
+                                                            {job.title}
+                                                        </h3>
+                                                    </div>
+
+                                                    {/* Metadata */}
+                                                    <div className="space-y-2 text-xs text-slate-500 font-medium pt-2">
+                                                        {job.location && (
+                                                            <div className="flex items-center gap-2">
+                                                                <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
+                                                                <span className="truncate">{job.location}</span>
+                                                            </div>
+                                                        )}
+                                                        {job.salary && (
+                                                            <div className="flex items-center gap-2">
+                                                                <DollarSign className="w-4 h-4 text-slate-400 shrink-0" />
+                                                                <span>{job.salary}</span>
+                                                            </div>
+                                                        )}
+                                                        {job.type && (
+                                                            <div className="flex items-center gap-2">
+                                                                <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+                                                                <span>{job.type}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <div className="pt-6 mt-6 border-t border-slate-100">
+                                                    <button
+                                                        onClick={() => {
+                                                            setActiveDetailJob(job);
+                                                        }}
+                                                        className="w-full bg-slate-50 hover:bg-[#4169E1] hover:text-white text-[#4169E1] font-bold py-2.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2"
+                                                    >
+                                                        ดูรายละเอียด & สมัครงาน
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        }
+                    />
                 </section>
 
                 <section id="solution">
@@ -197,119 +350,7 @@ function LandingPage() {
 
                 
 
-                {/* 📌 SECTION: ตำแหน่งงานว่างที่เปิดรับสมัคร */}
-                <section id="job-board" className="py-20 bg-slate-50 border-y border-slate-100">
-                    <div className="max-w-6xl mx-auto px-6">
-                        <div className="text-center max-w-2xl mx-auto mb-16 space-y-3">
-                            <span className="text-[#4169E1] font-bold text-xs uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full">
-                                WE ARE HIRING!
-                            </span>
-                            <h2 className="text-3xl md:text-4xl font-black text-slate-800 tracking-tight">
-                                ร่วมเป็นส่วนหนึ่งกับทีม HireAI
-                            </h2>
-                            <p className="text-slate-400 text-sm">
-                                เลือกสมัครในตำแหน่งที่ใช่ เพื่อก้าวไปสู่ความสำเร็จและเติบโตไปด้วยกันในเทคโนโลยีแห่งอนาคต
-                            </p>
-                        </div>
 
-                        {/* Search and Filters */}
-                        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4 mb-8">
-                            <div className="flex-1 relative">
-                                <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
-                                <input
-                                    type="text"
-                                    placeholder="ค้นหาชื่อตำแหน่งงาน คีย์เวิร์ด หรือแผนก..."
-                                    value={searchQuery}
-                                    onChange={e => setSearchQuery(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-xl pl-12 pr-4 py-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans"
-                                />
-                            </div>
-                            <div className="w-full md:w-60">
-                                <select
-                                    value={selectedDept}
-                                    onChange={e => setSelectedDept(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans"
-                                >
-                                    <option value="all">ทุกแผนก / ฝ่าย</option>
-                                    {departments.map(dept => (
-                                        <option key={dept} value={dept}>{dept}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-
-                        {/* Jobs Grid */}
-                        {loading ? (
-                            <div className="py-20 text-center text-slate-400 text-sm">กำลังโหลดข้อมูลตำแหน่งงานว่าง...</div>
-                        ) : filteredJobs.length === 0 ? (
-                            <div className="py-20 text-center bg-white rounded-2xl border border-slate-100 shadow-sm p-8 flex flex-col items-center justify-center gap-3">
-                                <Briefcase className="w-10 h-10 text-slate-300 animate-pulse" />
-                                <p className="text-slate-500 font-bold">ไม่พบตำแหน่งงานที่คุณค้นหาในขณะนี้</p>
-                                <p className="text-slate-300 text-xs">กรุณาลองระบุคำค้นหาใหม่อีกครั้ง</p>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {filteredJobs.map(job => (
-                                    <div
-                                        key={job.ID}
-                                        className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:scale-[1.01] transition-all p-6 flex flex-col justify-between"
-                                    >
-                                        <div className="space-y-4">
-                                            {/* Category & Status */}
-                                            <div className="flex items-center justify-between">
-                                                <span className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-blue-50 text-[#4169E1]">
-                                                    {job.department || "General"}
-                                                </span>
-                                                <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-                                                    เปิดรับสมัคร
-                                                </span>
-                                            </div>
-
-                                            {/* Job Title */}
-                                            <div>
-                                                <h3 className="font-extrabold text-slate-800 text-base leading-snug line-clamp-2 min-h-[44px]">
-                                                    {job.title}
-                                                </h3>
-                                            </div>
-
-                                            {/* Metadata */}
-                                            <div className="space-y-2 text-xs text-slate-500 font-medium pt-2">
-                                                {job.location && (
-                                                    <div className="flex items-center gap-2">
-                                                        <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
-                                                        <span className="truncate">{job.location}</span>
-                                                    </div>
-                                                )}
-                                                {job.salary && (
-                                                    <div className="flex items-center gap-2">
-                                                        <DollarSign className="w-4 h-4 text-slate-400 shrink-0" />
-                                                        <span>{job.salary}</span>
-                                                    </div>
-                                                )}
-                                                {job.type && (
-                                                    <div className="flex items-center gap-2">
-                                                        <Clock className="w-4 h-4 text-slate-400 shrink-0" />
-                                                        <span>{job.type}</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <div className="pt-6 mt-6 border-t border-slate-50">
-                                            <button
-                                                onClick={() => setSelectedJob(job)}
-                                                className="w-full bg-slate-50 hover:bg-[#4169E1] hover:text-white text-[#4169E1] font-bold py-2.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2"
-                                            >
-                                                ดูรายละเอียด & สมัครงาน
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </section>
 
                 <section id="how-it-works">
                     <HowItWorks />
@@ -325,46 +366,44 @@ function LandingPage() {
             <LoginModal open={isLoginOpen} onOpenChange={handleLoginOpenChange} />
 
             {/* 📌 MODAL: รายละเอียดตำแหน่งงานว่าง (สไตล์ JobThai) */}
-            {selectedJob && (
+            {activeDetailJob && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
                     <div className="bg-white rounded-3xl w-full max-w-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-scaleUp">
                         {/* Modal Header */}
                         <div className="bg-gradient-to-r from-[#4169E1] to-[#3a5ec7] text-white p-6 relative shrink-0">
                             <button
-                                onClick={() => setSelectedJob(null)}
+                                onClick={() => setActiveDetailJob(null)}
                                 className="absolute right-4 top-4 text-white/80 hover:text-white hover:bg-white/10 p-1.5 rounded-full transition-all"
                             >
                                 <X className="w-5 h-5" />
                             </button>
                             <div className="space-y-2 pr-10">
                                 <span className="inline-block px-3 py-1 rounded bg-white/20 text-xs font-bold tracking-wide">
-                                    {selectedJob.department || "General"}
+                                    {activeDetailJob.department || "General"}
                                 </span>
-                                <h3 className="text-xl md:text-2xl font-black">{selectedJob.title}</h3>
+                                <h3 className="text-xl md:text-2xl font-black">{activeDetailJob.title}</h3>
                                 <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-white/90 font-medium pt-2">
-                                    {selectedJob.location && (
+                                    {activeDetailJob.location && (
                                         <span className="flex items-center gap-1.5">
                                             <MapPin className="w-4 h-4 text-white/75 shrink-0" />
-                                            {selectedJob.location}
+                                            {activeDetailJob.location}
                                         </span>
                                     )}
-                                    {selectedJob.salary && (
+                                    {activeDetailJob.salary && (
                                         <span className="flex items-center gap-1.5">
                                             <DollarSign className="w-4 h-4 text-white/75 shrink-0" />
-                                            เงินเดือน: {selectedJob.salary}
+                                            เงินเดือน: {activeDetailJob.salary}
                                         </span>
                                     )}
-                                    {selectedJob.type && (
+                                    {activeDetailJob.type && (
                                         <span className="flex items-center gap-1.5">
                                             <Clock className="w-4 h-4 text-white/75 shrink-0" />
-                                            {selectedJob.type}
+                                            {activeDetailJob.type}
                                         </span>
                                     )}
                                 </div>
                             </div>
                         </div>
-
-                        {/* 📌 MODAL: ฟอร์มสมัครงานและอัปโหลด Resume */}
 
                         {/* Modal Content */}
                         <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 bg-slate-50/50 font-sans">
@@ -375,7 +414,7 @@ function LandingPage() {
                                     รายละเอียดงาน / หน้าที่ความรับผิดชอบ
                                 </h4>
                                 <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-wrap">
-                                    {selectedJob.description || "ไม่มีรายละเอียดลักษณะงาน"}
+                                    {activeDetailJob.description || "ไม่มีรายละเอียดลักษณะงาน"}
                                 </p>
                             </div>
 
@@ -386,32 +425,32 @@ function LandingPage() {
                                     คุณสมบัติผู้สมัคร / เกณฑ์คัดเลือก
                                 </h4>
                                 <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-wrap">
-                                    {selectedJob.criteria || "ไม่มีรายละเอียดคุณสมบัติ"}
+                                    {activeDetailJob.criteria || "ไม่มีรายละเอียดคุณสมบัติ"}
                                 </p>
                             </div>
 
                             {/* Section: สวัสดิการ */}
-                            {selectedJob.benefits && (
+                            {activeDetailJob.benefits && (
                                 <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3">
                                     <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-50 pb-2">
                                         <Building2 className="w-4.5 h-4.5 text-[#4169E1]" />
                                         สวัสดิการพนักงาน
                                     </h4>
                                     <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-wrap">
-                                        {selectedJob.benefits}
+                                        {activeDetailJob.benefits}
                                     </p>
                                 </div>
                             )}
 
                             {/* Section: ข้อมูลการติดต่อ */}
-                            {selectedJob.contact_info && (
+                            {activeDetailJob.contact_info && (
                                 <div className="bg-white p-6 rounded-2xl border border-indigo-100/50 shadow-sm space-y-3 bg-blue-50/10">
                                     <h4 className="font-bold text-blue-900 text-sm flex items-center gap-2 border-b border-blue-50/50 pb-2">
                                         <Mail className="w-4.5 h-4.5 text-[#4169E1]" />
                                         ข้อมูลการติดต่อสมัครงาน
                                     </h4>
                                     <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-wrap">
-                                        {selectedJob.contact_info}
+                                        {activeDetailJob.contact_info}
                                     </p>
                                 </div>
                             )}
@@ -420,17 +459,25 @@ function LandingPage() {
                         {/* Modal Footer */}
                         <div className="p-4 border-t border-slate-100 flex items-center justify-between shrink-0 bg-white">
                             <span className="text-[11px] text-slate-400">
-                                โพสต์เมื่อ: {new Date(selectedJob.CreatedAt).toLocaleDateString("th-TH")}
+                                โพสต์เมื่อ: {new Date(activeDetailJob.CreatedAt).toLocaleDateString("th-TH")}
                             </span>
                             <div className="flex gap-3">
                                 <button
-                                    onClick={() => setSelectedJob(null)}
+                                    onClick={() => setActiveDetailJob(null)}
                                     className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 text-sm font-sans"
                                 >
                                     ปิดหน้าต่าง
                                 </button>
                                 <button
-                                    onClick={() => setShowApplyForm(true)}
+                                    type="button"
+                                    onClick={() => {
+                                        // เปิดฟอร์มส่งประวัติย่อแบบด่วนในหน้าต่างโมดอลใหม่แทน
+                                        setActiveDetailJob(null);
+                                        // ตั้งรหัสตำแหน่งงานที่เลือกไว้
+                                        setSelectedJob(activeDetailJob);
+                                        // สั่งเปิดโมดอลฟอร์มสมัครงาน
+                                        setShowApplyForm(true);
+                                    }}
                                     className="bg-[#4169E1] hover:bg-[#3152c4] text-white font-bold px-6 py-2.5 rounded-xl text-sm transition-all shadow-md shadow-blue-100 active:scale-95 font-sans"
                                 >
                                     สมัครงานทันที
@@ -465,6 +512,7 @@ function LandingPage() {
                 </div>
             )}
 
+            {/* 📌 MODAL: ฟอร์มสมัครงานและอัปโหลด Resume */}
             {showApplyForm && selectedJob && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
                     <form
@@ -490,7 +538,7 @@ function LandingPage() {
                         <div className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
                             {applyError && (
                                 <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-500 font-semibold flex items-center gap-2">
-                                    <AlertCircle className="w-4 h-4 shrink-0" />
+                                    <AlertCircle className="w-4.5 h-4.5 text-red-500 shrink-0" />
                                     <span>{applyError}</span>
                                 </div>
                             )}
@@ -566,6 +614,37 @@ function LandingPage() {
                                     </label>
                                 </div>
                             </div>
+                            
+                            {/* Upload Transcript Box */}
+                            <div className="space-y-1.5">
+                                <label className="block text-xs font-bold text-slate-400 uppercase">อัปโหลด Transcript / ใบแสดงผลการศึกษา *</label>
+                                <div className="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center hover:border-[#4169E1] transition-all bg-slate-50/50">
+                                    <input
+                                        type="file"
+                                        accept=".txt,.pdf,image/*"
+                                        required
+                                        id="transcript-uploader"
+                                        className="hidden"
+                                        onChange={e => e.target.files?.[0] && handleTranscriptUpload(e.target.files[0])}
+                                    />
+                                    <label htmlFor="transcript-uploader" className="cursor-pointer block space-y-2">
+                                        <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center mx-auto text-[#4169E1]">
+                                            <Upload className="w-5 h-5" />
+                                        </div>
+                                        {applyTranscriptFileName ? (
+                                            <div>
+                                                <p className="text-xs font-bold text-[#4169E1]">{applyTranscriptFileName}</p>
+                                                <p className="text-[10px] text-slate-400 mt-1">คลิกเพื่อเปลี่ยนไฟล์</p>
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <p className="text-xs font-bold text-slate-600">คลิกที่นี่เพื่อเลือกไฟล์ Transcript</p>
+                                                <p className="text-[10px] text-slate-400 mt-1">รองรับไฟล์ PDF, TXT หรือรูปภาพ</p>
+                                            </div>
+                                        )}
+                                    </label>
+                                </div>
+                            </div>
                         </div>
                         <div className="p-4 border-t border-slate-100 flex items-center justify-end gap-3 shrink-0 bg-slate-50/30">
                             <button
@@ -589,9 +668,6 @@ function LandingPage() {
                     </form>
                 </div>
             )}
-
-            
-            
         </div>
     );
 }
