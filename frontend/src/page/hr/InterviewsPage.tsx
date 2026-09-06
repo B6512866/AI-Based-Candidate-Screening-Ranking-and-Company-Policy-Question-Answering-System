@@ -2,11 +2,11 @@ import { JSX, useState, useEffect } from "react";
 import {
     Users, Calendar, CheckCircle2, Clock, AlertTriangle,
     Search, Video, MapPin, Phone, Link as LinkIcon,
-    Trash2, Edit3, Send, CalendarDays, X, Save, Loader2
+    Trash2, Edit3, Send, CalendarDays, Save, Loader2
 } from "lucide-react";
 import {
     getAllInterviews, createInterview, updateInterview,
-    deleteInterview, getCandidatesForInterview
+    deleteInterview, getCandidatesForInterview, sendInterviewEmail
 } from "../../services/interviewService";
 
 // ── Helper ──────────────────────────────────────────────────────────
@@ -76,6 +76,9 @@ export default function InterviewsPage() {
     const [interviewLink, setInterviewLink] = useState("");
     const [saving, setSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
+    const [lastSavedInterviewId, setLastSavedInterviewId] = useState<number | null>(null);
+    const [editingInterviewId, setEditingInterviewId] = useState<number | null>(null);
+    const [sendingEmail, setSendingEmail] = useState(false);
 
 
     // ── Email content (auto-filled after save) ──
@@ -83,15 +86,6 @@ export default function InterviewsPage() {
 
     // ── Table tab state ──
     const [filterStatus, setFilterStatus] = useState("ทั้งหมด");
-
-    // ── Edit Modal state ──
-    const [editingInterview, setEditingInterview] = useState<any>(null);
-    const [editDate, setEditDate] = useState("");
-    const [editTime, setEditTime] = useState("");
-    const [editFormat, setEditFormat] = useState("");
-    const [editLink, setEditLink] = useState("");
-    const [editStatus, setEditStatus] = useState("");
-    const [editSaving, setEditSaving] = useState(false);
 
     // ── Fetch data ──
     const fetchInterviews = async () => {
@@ -155,14 +149,28 @@ export default function InterviewsPage() {
         setSaving(true);
         setSaveSuccess(false);
         try {
-            const res = await createInterview(
-                selectedAppId,
-                interviewDate,
-                interviewTime,
-                interviewFormat,
-                interviewLink
-            );
+            let res;
+            if (editingInterviewId) {
+                // อัปเดต interview ที่มีอยู่
+                res = await updateInterview(editingInterviewId, {
+                    interview_date: interviewDate,
+                    interview_time: interviewTime,
+                    format: interviewFormat,
+                    format_description: interviewLink,
+                });
+            } else {
+                // สร้าง interview ใหม่
+                res = await createInterview(
+                    selectedAppId,
+                    interviewDate,
+                    interviewTime,
+                    interviewFormat,
+                    interviewLink
+                );
+            }
             if (res?.data) {
+                const savedId = res.data.ID || editingInterviewId;
+                setLastSavedInterviewId(savedId);
                 // Auto-fill email content
                 const cand = selectedApp?.Candidate;
                 const candName = cand ? `${cand.first_name} ${cand.last_name}` : "ผู้สมัคร";
@@ -183,44 +191,57 @@ export default function InterviewsPage() {
 ฝ่ายทรัพยากรบุคคล`
                 );
                 setSaveSuccess(true);
+                setEditingInterviewId(null);
                 fetchInterviews();
             }
         } catch (err: any) {
-            alert(err.response?.data?.error || "เกิดข้อผิดพลาดในการสร้างนัดสัมภาษณ์");
+            alert(err.response?.data?.error || "เกิดข้อผิดพลาดในการบันทึกนัดสัมภาษณ์");
         } finally {
             setSaving(false);
         }
     };
 
     const openEditModal = (iv: any) => {
-        setEditingInterview(iv);
+        // เปลี่ยนไป tab สร้าง และ prefill ข้อมูลจาก interview ที่เลือก
         const dt = new Date(iv.interview_datetime);
-        setEditDate(dt.toISOString().split("T")[0]);
-        setEditTime(dt.toTimeString().slice(0, 5));
-        setEditFormat(iv.format || "online");
-        setEditLink(iv.format_description || "");
-        setEditStatus(iv.interview_status || "pending");
+        const appId = iv.application_id || iv.ApplicationID || iv.Application?.ID;
+        const dateStr = dt.toISOString().split("T")[0];
+        const timeStr = dt.toTimeString().slice(0, 5);
+        const formatStr = iv.format || "online";
+        const linkStr = iv.format_description || "";
+        const cand = iv.application?.Candidate || iv.Application?.Candidate;
+        const job = iv.application?.JobPosition || iv.Application?.JobPosition;
+        const candName = cand ? `${cand.first_name} ${cand.last_name}` : "ผู้สมัคร";
+        const posTitle = job?.title || iv.position || "ตำแหน่งงาน";
+
+        setSelectedAppId(appId);
+        setInterviewDate(dateStr);
+        setInterviewTime(timeStr);
+        setInterviewFormat(formatStr);
+        setInterviewLink(linkStr);
+        setEditingInterviewId(iv.ID);
+        setLastSavedInterviewId(iv.ID);
+
+        setEmailContent(
+`เรียน คุณ${candName}
+
+ทางบริษัทขอเรียนเชิญท่านเข้าสัมภาษณ์งาน ตำแหน่ง ${posTitle} ตามรายละเอียดดังนี้:
+
+📅 วันที่: ${dateStr}
+🕐 เวลา: ${timeStr} น.
+📹 รูปแบบ: ${formatLabels[formatStr] || formatStr}
+🔗 ลิงก์/สถานที่: ${linkStr || "-"}
+
+กรุณายืนยันการเข้าร่วมภายใน 3 วันทำการ
+
+ขอแสดงความนับถือ
+ฝ่ายทรัพยากรบุคคล`
+        );
+        setSaveSuccess(false);
+        setActiveTab("create");
     };
 
-    const handleEditSave = async () => {
-        if (!editingInterview) return;
-        setEditSaving(true);
-        try {
-            await updateInterview(editingInterview.ID, {
-                interview_date: editDate,
-                interview_time: editTime,
-                format: editFormat,
-                format_description: editLink,
-                interview_status: editStatus,
-            });
-            setEditingInterview(null);
-            fetchInterviews();
-        } catch (err: any) {
-            alert(err.response?.data?.error || "อัปเดตไม่สำเร็จ");
-        } finally {
-            setEditSaving(false);
-        }
-    };
+
 
     const handleDelete = async (id: number) => {
         if (!confirm("ต้องการลบนัดสัมภาษณ์นี้หรือไม่?")) return;
@@ -474,11 +495,26 @@ export default function InterviewsPage() {
                                         </div>
 
                                         <button
-                                            className="w-full bg-[#4169E1] hover:bg-[#3152c4] text-white font-bold py-3 rounded-xl text-sm transition-all shadow-md shadow-indigo-200 active:scale-95 flex items-center justify-center gap-2"
-                                            onClick={() => alert("ส่งคำเชิญเรียบร้อยแล้ว")}
+                                            className="w-full bg-[#4169E1] hover:bg-[#3152c4] text-white font-bold py-3 rounded-xl text-sm transition-all shadow-md shadow-indigo-200 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            disabled={sendingEmail || !lastSavedInterviewId}
+                                            onClick={async () => {
+                                                if (!lastSavedInterviewId) {
+                                                    alert("กรุณาบันทึกข้อมูลการนัดสัมภาษณ์ก่อน");
+                                                    return;
+                                                }
+                                                setSendingEmail(true);
+                                                try {
+                                                    await sendInterviewEmail(lastSavedInterviewId, emailContent);
+                                                    alert("ส่งคำเชิญเรียบร้อยแล้ว");
+                                                } catch (err: any) {
+                                                    alert(err.response?.data?.error || "ส่งอีเมลไม่สำเร็จ");
+                                                } finally {
+                                                    setSendingEmail(false);
+                                                }
+                                            }}
                                         >
-                                            <Send className="w-4 h-4" />
-                                            ส่งคำเชิญให้ผู้สัมภาษณ์
+                                            {sendingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                                            {sendingEmail ? "กำลังส่ง..." : "ส่งคำเชิญให้ผู้สัมภาษณ์"}
                                         </button>
                                     </>
                                 )}
@@ -603,78 +639,6 @@ export default function InterviewsPage() {
                     </div>
                 )}
             </div>
-
-            {/* ═══════════ EDIT MODAL ════════════════════════════════ */}
-            {editingInterview && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
-                    <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-scaleUp">
-                        <div className="bg-[#4169E1] text-white p-5 flex items-center justify-between">
-                            <div>
-                                <h3 className="font-black text-lg">แก้ไขนัดสัมภาษณ์</h3>
-                                <p className="text-white/80 text-xs mt-0.5">
-                                    {editingInterview.Application?.Candidate?.first_name} {editingInterview.Application?.Candidate?.last_name}
-                                </p>
-                            </div>
-                            <button onClick={() => setEditingInterview(null)} className="text-white/80 hover:text-white hover:bg-white/10 p-1 rounded-full transition-all">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1.5">วันสัมภาษณ์</label>
-                                <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1.5">เวลานัดหมาย</label>
-                                <input type="time" value={editTime} onChange={e => setEditTime(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1.5">รูปแบบสัมภาษณ์</label>
-                                <select value={editFormat} onChange={e => setEditFormat(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20">
-                                    <option value="online">Video Call (Google Meet)</option>
-                                    <option value="onsite">On-site (สถานที่จริง)</option>
-                                    <option value="phone">Phone Interview (โทรศัพท์)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1.5">ลิงก์ / สถานที่ / เบอร์โทร</label>
-                                <input type="text" value={editLink} onChange={e => setEditLink(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1.5">สถานะ</label>
-                                <select value={editStatus} onChange={e => setEditStatus(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/20">
-                                    <option value="pending">รอยืนยัน</option>
-                                    <option value="confirmed">ยืนยันแล้ว</option>
-                                    <option value="rescheduled">ขอเลื่อนนัด</option>
-                                    <option value="completed">เสร็จสิ้น</option>
-                                    <option value="cancelled">ยกเลิก</option>
-                                </select>
-                            </div>
-                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                                <button
-                                    onClick={() => setEditingInterview(null)}
-                                    className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 text-sm"
-                                >
-                                    ยกเลิก
-                                </button>
-                                <button
-                                    onClick={handleEditSave}
-                                    disabled={editSaving}
-                                    className="bg-[#4169E1] hover:bg-[#3152c4] text-white font-bold px-6 py-2.5 rounded-xl text-sm transition-all shadow-md shadow-blue-100 active:scale-95 disabled:opacity-50 flex items-center gap-2"
-                                >
-                                    {editSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                    {editSaving ? "กำลังบันทึก..." : "บันทึกการเปลี่ยนแปลง"}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

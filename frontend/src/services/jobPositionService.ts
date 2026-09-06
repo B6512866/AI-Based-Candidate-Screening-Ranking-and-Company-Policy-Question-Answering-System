@@ -3,6 +3,10 @@
 
 import apiClient from "./apiClient";
 
+export const JOB_STATUS_OPEN = "เปิดรับสมัคร" as const;
+export const JOB_STATUS_CLOSED = "ปิดรับสมัครแล้ว" as const;
+export type JobStatus = typeof JOB_STATUS_OPEN | typeof JOB_STATUS_CLOSED;
+
 /* =========================================================
    TYPES
 ========================================================= */
@@ -56,8 +60,12 @@ export interface JobPosition {
     criteria: Criterion[];
 
     image_url?: string;
+    image_urls?: string[];
 
-    status: string;
+    status: JobStatus;
+
+    application_start_date?: string | null;
+    application_end_date?: string | null;
 
     user_id?: number;
 
@@ -72,10 +80,12 @@ export interface ExtractJobData {
     type: string;
 
     description: string;
+    job_description?: string;
 
     qualifications: string[];
     responsibilities: string[];
     benefits: string[];
+    contact_info?: string;
 
     suggested_criteria: Criterion[];
 }
@@ -83,6 +93,7 @@ export interface ExtractJobData {
 export interface ExtractJobResponse {
     data: ExtractJobData;
     image_url: string;
+    image_urls?: string[];
     status: string;
 }
 
@@ -128,8 +139,11 @@ export async function createjob(
     jobType: string = "",
     benefits: string = "",
     contactInfo: string = "",
-    status: string = "เปิดรับสมัคร",
-    imageUrl: string = ""
+    status: JobStatus = JOB_STATUS_OPEN,
+    imageUrl: string = "",
+    applicationStartDate: string = "",
+    applicationEndDate: string = "",
+    imageUrls: string[] = []
 ) {
     const res =
         await apiClient.post(
@@ -158,6 +172,14 @@ export async function createjob(
 
                 image_url:
                     imageUrl,
+
+                image_urls: imageUrls,
+
+                application_start_date:
+                    applicationStartDate || null,
+
+                application_end_date:
+                    applicationEndDate || null,
             }
         );
 
@@ -179,8 +201,11 @@ export async function updatejob(
     jobType: string = "",
     benefits: string = "",
     contactInfo: string = "",
-    status: string = "เปิดรับสมัคร",
-    imageUrl: string = ""
+    status: JobStatus = JOB_STATUS_OPEN,
+    imageUrl: string = "",
+    applicationStartDate: string = "",
+    applicationEndDate: string = "",
+    imageUrls: string[] = []
 ) {
     const res =
         await apiClient.put(
@@ -209,8 +234,28 @@ export async function updatejob(
 
                 image_url:
                     imageUrl,
+
+                image_urls: imageUrls,
+
+                application_start_date:
+                    applicationStartDate || null,
+
+                application_end_date:
+                    applicationEndDate || null,
             }
         );
+
+    return res.data;
+}
+
+export async function updateJobStatus(
+    id: number,
+    status: JobStatus
+) {
+    const res = await apiClient.patch(
+        `/job-positions/${id}/status`,
+        { status }
+    );
 
     return res.data;
 }
@@ -393,15 +438,13 @@ export async function deleteApplicationDocument(docId: number) {
 ========================================================= */
 
 export async function extractJobInfoFromImage(
-    file: File
+    files: File | File[]
 ): Promise<ExtractJobResponse> {
     const formData =
         new FormData();
 
-    formData.append(
-        "image",
-        file
-    );
+    const selectedFiles = Array.isArray(files) ? files : [files];
+    selectedFiles.forEach((file) => formData.append("images", file));
 
     const res =
         await apiClient.post<ExtractJobResponse>(

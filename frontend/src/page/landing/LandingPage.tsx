@@ -12,7 +12,7 @@ import {
 } from "./landing-components";
 import { getalljobs, applyjob, checkApplicationStatus } from "../../services/jobPositionService";
 import apiClient from "../../services/apiClient";
-import { Briefcase, MapPin, DollarSign, Clock, Search, X, Building2, ShieldCheck, Mail, AlertCircle, Upload } from "lucide-react";
+import { Briefcase, MapPin, DollarSign, Clock, Search, X, Building2, ShieldCheck, Mail, AlertCircle, Upload, CalendarDays, Image as ImageIcon, Maximize2 } from "lucide-react";
 import { LoginModal } from "../auth/LoginPage";
 
 interface JobPosition {
@@ -27,8 +27,45 @@ interface JobPosition {
     description: string;
     criteria: any;
     status: string;
+    image_url?: string | null;
+    image_urls?: string[];
+    application_end_date?: string | null;
     CreatedAt: string;
 }
+
+const getDateOnly = (value?: string | null) =>
+    value ? value.slice(0, 10) : "";
+
+const getDaysUntil = (value?: string | null) => {
+    const dateOnly = getDateOnly(value);
+    if (!dateOnly) return null;
+
+    const [year, month, day] = dateOnly.split("-").map(Number);
+    const targetDate = new Date(year, month - 1, day);
+    const today = new Date();
+    const todayDate = new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate()
+    );
+
+    return Math.round(
+        (targetDate.getTime() - todayDate.getTime()) /
+            (1000 * 60 * 60 * 24)
+    );
+};
+
+const formatThaiDate = (value?: string | null) => {
+    const dateOnly = getDateOnly(value);
+    if (!dateOnly) return "";
+
+    const [year, month, day] = dateOnly.split("-").map(Number);
+    return new Intl.DateTimeFormat("th-TH", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+    }).format(new Date(year, month - 1, day));
+};
 
 function LandingPage() {
     const location = useLocation();
@@ -43,6 +80,7 @@ function LandingPage() {
     const [selectedDept, setSelectedDept] = useState("all");
     const [selectedJob, setSelectedJob] = useState<JobPosition | null>(null);
     const [activeDetailJob, setActiveDetailJob] = useState<JobPosition | null>(null);
+    const [viewingJobImageUrl, setViewingJobImageUrl] = useState<string | null>(null);
     const [showApplySuccess, setShowApplySuccess] = useState(false);
     const [showApplyForm, setShowApplyForm] = useState(false);
     const [showStatusModal, setShowStatusModal] = useState(false);
@@ -66,6 +104,16 @@ function LandingPage() {
     const [transcriptFile, setTranscriptFile] = useState<File | null>(null);
     const [submittingApply, setSubmittingApply] = useState(false);
     const [applyError, setApplyError] = useState("");
+
+    const getJobImageUrl = (url?: string | null) => {
+        if (!url) return "";
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            return url;
+        }
+
+        const baseURL = apiClient.defaults.baseURL || "";
+        return `${baseURL.replace(/\/api\/?$/, "")}${url}`;
+    };
 
     // ฟังก์ชันเลือกไฟล์ Resume (เก็บไว้ใน State ยังไม่อัปโหลดไปที่ Server)
     const handleResumeSelect = (file: File) => {
@@ -258,6 +306,12 @@ function LandingPage() {
         return matchesSearch && matchesDept;
     });
 
+    const detailImageUrls = activeDetailJob?.image_urls?.length
+        ? activeDetailJob.image_urls
+        : activeDetailJob?.image_url
+            ? [activeDetailJob.image_url]
+            : [];
+
     return (
         <div className="bg-[#f8fafc] min-h-screen font-sans flex flex-col text-slate-900 scroll-smooth">
             <Navbar onCheckStatusClick={() => {
@@ -378,6 +432,35 @@ function LandingPage() {
                                                                         <span>{job.type}</span>
                                                                     </div>
                                                                 )}
+                                                                {job.application_end_date && (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <CalendarDays className="w-4 h-4 text-slate-400 shrink-0" />
+                                                                        <span>
+                                                                            สิ้นสุดรับสมัคร: {formatThaiDate(job.application_end_date)}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                                {job.application_end_date && (() => {
+                                                                    const daysRemaining = getDaysUntil(job.application_end_date);
+                                                                    if (daysRemaining === null) return null;
+
+                                                                    return (
+                                                                        <div className={`flex items-center gap-2 font-bold ${
+                                                                            daysRemaining < 0
+                                                                                ? "text-rose-500"
+                                                                                : daysRemaining <= 7
+                                                                                    ? "text-amber-600"
+                                                                                    : "text-emerald-600"
+                                                                        }`}>
+                                                                            <Clock className="w-4 h-4 shrink-0" />
+                                                                            <span>
+                                                                                {daysRemaining < 0
+                                                                                    ? "หมดเขตรับสมัครแล้ว"
+                                                                                    : `เหลือ ${daysRemaining} วัน`}
+                                                                            </span>
+                                                                        </div>
+                                                                    );
+                                                                })()}
                                                             </div>
                                                         </div>
 
@@ -547,6 +630,38 @@ function LandingPage() {
 
                         {/* Modal Content */}
                         <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 bg-slate-50/50 font-sans">
+                            {detailImageUrls.length > 0 && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {detailImageUrls.map((imageUrl, index) => (
+                                        <div
+                                            key={`${imageUrl}-${index}`}
+                                            className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"
+                                        >
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setViewingJobImageUrl(
+                                                        getJobImageUrl(imageUrl)
+                                                    )
+                                                }
+                                                className="group relative block w-full cursor-zoom-in"
+                                                title="คลิกเพื่อดูรูปเต็ม"
+                                            >
+                                                <img
+                                                    src={getJobImageUrl(imageUrl)}
+                                                    alt={`รูปประกาศงาน ${activeDetailJob.title} ${index + 1}`}
+                                                    className="h-64 w-full object-contain bg-white transition-transform group-hover:scale-[1.02]"
+                                                />
+                                                <span className="absolute right-3 bottom-3 inline-flex items-center gap-1 rounded-lg bg-slate-900/70 px-2.5 py-1.5 text-xs font-bold text-white opacity-0 transition-opacity group-hover:opacity-100">
+                                                    <Maximize2 className="w-3.5 h-3.5" />
+                                                    ดูรูปเต็ม
+                                                </span>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
                             {/* Section: ลักษณะงาน */}
                             <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3">
                                 <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-50 pb-2">
@@ -614,6 +729,28 @@ function LandingPage() {
                             </div>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {viewingJobImageUrl && (
+                <div
+                    className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm"
+                    onClick={() => setViewingJobImageUrl(null)}
+                >
+                    <button
+                        type="button"
+                        onClick={() => setViewingJobImageUrl(null)}
+                        className="absolute right-5 top-5 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+                        title="ปิดรูปเต็ม"
+                    >
+                        <X className="h-6 w-6" />
+                    </button>
+                    <img
+                        src={viewingJobImageUrl}
+                        alt="Job Announcement Full Size"
+                        className="max-h-[92vh] max-w-[95vw] object-contain"
+                        onClick={(event) => event.stopPropagation()}
+                    />
                 </div>
             )}
 

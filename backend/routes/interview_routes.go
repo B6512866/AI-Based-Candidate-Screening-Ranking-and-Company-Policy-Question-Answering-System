@@ -19,5 +19,6 @@ func InterviewRoutes(api *gin.RouterGroup, db *gorm.DB) {
 		i.POST("", interviewController.Create)
 		i.PUT("/:id", interviewController.Update)
 		i.DELETE("/:id", interviewController.Delete)
+		i.POST("/:id/send-email", interviewController.SendEmail)
 	}
 }

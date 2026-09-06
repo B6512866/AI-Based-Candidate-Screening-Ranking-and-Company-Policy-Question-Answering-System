@@ -19,6 +19,7 @@ func JobPositionRoutes(api *gin.RouterGroup, db *gorm.DB) {
 		j.GET("/:id", jobPositionController.GetByID)
 		j.POST("", middleware.AuthMiddleware(), jobPositionController.Create)
 		j.PUT("/:id", middleware.AuthMiddleware(), jobPositionController.Update)
+		j.PATCH("/:id/status", middleware.AuthMiddleware(), jobPositionController.UpdateStatus)
 		j.DELETE("/:id", middleware.AuthMiddleware(), jobPositionController.Delete)
 		j.GET("/:id/applications", jobPositionController.GetApplications)
 		j.GET("/:id/documents", jobPositionController.GetJobPositionDocuments)

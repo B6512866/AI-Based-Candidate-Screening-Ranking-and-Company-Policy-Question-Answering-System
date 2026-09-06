@@ -14,11 +14,52 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
 type JobPositionController struct {
 	db *gorm.DB
+}
+
+func mustMarshalJSON(values []string) datatypes.JSON {
+	if values == nil {
+		return datatypes.JSON([]byte("[]"))
+	}
+
+	encoded, err := json.Marshal(values)
+	if err != nil {
+		return datatypes.JSON([]byte("[]"))
+	}
+
+	return datatypes.JSON(encoded)
+}
+
+func parseApplicationDates(startValue, endValue string) (*time.Time, *time.Time, error) {
+	var startDate *time.Time
+	var endDate *time.Time
+
+	if startValue != "" {
+		parsed, err := time.Parse("2006-01-02", startValue)
+		if err != nil {
+			return nil, nil, fmt.Errorf("วันที่เริ่มรับสมัครไม่ถูกต้อง")
+		}
+		startDate = &parsed
+	}
+
+	if endValue != "" {
+		parsed, err := time.Parse("2006-01-02", endValue)
+		if err != nil {
+			return nil, nil, fmt.Errorf("วันที่สิ้นสุดรับสมัครไม่ถูกต้อง")
+		}
+		endDate = &parsed
+	}
+
+	if startDate != nil && endDate != nil && endDate.Before(*startDate) {
+		return nil, nil, fmt.Errorf("วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่มรับสมัคร")
+	}
+
+	return startDate, endDate, nil
 }
 
 func NewJobPositionController(db *gorm.DB) *JobPositionController {
@@ -52,17 +93,20 @@ func (c *JobPositionController) GetByID(ctx *gin.Context) {
 func (c *JobPositionController) Create(ctx *gin.Context) {
 	// ใช้ Struct ชั่วคราวเพื่อให้ Criteria รองรับทั้งแบบ String และแบบ Array ได้
 	var req struct {
-		Title       string      `json:"title"`
-		Department  string      `json:"department"`
-		Location    string      `json:"location"`
-		Salary      string      `json:"salary"`
-		Type        string      `json:"type"`
-		Benefits    string      `json:"benefits"`
-		ContactInfo string      `json:"contact_info"`
-		Description string      `json:"description"`
-		Criteria    interface{} `json:"criteria"` // รับได้ทั้ง string หรือ array เพื่อป้องกัน error unmarshal
-		ImageURL    string      `json:"image_url"`
-		Status      string      `json:"status"`
+		Title                string      `json:"title"`
+		Department           string      `json:"department"`
+		Location             string      `json:"location"`
+		Salary               string      `json:"salary"`
+		Type                 string      `json:"type"`
+		Benefits             string      `json:"benefits"`
+		ContactInfo          string      `json:"contact_info"`
+		Description          string      `json:"description"`
+		Criteria             interface{} `json:"criteria"` // รับได้ทั้ง string หรือ array เพื่อป้องกัน error unmarshal
+		ImageURL             string      `json:"image_url"`
+		ImageURLs            []string    `json:"image_urls"`
+		Status               string      `json:"status"`
+		ApplicationStartDate string      `json:"application_start_date"`
+		ApplicationEndDate   string      `json:"application_end_date"`
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -94,7 +138,17 @@ func (c *JobPositionController) Create(ctx *gin.Context) {
 
 	status := req.Status
 	if status == "" {
-		status = "เปิดรับสมัคร"
+		status = entity.JobStatusOpen
+	}
+	if !entity.IsValidJobStatus(status) {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "สถานะประกาศงานไม่ถูกต้อง"})
+		return
+	}
+
+	applicationStartDate, applicationEndDate, err := parseApplicationDates(req.ApplicationStartDate, req.ApplicationEndDate)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
 	// แปลง Criteria กลับเป็น []entity.MainCriterion ถ้าส่งมาเป็น struct ปกติ
@@ -107,18 +161,21 @@ func (c *JobPositionController) Create(ctx *gin.Context) {
 	}
 
 	job := entity.JobPosition{
-		Title:       req.Title,
-		Department:  req.Department,
-		Location:    req.Location,
-		Salary:      req.Salary,
-		Type:        req.Type,
-		Benefits:    req.Benefits,
-		ContactInfo: req.ContactInfo,
-		Description: req.Description,
-		Criteria:    criteriaList,
-		ImageURL:    req.ImageURL,
-		Status:      status,
-		UserID:      userID,
+		Title:                req.Title,
+		Department:           req.Department,
+		Location:             req.Location,
+		Salary:               req.Salary,
+		Type:                 req.Type,
+		Benefits:             req.Benefits,
+		ContactInfo:          req.ContactInfo,
+		Description:          req.Description,
+		Criteria:             criteriaList,
+		ImageURL:             req.ImageURL,
+		ImageURLs:            mustMarshalJSON(req.ImageURLs),
+		Status:               status,
+		ApplicationStartDate: applicationStartDate,
+		ApplicationEndDate:   applicationEndDate,
+		UserID:               userID,
 	}
 
 	if err := c.db.Create(&job).Error; err != nil {
@@ -189,8 +246,11 @@ func (c *JobPositionController) Update(ctx *gin.Context) {
 
 		Criteria []CriterionRequest `json:"criteria"`
 
-		ImageURL string `json:"image_url"`
-		Status   string `json:"status"`
+		ImageURL             string   `json:"image_url"`
+		ImageURLs            []string `json:"image_urls"`
+		Status               string   `json:"status"`
+		ApplicationStartDate string   `json:"application_start_date"`
+		ApplicationEndDate   string   `json:"application_end_date"`
 	}
 
 	var req UpdateJobRequest
@@ -200,6 +260,12 @@ func (c *JobPositionController) Update(ctx *gin.Context) {
 			"error":   "ข้อมูลไม่ถูกต้อง",
 			"details": err.Error(),
 		})
+		return
+	}
+
+	applicationStartDate, applicationEndDate, dateErr := parseApplicationDates(req.ApplicationStartDate, req.ApplicationEndDate)
+	if dateErr != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": dateErr.Error()})
 		return
 	}
 
@@ -289,8 +355,18 @@ func (c *JobPositionController) Update(ctx *gin.Context) {
 	job.ContactInfo = req.ContactInfo
 	job.Description = req.Description
 	job.ImageURL = req.ImageURL
+	job.ImageURLs = mustMarshalJSON(req.ImageURLs)
+	job.ApplicationStartDate = applicationStartDate
+	job.ApplicationEndDate = applicationEndDate
 
 	if req.Status != "" {
+		if !entity.IsValidJobStatus(req.Status) {
+			tx.Rollback()
+			ctx.JSON(http.StatusBadRequest, gin.H{
+				"error": "สถานะประกาศงานไม่ถูกต้อง",
+			})
+			return
+		}
 		job.Status = req.Status
 	}
 
@@ -443,6 +519,42 @@ func (c *JobPositionController) Update(ctx *gin.Context) {
 	})
 }
 
+// PATCH /api/job-positions/:id/status
+func (c *JobPositionController) UpdateStatus(ctx *gin.Context) {
+	id := ctx.Param("id")
+
+	var req struct {
+		Status string `json:"status" binding:"required"`
+	}
+
+	if err := ctx.ShouldBindJSON(&req); err != nil || !entity.IsValidJobStatus(req.Status) {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "สถานะประกาศงานไม่ถูกต้อง"})
+		return
+	}
+
+	var job entity.JobPosition
+	if err := c.db.First(&job, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบตำแหน่งงาน"})
+			return
+		}
+
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถค้นหาตำแหน่งงานได้"})
+		return
+	}
+
+	if err := c.db.Model(&job).Update("status", req.Status).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอัปเดตสถานะประกาศงานได้"})
+		return
+	}
+
+	job.Status = req.Status
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "อัปเดตสถานะประกาศงานสำเร็จ",
+		"data":    job,
+	})
+}
+
 // DELETE /api/job-positions/:id
 func (c *JobPositionController) Delete(ctx *gin.Context) {
 	id := ctx.Param("id")
@@ -471,6 +583,10 @@ func (c *JobPositionController) Apply(ctx *gin.Context) {
 	var job entity.JobPosition
 	if err := c.db.First(&job, jobID).Error; err != nil {
 		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบตำแหน่งงานนี้ในระบบ"})
+		return
+	}
+	if job.Status == entity.JobStatusClosed {
+		ctx.JSON(http.StatusConflict, gin.H{"error": "ตำแหน่งงานนี้ปิดรับสมัครแล้ว"})
 		return
 	}
 	var req struct {

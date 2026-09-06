@@ -49,6 +49,12 @@ func ConnectDatabase() {
 		panic("AutoMigrate failed: " + err.Error())
 	}
 
+	if err := db.Model(&entity.JobPosition{}).
+		Where("status IS NULL OR status = ''").
+		Update("status", entity.JobStatusOpen).Error; err != nil {
+		panic("Job position status migration failed: " + err.Error())
+	}
+
 	fmt.Println("Database connected!")
 	DB = db
 }

@@ -27,16 +27,29 @@ func NewJobController(geminiService *services.GeminiService, jobService *service
 	}
 }
 
-// ExtractFromImage: รับไฟล์รูปภาพ -> บันทึกลง disk -> ส่งให้ Gemini สกัดข้อมูล -> คืนค่าข้อมูลสกัด + image_url
+// ExtractFromImage: รับภาพหลายไฟล์ของประกาศเดียวกัน -> ส่งให้ Gemini วิเคราะห์รวมกัน
 func (c *JobController) ExtractFromImage(ctx *gin.Context) {
 	if c.geminiService == nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Gemini Service ไม่ได้เปิดใช้งาน หรือตั้งค่า API Key ไม่ถูกต้อง"})
 		return
 	}
 
-	fileHeader, err := ctx.FormFile("image")
+	form, err := ctx.MultipartForm()
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาแนบไฟล์รูปภาพในฟิลด์ 'image'"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาแนบไฟล์รูปภาพ"})
+		return
+	}
+
+	fileHeaders := form.File["images"]
+	if len(fileHeaders) == 0 {
+		fileHeaders = form.File["image"]
+	}
+	if len(fileHeaders) == 0 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาแนบไฟล์รูปภาพอย่างน้อย 1 รูป"})
+		return
+	}
+	if len(fileHeaders) > 10 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "อัปโหลดได้ไม่เกิน 10 รูปต่อครั้ง"})
 		return
 	}
 
@@ -47,39 +60,40 @@ func (c *JobController) ExtractFromImage(ctx *gin.Context) {
 		return
 	}
 
-	// 2. ตั้งชื่อไฟล์ใหม่ด้วย Timestamp เพื่อกันชื่อซ้ำ และเซฟไฟล์ลง Server
-	filename := fmt.Sprintf("%d_%s", time.Now().Unix(), filepath.Base(fileHeader.Filename))
-	filePath := filepath.Join(uploadDir, filename)
+	imageInputs := make([]services.JobImageInput, 0, len(fileHeaders))
+	imageURLs := make([]string, 0, len(fileHeaders))
+	for index, fileHeader := range fileHeaders {
+		filename := fmt.Sprintf("%d_%d_%s", time.Now().UnixNano(), index, filepath.Base(fileHeader.Filename))
+		filePath := filepath.Join(uploadDir, filename)
+		if err := ctx.SaveUploadedFile(fileHeader, filePath); err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกไฟล์รูปภาพได้"})
+			return
+		}
 
-	if err := ctx.SaveUploadedFile(fileHeader, filePath); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกไฟล์รูปภาพได้"})
-		return
+		imageBytes, err := os.ReadFile(filePath)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอ่านไฟล์รูปภาพจากดิสก์ได้"})
+			return
+		}
+
+		detectedMime := http.DetectContentType(imageBytes)
+		if !filepath.HasPrefix(detectedMime, "image/") {
+			detectedMime = "image/jpeg"
+		}
+
+		imageInputs = append(imageInputs, services.JobImageInput{
+			Bytes:    imageBytes,
+			MimeType: detectedMime,
+		})
+		imageURLs = append(imageURLs, fmt.Sprintf("/uploads/jobs/%s", filename))
 	}
-
-	// 3. อ่าน Bytes จากไฟล์ที่บันทึกไว้ใน Disk โดยตรง (การันตีได้ไฟล์ครบ ชัวร์ 100% ไม่เจอ EOF)
-	imageBytes, err := os.ReadFile(filePath)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอ่านไฟล์รูปภาพจากดิสก์ได้"})
-		return
-	}
-
-	// 4. ตรวจหา MIME Type จาก Magic Bytes ของรูปภาพจริง
-	detectedMime := http.DetectContentType(imageBytes)
-
-	// Fallback ถ้าเช็กแล้วไม่ใช่ประเภท image/
-	if !filepath.HasPrefix(detectedMime, "image/") {
-		detectedMime = "image/jpeg"
-	}
-
-	fmt.Printf("📸 Uploaded Image File: %s | Size: %d bytes | Detected MIME: %s | Path: %s\n",
-		fileHeader.Filename, len(imageBytes), detectedMime, filePath)
 
 	// 5. สร้าง Context แยกต่างหากสำหรับยิงหา Gemini โดยกำหนดเวลาเผื่อไว้ 60 วินาที
 	aiCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	// ส่ง aiCtx เข้าไปแทน ctx.Request.Context()
-	result, err := c.geminiService.ExtractJobInfoFromImage(aiCtx, imageBytes, detectedMime)
+	result, err := c.geminiService.ExtractJobInfoFromImages(aiCtx, imageInputs)
 	if err != nil {
 		fmt.Printf("❌ Controller Error: %v\n", err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("เกิดข้อผิดพลาดในการสกัดข้อมูล: %v", err)})
@@ -87,12 +101,11 @@ func (c *JobController) ExtractFromImage(ctx *gin.Context) {
 	}
 
 	// 6. สร้าง Path URL ส่งกลับไปให้ Frontend แสดงผล preview
-	imageURL := fmt.Sprintf("/uploads/jobs/%s", filename)
-
 	ctx.JSON(http.StatusOK, gin.H{
-		"status":    "success",
-		"image_url": imageURL,
-		"data":      result,
+		"status":     "success",
+		"image_url":  imageURLs[0],
+		"image_urls": imageURLs,
+		"data":       result,
 	})
 }
 

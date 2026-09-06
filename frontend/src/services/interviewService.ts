@@ -56,3 +56,14 @@ export async function getCandidatesForInterview() {
   const res = await apiClient.get("/interviews/candidates");
   return res.data;
 }
+
+// ── ส่งอีเมลเชิญสัมภาษณ์ (แยกจากการบันทึก)
+export async function sendInterviewEmail(
+  interviewId: number,
+  emailContent: string
+) {
+  const res = await apiClient.post(`/interviews/${interviewId}/send-email`, {
+    email_content: emailContent,
+  });
+  return res.data;
+}

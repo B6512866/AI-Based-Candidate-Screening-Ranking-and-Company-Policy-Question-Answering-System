@@ -23,10 +23,18 @@ func NewInterviewController(db *gorm.DB) *InterviewController {
 // GET /api/interviews
 func (c *InterviewController) GetAll(ctx *gin.Context) {
 	var interviews []entity.Interview
+
+	// ดึงเฉพาะ interview ล่าสุดของแต่ละ application_id
+	// โดยใช้ subquery หา ID ที่มากที่สุด (สร้างล่าสุด) ของแต่ละ application_id
+	subQuery := c.db.Model(&entity.Interview{}).
+		Select("MAX(id)").
+		Group("application_id")
+
 	if err := c.db.
 		Preload("Application.Candidate").
 		Preload("Application.JobPosition").
 		Preload("CreatedBy").
+		Where("id IN (?)", subQuery).
 		Order("interview_datetime asc").
 		Find(&interviews).Error; err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลนัดสัมภาษณ์ได้"})
@@ -108,20 +116,8 @@ func (c *InterviewController) Create(ctx *gin.Context) {
 	// โหลดข้อมูลที่สัมพันธ์กลับมาเพื่อส่งกลับ
 	c.db.Preload("Application.Candidate").Preload("Application.JobPosition").Preload("CreatedBy").First(&interview, interview.ID)
 
-	// ส่งอีเมลแจ้งเตือนนัดสัมภาษณ์ไปยัง Gmail ของผู้สมัคร
-	if interview.Application.Candidate.Email != "" {
-		candName := fmt.Sprintf("%s %s", interview.Application.Candidate.FirstName, interview.Application.Candidate.LastName)
-		jobTitle := interview.Application.JobPosition.Title
-		dateStr := interview.InterviewDatetime.Format("02/01/2006 เวลา 15:04 น.")
-		locStr := interview.Format
-		if interview.FormatDescription != "" {
-			locStr += " (" + interview.FormatDescription + ")"
-		}
-		go services.SendInterviewEmail(interview.Application.Candidate.Email, candName, jobTitle, dateStr, locStr, interview.FormatDescription)
-	}
-
 	ctx.JSON(http.StatusCreated, gin.H{
-		"message": "สร้างนัดสัมภาษณ์สำเร็จและส่งอีเมลแจ้งเตือนแล้ว",
+		"message": "สร้างนัดสัมภาษณ์สำเร็จ",
 		"data":    interview,
 	})
 }
@@ -213,3 +209,52 @@ func (c *InterviewController) GetCandidatesForInterview(ctx *gin.Context) {
 	}
 	ctx.JSON(http.StatusOK, gin.H{"data": applications})
 }
+
+// POST /api/interviews/:id/send-email – ส่งอีเมลเชิญสัมภาษณ์แยกต่างหาก (ไม่ส่งอัตโนมัติเมื่อบันทึก)
+func (c *InterviewController) SendEmail(ctx *gin.Context) {
+	id, _ := strconv.Atoi(ctx.Param("id"))
+
+	var interview entity.Interview
+	if err := c.db.
+		Preload("Application.Candidate").
+		Preload("Application.JobPosition").
+		First(&interview, id).Error; err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบนัดสัมภาษณ์นี้"})
+		return
+	}
+
+	// รับเนื้อหาอีเมลที่ HR แก้ไขมาจาก frontend
+	var req struct {
+		EmailContent string `json:"email_content"`
+	}
+	ctx.ShouldBindJSON(&req)
+
+	candidateEmail := interview.Application.Candidate.Email
+	if candidateEmail == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ผู้สมัครไม่มีอีเมล"})
+		return
+	}
+
+	jobTitle := interview.Application.JobPosition.Title
+
+	var err error
+	if req.EmailContent != "" {
+		err = services.SendCustomInterviewEmail(candidateEmail, jobTitle, req.EmailContent)
+	} else {
+		candName := fmt.Sprintf("%s %s", interview.Application.Candidate.FirstName, interview.Application.Candidate.LastName)
+		dateStr := interview.InterviewDatetime.Format("02/01/2006 เวลา 15:04 น.")
+		locStr := interview.Format
+		if interview.FormatDescription != "" {
+			locStr += " (" + interview.FormatDescription + ")"
+		}
+		err = services.SendInterviewEmail(candidateEmail, candName, jobTitle, dateStr, locStr, interview.FormatDescription)
+	}
+
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ส่งอีเมลไม่สำเร็จ: " + err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"message": "ส่งอีเมลเชิญสัมภาษณ์สำเร็จ"})
+}
+

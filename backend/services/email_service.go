@@ -185,3 +185,73 @@ func SendInterviewEmail(toEmail string, candidateName string, jobTitle string, i
 	fmt.Printf("📧 [SMTP Interview Success] ส่งอีเมลแจ้งนัดหมายสัมภาษณ์ไปยัง %s สำเร็จเรียบร้อย!\n", toEmail)
 	return nil
 }
+
+// SendCustomInterviewEmail ส่งอีเมลแจ้งนัดหมายสัมภาษณ์ตามเนื้อหาที่ HR กำหนด/แก้ไขจริง
+func SendCustomInterviewEmail(toEmail string, jobTitle string, customContent string) error {
+	fromEmail := config.Env.SMTPEmail
+	if fromEmail == "" {
+		fromEmail = "guymini02479@gmail.com"
+	}
+
+	appPassword := config.Env.SMTPPassword
+	if appPassword == "" {
+		appPassword = "gjsrvsyeqsixfvlk"
+	}
+	appPassword = strings.ReplaceAll(appPassword, " ", "")
+
+	smtpHost := "smtp.gmail.com"
+	smtpPort := "587"
+
+	subject := fmt.Sprintf("Subject: [HireAI] แจ้งนัดหมายสัมภาษณ์งาน - ตำแหน่ง %s\r\n", jobTitle)
+	headers := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\r\n"
+	fromHeader := fmt.Sprintf("From: HireAI Recruitment <%s>\r\n", fromEmail)
+	toHeader := fmt.Sprintf("To: %s\r\n\r\n", toEmail)
+
+	// แปลง newline ให้เป็น <br/> เพื่อให้แสดงผลขึ้นบรรทัดใหม่ในโปรแกรมเปิดเมลได้ถูกต้อง
+	formattedContent := strings.ReplaceAll(customContent, "\n", "<br/>")
+
+	body := fmt.Sprintf(`
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f1f5f9; margin: 0; padding: 20px; }
+        .card { max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+        .header { background: linear-gradient(135deg, #4169E1, #3152c4); color: #ffffff; padding: 28px 24px; text-align: center; }
+        .header h1 { margin: 0; font-size: 20px; font-weight: 800; }
+        .header p { margin: 4px 0 0 0; font-size: 13px; opacity: 0.9; }
+        .content { padding: 32px 28px; color: #334155; font-size: 14px; line-height: 1.8; word-break: break-word; }
+        .footer { background: #f8fafc; padding: 16px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <h1>HireAI Recruitment</h1>
+            <p>แจ้งนัดหมายเข้ารับการสัมภาษณ์งาน</p>
+        </div>
+        <div class="content">
+            %s
+        </div>
+        <div class="footer">
+            อีเมลนี้เป็นข้อความแจ้งนัดหมายจากระบบ HireAI Recruitment
+        </div>
+    </div>
+</body>
+</html>
+`, formattedContent)
+
+	msg := []byte(subject + headers + fromHeader + toHeader + body)
+	auth := smtp.PlainAuth("", fromEmail, appPassword, smtpHost)
+
+	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, fromEmail, []string{toEmail}, msg)
+	if err != nil {
+		fmt.Printf("❌ [SMTP Custom Interview Error] ส่งอีเมลสัมภาษณ์ไปยัง %s ล้มเหลว: %v\n", toEmail, err)
+		return err
+	}
+
+	fmt.Printf("📧 [SMTP Custom Interview Success] ส่งอีเมลเชิญสัมภาษณ์เนื้อหาตามร่างไปยัง %s สำเร็จเรียบร้อย!\n", toEmail)
+	return nil
+}
+

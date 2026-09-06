@@ -23,23 +23,26 @@ import {
     Trash,
     Image as ImageIcon,
     RefreshCw,
+    Power,
+    CalendarDays,
+    Maximize2,
 } from "lucide-react";
 
 import {
     getalljobs,
     createjob,
     updatejob,
+    updateJobStatus,
     deletejob,
     getapplications,
     updateApplicationScreening,
     extractJobInfoFromImage,
+    JOB_STATUS_OPEN,
+    JOB_STATUS_CLOSED,
+    type JobStatus,
 } from "../../services/jobPositionService";
 
 import apiClient from "../../services/apiClient";
-
-/* =========================================================
-   TYPES
-========================================================= */
 
 interface SubCriterion {
     ID?: number;
@@ -90,8 +93,12 @@ interface JobPosition {
     criteria: Criterion[];
 
     image_url?: string;
+    image_urls?: string[];
 
-    status: string;
+    status: JobStatus;
+
+    application_start_date?: string | null;
+    application_end_date?: string | null;
 
     user_id?: number;
 
@@ -106,10 +113,12 @@ interface ExtractJobData {
     type: string;
 
     description: string;
+    job_description?: string;
 
     qualifications: string[];
     responsibilities: string[];
     benefits: string[];
+    contact_info?: string;
 
     suggested_criteria: Criterion[];
 }
@@ -118,9 +127,39 @@ interface ExtractJobResponse {
     data: ExtractJobData;
 
     image_url: string;
+    image_urls?: string[];
 
     status: string;
 }
+
+const formatApplicationEndDate = (value?: string | null) => {
+    if (!value) return "";
+
+    const [year, month, day] = value.slice(0, 10).split("-").map(Number);
+    return new Intl.DateTimeFormat("th-TH", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+    }).format(new Date(year, month - 1, day));
+};
+
+const getApplicationDaysRemaining = (value?: string | null) => {
+    if (!value) return null;
+
+    const [year, month, day] = value.slice(0, 10).split("-").map(Number);
+    const endDate = new Date(year, month - 1, day);
+    const today = new Date();
+    const todayDate = new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate()
+    );
+
+    return Math.round(
+        (endDate.getTime() - todayDate.getTime()) /
+            (1000 * 60 * 60 * 24)
+    );
+};
 
 /* =========================================================
    COMPONENT
@@ -165,7 +204,63 @@ export default function PositionsPage() {
     const [editDescription, setEditDescription] = useState("");
 
     const [editStatus, setEditStatus] =
-        useState("เปิดรับสมัคร");
+        useState<JobStatus>(JOB_STATUS_OPEN);
+
+    const [editApplicationStartDate, setEditApplicationStartDate] =
+        useState("");
+    const [editApplicationEndDate, setEditApplicationEndDate] =
+        useState("");
+
+    const toggleEditStatus = async () => {
+        const nextStatus =
+            editStatus === JOB_STATUS_OPEN
+                ? JOB_STATUS_CLOSED
+                : JOB_STATUS_OPEN;
+
+        setEditStatus(nextStatus);
+
+        if (!selectedJob || isCreating) {
+            return;
+        }
+
+        try {
+            setSaving(true);
+            await updateJobStatus(selectedJob.ID, nextStatus);
+            setSelectedJob((currentJob) =>
+                currentJob
+                    ? { ...currentJob, status: nextStatus }
+                    : currentJob
+            );
+            setJobs((currentJobs) =>
+                currentJobs.map((job) =>
+                    job.ID === selectedJob.ID
+                        ? { ...job, status: nextStatus }
+                        : job
+                )
+            );
+            setMessage({
+                text:
+                    nextStatus === JOB_STATUS_OPEN
+                        ? "เปิดรับสมัครเรียบร้อยแล้ว"
+                        : "ปิดรับสมัครเรียบร้อยแล้ว",
+                type: "success",
+            });
+        } catch (error) {
+            setEditStatus(editStatus);
+            setMessage({
+                text:
+                    error instanceof Error
+                        ? error.message
+                        : "ไม่สามารถอัปเดตสถานะประกาศงานได้",
+                type: "error",
+            });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const toDateInputValue = (value?: string | null) =>
+        value ? value.slice(0, 10) : "";
 
     /* =====================================================
        CRITERIA
@@ -187,6 +282,10 @@ export default function PositionsPage() {
 
     const [jobImageUrl, setJobImageUrl] =
         useState<string>("");
+    const [jobImageUrls, setJobImageUrls] =
+        useState<string[]>([]);
+    const [viewingJobImageUrl, setViewingJobImageUrl] =
+        useState<string | null>(null);
 
     const fileInputRef =
         useRef<HTMLInputElement | null>(null);
@@ -336,7 +435,14 @@ export default function PositionsPage() {
         setEditDescription(job.description || "");
 
         setEditStatus(
-            job.status || "เปิดรับสมัคร"
+            job.status || JOB_STATUS_OPEN
+        );
+
+        setEditApplicationStartDate(
+            toDateInputValue(job.application_start_date)
+        );
+        setEditApplicationEndDate(
+            toDateInputValue(job.application_end_date)
         );
 
         setCriteriaList(
@@ -347,6 +453,13 @@ export default function PositionsPage() {
 
         setJobImageUrl(
             job.image_url || ""
+        );
+        setJobImageUrls(
+            Array.isArray(job.image_urls) && job.image_urls.length > 0
+                ? job.image_urls
+                : job.image_url
+                    ? [job.image_url]
+                    : []
         );
 
         setIsCreating(false);
@@ -378,11 +491,15 @@ export default function PositionsPage() {
         setEditContactInfo("");
         setEditDescription("");
 
-        setEditStatus("เปิดรับสมัคร");
+        setEditStatus(JOB_STATUS_OPEN);
+
+        setEditApplicationStartDate("");
+        setEditApplicationEndDate("");
 
         setCriteriaList([]);
 
         setJobImageUrl("");
+        setJobImageUrls([]);
 
         setActiveTab("editor");
 
@@ -402,10 +519,9 @@ export default function PositionsPage() {
     const handleAIImageAnalysis = async (
         event: React.ChangeEvent<HTMLInputElement>
     ) => {
-        const file =
-            event.target.files?.[0];
+        const files = Array.from(event.target.files || []);
 
-        if (!file) return;
+        if (files.length === 0) return;
 
         /* Validate */
 
@@ -416,7 +532,7 @@ export default function PositionsPage() {
             "image/webp",
         ];
 
-        if (!allowedTypes.includes(file.type)) {
+        if (files.some((file) => !allowedTypes.includes(file.type))) {
             setMessage({
                 text:
                     "รองรับเฉพาะ JPG, JPEG, PNG และ WEBP",
@@ -432,10 +548,9 @@ export default function PositionsPage() {
 
             setMessage(null);
 
-            const response =
-                await extractJobInfoFromImage(
-                    file
-                ) as ExtractJobResponse;
+            const response = await extractJobInfoFromImage(
+                files
+            ) as ExtractJobResponse;
 
             if (
                 response.status !== "success" ||
@@ -478,7 +593,27 @@ export default function PositionsPage() {
             ============================== */
 
             let description =
-                ai.description || "";
+                ai.description ||
+                ai.job_description ||
+                "";
+
+            const appendSection = (
+                current: string,
+                heading: string,
+                items: string[] | undefined
+            ) => {
+                if (!Array.isArray(items) || items.length === 0) {
+                    return current;
+                }
+
+                const section = `${heading}:\n${items
+                    .map((item) => `- ${item}`)
+                    .join("\n")}`;
+
+                return current
+                    ? `${current}\n\n${section}`
+                    : section;
+            };
 
             /*
              * ถ้า AI ส่ง responsibilities มา
@@ -486,29 +621,18 @@ export default function PositionsPage() {
              * เราเพิ่ม responsibilities ต่อท้าย
              */
 
-            if (
-                Array.isArray(
-                    ai.responsibilities
-                ) &&
-                ai.responsibilities.length > 0
-            ) {
-                description +=
-                    description
-                        ? "\n\nหน้าที่ความรับผิดชอบ:\n"
-                        : "หน้าที่ความรับผิดชอบ:\n";
-
-                description +=
-                    ai.responsibilities
-                        .map(
-                            (item) =>
-                                `- ${item}`
-                        )
-                        .join("\n");
-            }
-
-            setEditDescription(
-                description
+            description = appendSection(
+                description,
+                "หน้าที่ความรับผิดชอบ",
+                ai.responsibilities
             );
+            description = appendSection(
+                description,
+                "คุณสมบัติผู้สมัคร",
+                ai.qualifications
+            );
+
+            setEditDescription(description);
 
             /* ==============================
                BENEFITS
@@ -528,6 +652,8 @@ export default function PositionsPage() {
             } else {
                 setEditBenefits("");
             }
+
+            setEditContactInfo(ai.contact_info || "");
 
             /* ==============================
                CRITERIA
@@ -550,6 +676,13 @@ export default function PositionsPage() {
                     response.image_url
                 );
             }
+            setJobImageUrls(
+                response.image_urls?.length
+                    ? response.image_urls
+                    : response.image_url
+                        ? [response.image_url]
+                        : []
+            );
 
             /* ==============================
                EXPAND CRITERIA
@@ -671,6 +804,7 @@ export default function PositionsPage() {
                     : criterion
             )
         );
+
     };
 
     const addSubCriterion = (
@@ -870,7 +1004,10 @@ export default function PositionsPage() {
                         editBenefits,
                         editContactInfo,
                         editStatus,
-                        jobImageUrl
+                        jobImageUrl,
+                        editApplicationStartDate,
+                        editApplicationEndDate,
+                        jobImageUrls
                     );
 
                 if (response) {
@@ -914,7 +1051,10 @@ export default function PositionsPage() {
                         editBenefits,
                         editContactInfo,
                         editStatus,
-                        jobImageUrl
+                        jobImageUrl,
+                        editApplicationStartDate,
+                        editApplicationEndDate,
+                        jobImageUrls
                     );
 
                 if (response) {
@@ -1321,6 +1461,10 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                         selectedJob?.ID ===
                                             job.ID &&
                                         !isCreating;
+                                    const applicationDaysRemaining =
+                                        getApplicationDaysRemaining(
+                                            job.application_end_date
+                                        );
 
                                     return (
                                         <div
@@ -1414,6 +1558,29 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                                 Criteria
                                                             </span>
                                                         </div>
+
+                                                        {job.application_end_date && (
+                                                            <div
+                                                                className={`flex items-center gap-1.5 ${
+                                                                    applicationDaysRemaining !== null &&
+                                                                    applicationDaysRemaining < 0
+                                                                        ? "text-rose-500"
+                                                                        : applicationDaysRemaining !== null &&
+                                                                            applicationDaysRemaining <= 7
+                                                                            ? "text-amber-600"
+                                                                            : "text-slate-400"
+                                                                }`}
+                                                            >
+                                                                <CalendarDays className="w-3 h-3 shrink-0" />
+                                                                <span className="truncate">
+                                                                    สิ้นสุด {formatApplicationEndDate(job.application_end_date)}
+                                                                    {applicationDaysRemaining !== null &&
+                                                                        (applicationDaysRemaining < 0
+                                                                            ? " (หมดเขตแล้ว)"
+                                                                            : ` (เหลือ ${applicationDaysRemaining} วัน)`)}
+                                                                </span>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
 
@@ -1533,6 +1700,23 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                     </div>
                                 )}
 
+                                <button
+                                    type="button"
+                                    onClick={toggleEditStatus}
+                                    disabled={activeTab === "applicants"}
+                                    title="เปิดหรือปิดการรับสมัคร"
+                                    className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                                        editStatus === JOB_STATUS_OPEN
+                                            ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                                            : "bg-slate-100 border-slate-200 text-slate-500 hover:bg-slate-200"
+                                    }`}
+                                >
+                                    <Power className="w-4 h-4" />
+                                    {editStatus === JOB_STATUS_OPEN
+                                        ? "เปิดรับสมัคร"
+                                        : "ปิดรับสมัคร"}
+                                </button>
+
                                 {activeTab ===
                                     "editor" && (
                                     <button
@@ -1563,7 +1747,7 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                             <div className="flex-1 p-6 overflow-y-auto bg-white">
                                 {activeTab ===
                                 "editor" ? (
-                                    <div className="space-y-6">
+                                    <div className="flex flex-col space-y-6">
                                         {/* =================================================
                                             AI IMAGE UPLOAD
                                         ================================================= */}
@@ -1594,6 +1778,7 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                         }
                                                         type="file"
                                                         accept="image/png,image/jpeg,image/jpg,image/webp"
+                                                        multiple
                                                         onChange={
                                                             handleAIImageAnalysis
                                                         }
@@ -1627,7 +1812,7 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                 </div>
                                             </div>
 
-                                            {jobImageUrl && (
+                                            {jobImageUrls.length > 0 && (
                                                 <div className="mt-4 pt-4 border-t border-blue-100">
                                                     <div className="flex items-center gap-2 mb-2">
                                                         <ImageIcon className="w-4 h-4 text-slate-400" />
@@ -1637,20 +1822,30 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                         </span>
                                                     </div>
 
-                                                    <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-white">
-                                                        <img
-                                                            src={getImageUrl(
-                                                                jobImageUrl
-                                                            )}
-                                                            alt="Job Announcement"
-                                                            className="w-full max-h-[300px] object-contain"
-                                                            onError={(
-                                                                event
-                                                            ) => {
-                                                                event.currentTarget.style.display =
-                                                                    "none";
-                                                            }}
-                                                        />
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        {jobImageUrls.map((imageUrl, index) => (
+                                                            <button
+                                                                key={`${imageUrl}-${index}`}
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    setViewingJobImageUrl(
+                                                                        getImageUrl(imageUrl)
+                                                                    )
+                                                                }
+                                                                className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white cursor-zoom-in"
+                                                                title="คลิกเพื่อดูรูปเต็ม"
+                                                            >
+                                                                <img
+                                                                    src={getImageUrl(imageUrl)}
+                                                                    alt={`Job Announcement ${index + 1}`}
+                                                                    className="h-40 w-full object-contain transition-transform group-hover:scale-[1.02]"
+                                                                />
+                                                                <span className="absolute right-2 bottom-2 inline-flex items-center gap-1 rounded-lg bg-slate-900/70 px-2 py-1 text-[10px] font-bold text-white opacity-0 transition-opacity group-hover:opacity-100">
+                                                                    <Maximize2 className="w-3 h-3" />
+                                                                    ดูรูปเต็ม
+                                                                </span>
+                                                            </button>
+                                                        ))}
                                                     </div>
                                                 </div>
                                             )}
@@ -1781,28 +1976,62 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                 </label>
 
                                                 <select
-                                                    value={
-                                                        editStatus
-                                                    }
-                                                    onChange={(
-                                                        event
-                                                    ) =>
-                                                        setEditStatus(
-                                                            event
-                                                                .target
-                                                                .value
-                                                        )
-                                                    }
+                                                    value={editStatus}
+                                                    onChange={(event) => {
+                                                        const status = event.target.value;
+
+                                                        if (
+                                                            status === JOB_STATUS_OPEN ||
+                                                            status === JOB_STATUS_CLOSED
+                                                        ) {
+                                                            setEditStatus(status);
+                                                        }
+                                                    }}
                                                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white"
                                                 >
-                                                    <option value="เปิดรับสมัคร">
+                                                    <option value={JOB_STATUS_OPEN}>
                                                         เปิดรับสมัคร
                                                     </option>
 
-                                                    <option value="ปิดรับสมัครแล้ว">
+                                                    <option value={JOB_STATUS_CLOSED}>
                                                         ปิดรับสมัครแล้ว
                                                     </option>
                                                 </select>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">
+                                                    วันที่เริ่มรับสมัคร
+                                                </label>
+
+                                                <input
+                                                    type="date"
+                                                    value={editApplicationStartDate}
+                                                    onChange={(event) =>
+                                                        setEditApplicationStartDate(
+                                                            event.target.value
+                                                        )
+                                                    }
+                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white"
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">
+                                                    วันที่สิ้นสุดรับสมัคร
+                                                </label>
+
+                                                <input
+                                                    type="date"
+                                                    min={editApplicationStartDate || undefined}
+                                                    value={editApplicationEndDate}
+                                                    onChange={(event) =>
+                                                        setEditApplicationEndDate(
+                                                            event.target.value
+                                                        )
+                                                    }
+                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white"
+                                                />
                                             </div>
                                         </div>
 
@@ -1812,7 +2041,7 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                             DESCRIPTION
                                         ================================================= */}
 
-                                        <div>
+                                        <div className="order-1">
                                             <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">
                                                 ลักษณะงานที่ทำ
                                                 (Job Description)
@@ -1844,7 +2073,7 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                             CRITERIA
                                         ================================================= */}
 
-                                        <div>
+                                        <div className="order-4">
                                             <div className="flex items-center justify-between mb-3">
                                                 <div>
                                                     <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
@@ -2153,7 +2382,7 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                             BENEFITS
                                         ================================================= */}
 
-                                        <div>
+                                        <div className="order-2">
                                             <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">
                                                 สวัสดิการพนักงาน
                                                 (Benefits)
@@ -2184,7 +2413,7 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                             CONTACT
                                         ================================================= */}
 
-                                        <div>
+                                        <div className="order-3">
                                             <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">
                                                 วิธีการสมัคร /
                                                 ข้อมูลติดต่อ
@@ -2429,6 +2658,28 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                     )}
                 </div>
             </div>
+
+            {viewingJobImageUrl && (
+                <div
+                    className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm"
+                    onClick={() => setViewingJobImageUrl(null)}
+                >
+                    <button
+                        type="button"
+                        onClick={() => setViewingJobImageUrl(null)}
+                        className="absolute right-5 top-5 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+                        title="ปิดรูปเต็ม"
+                    >
+                        <X className="h-6 w-6" />
+                    </button>
+                    <img
+                        src={viewingJobImageUrl}
+                        alt="Job Announcement Full Size"
+                        className="max-h-[92vh] max-w-[95vw] object-contain"
+                        onClick={(event) => event.stopPropagation()}
+                    />
+                </div>
+            )}
 
             {/* =====================================================
                 RESUME MODAL

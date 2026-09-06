@@ -62,8 +62,10 @@ type ExtractedJobResponse struct {
 	Salary            string             `json:"salary"`
 	Type              string             `json:"type"`
 	Description       string             `json:"description"`
+	JobDescription    string             `json:"job_description"`
 	Qualifications    []string           `json:"qualifications"`
 	Responsibilities  []string           `json:"responsibilities"`
 	Benefits          []string           `json:"benefits"`
+	ContactInfo       string             `json:"contact_info"`
 	SuggestedCriteria []MainCriterionDTO `json:"suggested_criteria"`
 }
