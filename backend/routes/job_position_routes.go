@@ -20,14 +20,14 @@ func JobPositionRoutes(api *gin.RouterGroup, db *gorm.DB) {
 		j.POST("", middleware.AuthMiddleware(), jobPositionController.Create)
 		j.PUT("/:id", middleware.AuthMiddleware(), jobPositionController.Update)
 		j.DELETE("/:id", middleware.AuthMiddleware(), jobPositionController.Delete)
-		j.GET("/:id/applications", middleware.AuthMiddleware(), jobPositionController.GetApplications)
-		j.GET("/:id/documents", middleware.AuthMiddleware(), jobPositionController.GetJobPositionDocuments)
+		j.GET("/:id/applications", jobPositionController.GetApplications)
+		j.GET("/:id/documents", jobPositionController.GetJobPositionDocuments)
 		j.POST("/documents/upload", middleware.AuthMiddleware(), jobPositionController.UploadDocument)
 		j.DELETE("/documents/:id", middleware.AuthMiddleware(), jobPositionController.DeleteDocument)
 	}
 
 	// บันทึกการคัดกรองผู้สมัครรายบุคคล
-	api.PUT("/applications/:appId/screening", middleware.AuthMiddleware(), jobPositionController.UpdateApplicationScreening)
-	api.DELETE("/applications/:appId", middleware.AuthMiddleware(), jobPositionController.DeleteApplication)
+	api.PUT("/applications/:appId/screening", jobPositionController.UpdateApplicationScreening)
+	api.DELETE("/applications/:appId", jobPositionController.DeleteApplication)
 	api.GET("/applications/status/:appCode", jobPositionController.GetApplicationStatus)
 }

@@ -8,8 +8,9 @@ type Application struct {
 	AIScore        float64 `json:"ai_score"`
 	Position       string  `json:"position"`
 	ResumeURL      string  `json:"resume_url"`
-	ResumeText     string  `json:"resume_text" gorm:"type:text"` // <-- เพิ่มตัวนี้เพื่อเก็บเนื้อหา Resume
-	TranscriptURL  string  `json:"transcript_url"`
+	ResumeText          string `json:"resume_text" gorm:"type:text"` // <-- เพิ่มตัวนี้เพื่อเก็บเนื้อหา Resume
+	ResumeExtractedJSON string `json:"resume_extracted_json" gorm:"type:text"` // 👈 บันทึกข้อมูลที่สกัดจาก OCR สแกน Resume เป็น JSON เพื่อต่อยอด UI
+	TranscriptURL       string `json:"transcript_url"`
 	TranscriptText string  `json:"transcript_text" gorm:"type:text"`
 
 	// Link to Candidate instead of User

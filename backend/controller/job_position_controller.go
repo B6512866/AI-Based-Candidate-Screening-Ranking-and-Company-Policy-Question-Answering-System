@@ -498,6 +498,24 @@ func (c *JobPositionController) Apply(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกข้อมูลผู้สมัครได้"})
 			return
 		}
+	} else {
+		// ถ้าพบ Candidate เดิม ให้อัปเดตชื่อ นามสกุล และ เบอร์โทร หากค่าเดิมเป็น "0" หรือว่างเปล่า หรือมีข้อมูลใหม่มา
+		updated := false
+		if req.FirstName != "" && req.FirstName != "0" {
+			candidate.FirstName = req.FirstName
+			updated = true
+		}
+		if req.LastName != "" && req.LastName != "0" {
+			candidate.LastName = req.LastName
+			updated = true
+		}
+		if req.Phone != "" && req.Phone != "0" {
+			candidate.Phone = req.Phone
+			updated = true
+		}
+		if updated {
+			c.db.Save(&candidate)
+		}
 	}
 	// 3. สร้างข้อมูลใบสมัคร (Application) บันทึกคู่กับ JobPositionID
 	app := entity.Application{
@@ -683,11 +701,12 @@ func (c *JobPositionController) UpdateApplicationScreening(ctx *gin.Context) {
 	}
 
 	var req struct {
-		Score        float64 `json:"score"`
-		Strengths    string  `json:"strengths"`
-		AnalysisData string  `json:"analysis_data"`
-		ModelUsed    string  `json:"model_used"`
-		ResumeText   string  `json:"resume_text"`
+		Score               float64 `json:"score"`
+		Strengths           string  `json:"strengths"`
+		AnalysisData        string  `json:"analysis_data"`
+		ModelUsed           string  `json:"model_used"`
+		ResumeText          string  `json:"resume_text"`
+		ResumeExtractedJSON string  `json:"resume_extracted_json"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
@@ -702,6 +721,54 @@ func (c *JobPositionController) UpdateApplicationScreening(ctx *gin.Context) {
 
 	if req.ResumeText != "" {
 		app.ResumeText = req.ResumeText
+	}
+	if req.ResumeExtractedJSON != "" {
+		app.ResumeExtractedJSON = req.ResumeExtractedJSON
+	}
+
+	// 🛠️ อัปเดตข้อมูล Candidate จากข้อมูลพื้นฐานใน AnalysisData หากมี
+	if req.AnalysisData != "" && app.CandidateID != 0 {
+		var candData struct {
+			CandidateBasicInfo struct {
+				Name  string `json:"name"`
+				Email string `json:"email"`
+				Phone string `json:"phone"`
+			} `json:"candidate_basic_info"`
+		}
+		if err := json.Unmarshal([]byte(req.AnalysisData), &candData); err == nil {
+			var candidate entity.Candidate
+			if err := c.db.First(&candidate, app.CandidateID).Error; err == nil {
+				updated := false
+				if (candidate.FirstName == "" || candidate.FirstName == "0" || candidate.FirstName == "test" || candidate.FirstName == "test5" || strings.HasPrefix(candidate.FirstName, "ผู้สมัครชื่อ")) && candData.CandidateBasicInfo.Name != "" {
+					cleanName := candData.CandidateBasicInfo.Name
+					cleanName = strings.TrimPrefix(cleanName, "คุณ ")
+					cleanName = strings.TrimPrefix(cleanName, "ผู้สมัครชื่อ ")
+					cleanName = strings.TrimPrefix(cleanName, "ชื่อ ")
+					if idx := strings.Index(cleanName, " เป็น"); idx != -1 {
+						cleanName = cleanName[:idx]
+					}
+					if idx := strings.Index(cleanName, " โดย"); idx != -1 {
+						cleanName = cleanName[:idx]
+					}
+					cleanName = strings.TrimSpace(cleanName)
+					parts := strings.Fields(cleanName)
+					if len(parts) > 0 {
+						candidate.FirstName = parts[0]
+					}
+					if len(parts) > 1 {
+						candidate.LastName = strings.Join(parts[1:], " ")
+					}
+					updated = true
+				}
+				if (candidate.Phone == "" || candidate.Phone == "0" || candidate.Phone == "test") && candData.CandidateBasicInfo.Phone != "" {
+					candidate.Phone = candData.CandidateBasicInfo.Phone
+					updated = true
+				}
+				if updated {
+					c.db.Save(&candidate)
+				}
+			}
+		}
 	}
 
 	// 1. ถ้ามีประวัติการประเมินอยู่แล้ว ให้อัปเดตของเดิม

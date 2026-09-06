@@ -301,7 +301,8 @@ export async function updateApplicationScreening(
     strengths: string,
     modelUsed: string = "typhoon2.5-qwen3-4b",
     resumeText: string = "",
-    analysisData: string = ""
+    analysisData: string = "",
+    resumeExtractedJSON: string = ""
 ) {
     const res = await apiClient.put(
         `/applications/${appId}/screening`,
@@ -311,6 +312,7 @@ export async function updateApplicationScreening(
             analysis_data: analysisData,
             model_used: modelUsed,
             resume_text: resumeText,
+            resume_extracted_json: resumeExtractedJSON,
         }
     );
 

@@ -113,7 +113,7 @@ export default function ScreeningPage() {
 
     const parseScoresFromMarkdown = (content: string) => {
         const lines = (content || "").split("\n");
-        const parsedRows: { name: string; score: number; max: number }[] = [];
+        const parsedRows: { name: string; score: number; max: number; reason: string }[] = [];
         let totalScore = 0;
         let totalMax = 100;
         let hasTotalRow = false;
@@ -131,6 +131,7 @@ export default function ScreeningPage() {
             }
 
             const scoreStr = cols[1].replace(/\*\*/g, "").trim();
+            const reason = cols[2] ? cols[2].replace(/\*\*/g, "").trim() : "";
             const scoreMatch = scoreStr.match(/(\d+(?:\.\d+)?)\s*(?:[\/|\s-–—]+\s*(\d+(?:\.\d+)?))?/);
             if (scoreMatch) {
                 const scoreVal = parseFloat(scoreMatch[1]);
@@ -141,7 +142,7 @@ export default function ScreeningPage() {
                     totalMax = maxVal;
                     hasTotalRow = true;
                 } else {
-                    parsedRows.push({ name, score: scoreVal, max: maxVal });
+                    parsedRows.push({ name, score: scoreVal, max: maxVal, reason });
                 }
             }
         }
@@ -369,10 +370,26 @@ export default function ScreeningPage() {
                     const ocrData = await ocrRes.json();
                     resumeText = ocrData.text || "";
 
-                    // Optimization 1: Automatic OCR Caching (Save OCR text to DB immediately)
+                    // Optimization 1: Automatic OCR Caching & Extracted Resume JSON (Save OCR text and Extracted JSON to DB immediately)
                     if (resumeText) {
                         try {
-                            await updateApplicationScreening(app.ID, app.AIScore || 0, app.AIScreening?.strengths || "", "typhoon2.5-qwen3-4b", resumeText);
+                            const extractedResumeObj = {
+                                raw_ocr_text: resumeText,
+                                filename: filename,
+                                character_count: resumeText.length,
+                                ocr_extracted_at: new Date().toISOString()
+                            };
+                            const extractedJSON = JSON.stringify(extractedResumeObj);
+
+                            await updateApplicationScreening(
+                                app.ID,
+                                app.AIScore || 0,
+                                app.AIScreening?.strengths || "",
+                                "typhoon2.5-qwen3-4b",
+                                resumeText,
+                                app.AIScreening?.analysis_data || "",
+                                extractedJSON
+                            );
                         } catch (cacheErr) {
                             console.warn("[OCR Cache Warning] Failed to cache OCR text in DB:", cacheErr);
                         }
@@ -497,30 +514,143 @@ ${tableRowsExample}
                 totalScore += Math.min(finalScores[key], criteriaMap[key].max);
             });
 
+    const parseBasicInfoFromMarkdown = (text: string) => {
+        const info = {
+            name: "",
+            email: "",
+            phone: "",
+            age: "",
+            education: "",
+            experience: ""
+        };
+        if (!text) return info;
+
+        const lines = text.split("\n");
+        let inSection1 = false;
+
+        lines.forEach(line => {
+            const trimmed = line.trim();
+            if (trimmed.includes("1. ข้อมูลผู้สมัคร") || trimmed.includes("ข้อมูลผู้สมัคร")) {
+                inSection1 = true;
+                return;
+            }
+            if (trimmed.startsWith("## 2.") || trimmed.startsWith("### 2.") || trimmed.includes("คะแนนรวม")) {
+                inSection1 = false;
+                return;
+            }
+
+            if (inSection1) {
+                if (trimmed.includes("ชื่อ") || trimmed.includes("Name")) {
+                    info.name = trimmed.replace(/^[-*•\d.\s]+/, "").split(":")[1]?.trim() || trimmed;
+                } else if (trimmed.includes("อีเมล") || trimmed.includes("Email")) {
+                    info.email = trimmed.replace(/^[-*•\d.\s]+/, "").split(":")[1]?.trim() || trimmed;
+                } else if (trimmed.includes("เบอร์") || trimmed.includes("โทร") || trimmed.includes("Phone")) {
+                    info.phone = trimmed.replace(/^[-*•\d.\s]+/, "").split(":")[1]?.trim() || trimmed;
+                } else if (trimmed.includes("อายุ") || trimmed.includes("จบ")) {
+                    info.age = trimmed.replace(/^[-*•\d.\s]+/, "").split(":")[1]?.trim() || trimmed;
+                } else if (trimmed.includes("ศึกษา") || trimmed.includes("วุฒิ")) {
+                    info.education = trimmed.replace(/^[-*•\d.\s]+/, "").split(":")[1]?.trim() || trimmed;
+                }
+            }
+        });
+
+        return info;
+    };
+
             setAnalyzingStates(prev => ({ ...prev, [app.ID]: "saving" }));
 
             const scoresStr = `[SCORES: ${Object.keys(finalScores).map(k => `${k}=${finalScores[k]}`).join(",")}]`;
             const strengthsText = `${scoresStr}\n\n${fullText}`;
 
-            const breakdownDetails = Object.keys(criteriaMap).map(key => {
+            const basicCandidateInfo = parseBasicInfoFromMarkdown(fullText);
+
+            const breakdownDetails = Object.keys(criteriaMap).map((key, idx) => {
                 const info = criteriaMap[key];
+                const rawScore = finalScores[key] || 0;
+                const maxScore = info.max || 100;
+                const ratio = maxScore > 0 ? rawScore / maxScore : 0;
+
+                let level = "แย่ (0%)";
+                let levelRatio = 0.0;
+
+                if (ratio >= 0.75) {
+                    level = "ดี (100%)";
+                    levelRatio = 1.0;
+                } else if (ratio >= 0.25) {
+                    level = "ปานกลาง (50%)";
+                    levelRatio = 0.5;
+                }
+
+                const calculatedScore = Math.round(maxScore * levelRatio);
+
+                let origMainCriterion: any = null;
+                if (Array.isArray(matchedJob?.criteria)) {
+                    origMainCriterion = matchedJob.criteria[idx] || matchedJob.criteria.find((c: any) => c.title === info.name);
+                }
+
+                let row = finalParsed.scores.find((r: any) => r.name.toLowerCase().includes(info.name.toLowerCase()) || info.name.toLowerCase().includes(r.name.toLowerCase()));
+                if (!row && finalParsed.scores[idx]) {
+                    row = finalParsed.scores[idx];
+                }
+
+                let reasonStr = (row as any)?.reason || "";
+                if (!reasonStr && fullText) {
+                    const cleanText = fullText.replace(/^\[SCORES:\s*.*?\]\s*/, "");
+                    const lines = cleanText.split("\n");
+                    const keywords = info.name.split(/[\s&/]+/);
+                    for (const line of lines) {
+                        const trimmed = line.replace(/^[-*•\d.\s#]+/, "").trim();
+                        if (trimmed.length > 8 && !trimmed.startsWith("|") && !trimmed.startsWith("---")) {
+                            if (keywords.some((kw: string) => kw.length > 3 && trimmed.toLowerCase().includes(kw.toLowerCase()))) {
+                                reasonStr = trimmed;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (!reasonStr) {
+                    if (levelRatio === 1.0) {
+                        reasonStr = `มีทักษะและประสบการณ์อยู่ในระดับดีเยี่ยม ตรงตามข้อกำหนดเกณฑ์ (${calculatedScore}/${maxScore} คะแนน)`;
+                    } else if (levelRatio === 0.5) {
+                        reasonStr = `มีทักษะและประสบการณ์ในระดับปานกลาง ครอบคลุมพื้นฐานเกณฑ์ (${calculatedScore}/${maxScore} คะแนน)`;
+                    } else {
+                        reasonStr = `ยังมีทักษะหรือประสบการณ์ไม่ตรงตามข้อกำหนดหลักของเกณฑ์ (${calculatedScore}/${maxScore} คะแนน)`;
+                    }
+                }
+
                 return {
-                    category_key: key,
-                    category_name: info.name,
-                    score: finalScores[key] || 0,
-                    max_score: info.max,
-                    percentage: info.max > 0 ? Math.round(((finalScores[key] || 0) / info.max) * 100) : 0
+                    criterion_id: origMainCriterion?.id || `c_${idx + 1}`,
+                    main_criterion_title: info.name,
+                    score: calculatedScore,
+                    max_score: maxScore,
+                    weight: origMainCriterion?.weight || maxScore,
+                    percentage: Math.round(levelRatio * 100),
+                    evaluated_level: level,
+                    reason: reasonStr,
+                    sub_criteria: origMainCriterion?.sub_criteria || []
                 };
             });
 
+            totalScore = breakdownDetails.reduce((sum, item) => sum + item.score, 0);
+
             const structuredJSON = JSON.stringify({
                 total_score: totalScore,
-                criteria_breakdown: breakdownDetails,
+                candidate_basic_info: basicCandidateInfo,
+                main_criteria_breakdown: breakdownDetails,
                 raw_markdown: fullText,
                 analyzed_at: new Date().toISOString()
             });
 
-            await updateApplicationScreening(app.ID, totalScore, strengthsText, "typhoon2.5-qwen3-4b", resumeText, structuredJSON);
+            const extractedResumeObj = {
+                raw_ocr_text: resumeText,
+                candidate_profile: basicCandidateInfo,
+                character_count: resumeText.length,
+                extracted_at: new Date().toISOString()
+            };
+            const extractedResumeJSON = JSON.stringify(extractedResumeObj);
+
+            await updateApplicationScreening(app.ID, totalScore, strengthsText, "typhoon2.5-qwen3-4b", resumeText, structuredJSON, extractedResumeJSON);
 
             setApplicants(prev => prev.map(a => {
                 if (a.ID === app.ID) {
@@ -1089,11 +1219,16 @@ ${tableRowsExample}
                                         const criteriaMap = parseCriteria(jobCriteria);
                                         const scores = matchParsedScoresToCriteria(parsed.scores, criteriaMap);
 
-                                        const breakdown: Record<string, { score: number; max: number }> = {};
+                                         const breakdown: Record<string, { score: number; max: number; reason: string }> = {};
                                         Object.entries(criteriaMap).forEach(([key, info]: any) => {
+                                            const matchedRow = parsed.scores.find((r: any) => 
+                                                r.name.toLowerCase().includes(info.name.toLowerCase()) || 
+                                                info.name.toLowerCase().includes(r.name.toLowerCase())
+                                            );
                                             breakdown[info.name] = {
                                                 score: scores[key] !== undefined ? scores[key] : 0,
-                                                max: info.max
+                                                max: info.max,
+                                                reason: matchedRow?.reason || ""
                                             };
                                         });
 
@@ -1121,6 +1256,12 @@ ${tableRowsExample}
                                                                         style={{ width: `${pct}%` }}
                                                                     />
                                                                 </div>
+                                                                {info.reason && (
+                                                                    <p className="text-[11px] text-indigo-700 bg-indigo-50/50 p-2 rounded-lg border border-indigo-100 mt-1 flex items-start gap-1.5">
+                                                                        <Sparkles className="w-3.5 h-3.5 text-[#4169E1] shrink-0 mt-0.5" />
+                                                                        <span><strong className="font-bold">เหตุผล AI:</strong> {info.reason}</span>
+                                                                    </p>
+                                                                )}
                                                             </div>
                                                         );
                                                     })}
