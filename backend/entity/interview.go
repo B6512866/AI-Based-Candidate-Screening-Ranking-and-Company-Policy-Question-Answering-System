@@ -17,8 +17,11 @@ type Interview struct {
 	// online = URL, onsite = ห้อง/สถานที่, phone = เบอร์โทร
 	FormatDescription string `json:"format_description" gorm:"type:text"`
 
-	// pending, confirmed, completed, cancelled
+	// pending, confirmed, completed, cancelled, rescheduled
 	Interview_Status string `json:"interview_status" gorm:"default:'pending'"`
+
+	// Token สำหรับตอบกลับจากอีเมล (ยืนยัน/เลื่อน/ปฏิเสธ)
+	ResponseToken string `json:"response_token" gorm:"size:64;index"`
 
 	ApplicationID uint        `json:"application_id" gorm:"index"`
 	Application   Application `json:"application" gorm:"foreignKey:ApplicationID"`

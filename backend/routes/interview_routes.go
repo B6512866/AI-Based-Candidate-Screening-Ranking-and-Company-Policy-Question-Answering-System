@@ -10,6 +10,9 @@ import (
 func InterviewRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	interviewController := controller.NewInterviewController(db)
 
+	// Route สำหรับผู้สมัครกดจากอีเมล — ไม่ต้อง login
+	api.GET("/interviews/respond", interviewController.Respond)
+
 	i := api.Group("/interviews")
 	i.Use(middleware.AuthMiddleware())
 	{
