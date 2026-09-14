@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { Search, Sparkles, Eye, RefreshCw, ChevronDown, ChevronUp, X, Award, FileText, BarChart3, Check, Briefcase, ExternalLink, Download } from "lucide-react";
+import { Search, Sparkles, Eye, RefreshCw, ChevronDown, ChevronUp, X, Award, FileText, BarChart3, Check, Briefcase, ExternalLink, Download, Edit3 } from "lucide-react";
 import { Link } from "react-router-dom";
 import apiClient, { getBackendBaseUrl } from "../../services/apiClient";
-import { getalljobs, updateApplicationStatus } from "../../services/jobPositionService";
+import { getalljobs, updateApplicationStatus, updateApplicationScreening } from "../../services/jobPositionService";
 
 interface SubCriterion {
     id?: string;
@@ -137,6 +137,8 @@ export default function CandidatesPage() {
     const [expandedCandidateId, setExpandedCandidateId] = useState<string | null>(null);
     const [selectedCandidateModal, setSelectedCandidateModal] = useState<CandidateItem | null>(null);
     const [viewingResumeModal, setViewingResumeModal] = useState<CandidateItem | null>(null);
+    const [editingScoreId, setEditingScoreId] = useState<string | null>(null);
+    const [editingScoreValue, setEditingScoreValue] = useState<number | string>(0);
 
     const getCleanResumeUrl = (url: string) => {
         if (!url) return "";
@@ -158,6 +160,35 @@ export default function CandidatesPage() {
         } catch (err) {
             console.error("Failed to update candidate status:", err);
             alert("เกิดข้อผิดพลาดในการอัปเดตสถานะผู้สมัคร");
+        }
+    };
+
+    const handleScoreChange = async (candidateId: string, newScore: number) => {
+        const target = candidates.find(c => c.id === candidateId);
+        if (!target) return;
+
+        const validScore = Math.max(0, Math.min(100, Math.round(newScore)));
+        try {
+            await updateApplicationScreening(
+                parseInt(candidateId),
+                validScore,
+                target.strengths || "",
+                target.modelUsed || "typhoon2.5-qwen3-4b",
+                target.resumeText || ""
+            );
+
+            setCandidates(prev => {
+                const updated = prev.map(c => c.id === candidateId ? { ...c, aiScore: validScore } : c);
+                updated.sort((a, b) => b.aiScore - a.aiScore);
+                return updated;
+            });
+
+            if (selectedCandidateModal && selectedCandidateModal.id === candidateId) {
+                setSelectedCandidateModal(prev => prev ? { ...prev, aiScore: validScore } : null);
+            }
+        } catch (err) {
+            console.error("Failed to update PTS score:", err);
+            alert("เกิดข้อผิดพลาดในการบันทึกคะแนน PTS");
         }
     };
 
@@ -472,11 +503,11 @@ export default function CandidatesPage() {
                             c.email.toLowerCase().includes(search.toLowerCase());
         const matchTab = activeTab === "ทั้งหมด" || 
                             c.status === activeTab ||
-                            (activeTab === "นัดสัมภาษณ์แล้ว" && (c.status === "interview" || c.status === "นัดสัมภาษณ์แล้ว")) ||
+                            (activeTab === "ผ่าน" && (c.status === "ผ่าน" || c.status === "ผ่านการคัดเลือก" || c.status === "approved")) ||
+                            (activeTab === "พิจารณาเพิ่ม" && (c.status === "พิจารณาเพิ่ม" || c.status === "รอพิจารณา" || c.status === "pending")) ||
+                            (activeTab === "ไม่ผ่าน" && (c.status === "ไม่ผ่าน" || c.status === "ปฏิเสธ" || c.status === "rejected")) ||
                             (activeTab === "รอนัดสัมภาษณ์" && (c.status === "shortlisted" || c.status === "รอนัดสัมภาษณ์")) ||
-                            (activeTab === "ผ่านการคัดเลือก" && (c.status === "approved" || c.status === "ผ่านการคัดเลือก")) ||
-                            (activeTab === "ปฏิเสธ" && (c.status === "rejected" || c.status === "ปฏิเสธ")) ||
-                            (activeTab === "รอพิจารณา" && (c.status === "pending" || c.status === "รอพิจารณา"));
+                            (activeTab === "นัดสัมภาษณ์แล้ว" && (c.status === "interview" || c.status === "นัดสัมภาษณ์แล้ว"));
         const matchPosition = selectedPosition === "ทั้งหมด" || c.position === selectedPosition;
         return matchSearch && matchTab && matchPosition;
     });
@@ -540,7 +571,7 @@ export default function CandidatesPage() {
 
                     {/* Filter Status Tabs */}
                     <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0">
-                        {["ทั้งหมด", "รอพิจารณา", "รอนัดสัมภาษณ์", "นัดสัมภาษณ์แล้ว", "ผ่านการคัดเลือก", "ปฏิเสธ"].map(tab => (
+                        {["ทั้งหมด", "ผ่าน", "พิจารณาเพิ่ม", "ไม่ผ่าน", "รอนัดสัมภาษณ์", "นัดสัมภาษณ์แล้ว"].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
@@ -638,57 +669,115 @@ export default function CandidatesPage() {
                                                 </td>
                                                 <td className="py-4 px-6 text-slate-600 font-semibold">{c.position}</td>
                                                 <td className="py-4 px-6">
-                                                    <div className="flex items-center gap-2.5">
-                                                        <div className="w-24 bg-slate-100 rounded-full h-3 overflow-hidden p-0.5 border border-slate-100">
-                                                            <div
-                                                                className={`h-full rounded-full transition-all ${
-                                                                    c.aiScore >= 80 
-                                                                        ? "bg-gradient-to-r from-emerald-500 to-emerald-400" 
-                                                                        : c.aiScore >= 50 
-                                                                            ? "bg-gradient-to-r from-amber-500 to-amber-400" 
-                                                                            : c.aiScore > 0 
-                                                                                ? "bg-gradient-to-r from-rose-500 to-rose-400" 
-                                                                                : "bg-slate-300"
-                                                                }`}
-                                                                style={{ width: `${c.aiScore}%` }}
+                                                    {editingScoreId === c.id ? (
+                                                        <div className="flex items-center gap-1.5">
+                                                            <input
+                                                                type="number"
+                                                                min={0}
+                                                                max={100}
+                                                                value={editingScoreValue}
+                                                                onChange={e => setEditingScoreValue(e.target.value)}
+                                                                onKeyDown={e => {
+                                                                    if (e.key === "Enter") {
+                                                                        const val = parseInt(String(editingScoreValue));
+                                                                        if (!isNaN(val)) handleScoreChange(c.id, val);
+                                                                        setEditingScoreId(null);
+                                                                    } else if (e.key === "Escape") {
+                                                                        setEditingScoreId(null);
+                                                                    }
+                                                                }}
+                                                                className="w-16 px-2 py-1 bg-white border-2 border-[#4169E1] rounded-lg text-sm font-black font-mono text-slate-800 outline-none text-center shadow-xs"
+                                                                autoFocus
                                                             />
+                                                            <button
+                                                                onClick={() => {
+                                                                    const val = parseInt(String(editingScoreValue));
+                                                                    if (!isNaN(val)) handleScoreChange(c.id, val);
+                                                                    setEditingScoreId(null);
+                                                                }}
+                                                                className="p-1 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-all cursor-pointer"
+                                                                title="บันทึกคะแนน"
+                                                            >
+                                                                <Check className="w-3.5 h-3.5" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setEditingScoreId(null)}
+                                                                className="p-1 bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300 transition-all cursor-pointer"
+                                                                title="ยกเลิก"
+                                                            >
+                                                                <X className="w-3.5 h-3.5" />
+                                                            </button>
                                                         </div>
-                                                        <span className={`font-extrabold text-sm font-mono ${
-                                                            c.aiScore >= 80 
-                                                                ? "text-emerald-600" 
-                                                                : c.aiScore >= 50 
-                                                                    ? "text-amber-600" 
-                                                                    : c.aiScore > 0 
-                                                                        ? "text-rose-600" 
-                                                                        : "text-slate-400"
-                                                        }`}>
-                                                            {c.aiScore} PTS
-                                                        </span>
-                                                    </div>
+                                                    ) : (
+                                                        <div className="flex items-center gap-2 group">
+                                                            <div className="w-20 bg-slate-100 rounded-full h-3 overflow-hidden p-0.5 border border-slate-100 shrink-0">
+                                                                <div
+                                                                    className={`h-full rounded-full transition-all ${
+                                                                        c.aiScore >= 80 
+                                                                            ? "bg-gradient-to-r from-emerald-500 to-emerald-400" 
+                                                                            : c.aiScore >= 50 
+                                                                                ? "bg-gradient-to-r from-amber-500 to-amber-400" 
+                                                                                : c.aiScore > 0 
+                                                                                    ? "bg-gradient-to-r from-rose-500 to-rose-400" 
+                                                                                    : "bg-slate-300"
+                                                                    }`}
+                                                                    style={{ width: `${c.aiScore}%` }}
+                                                                />
+                                                            </div>
+                                                            <div className="flex items-center gap-1">
+                                                                <span className={`font-extrabold text-sm font-mono ${
+                                                                    c.aiScore >= 80 
+                                                                        ? "text-emerald-600" 
+                                                                        : c.aiScore >= 50 
+                                                                            ? "text-amber-600" 
+                                                                            : c.aiScore > 0 
+                                                                                ? "text-rose-600" 
+                                                                                : "text-slate-400"
+                                                                }`}>
+                                                                    {c.aiScore} PTS
+                                                                </span>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setEditingScoreId(c.id);
+                                                                        setEditingScoreValue(c.aiScore);
+                                                                    }}
+                                                                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-indigo-50 text-slate-400 hover:text-[#4169E1] rounded-md transition-all cursor-pointer"
+                                                                    title="คลิกเพื่อปรับแก้ไขคะแนน PTS"
+                                                                >
+                                                                    <Edit3 className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td className="py-4 px-6">
                                                     <div className="flex flex-col items-start gap-1">
                                                         <div className="relative inline-block">
                                                             <select
-                                                                value={c.status === "interview" ? "นัดสัมภาษณ์แล้ว" : c.status}
+                                                                value={
+                                                                    c.status === "approved" || c.status === "ผ่านการคัดเลือก" ? "ผ่าน" :
+                                                                    c.status === "rejected" || c.status === "ปฏิเสธ" ? "ไม่ผ่าน" :
+                                                                    c.status === "pending" || c.status === "รอพิจารณา" ? "พิจารณาเพิ่ม" :
+                                                                    c.status === "interview" ? "นัดสัมภาษณ์แล้ว" : c.status
+                                                                }
                                                                 onChange={e => handleStatusChange(c.id, e.target.value)}
                                                                 className={`appearance-none outline-none cursor-pointer pl-3 pr-7 py-1 rounded-full text-xs font-extrabold transition-all border shadow-2xs ${
-                                                                    c.status === "ผ่านการคัดเลือก"
+                                                                    c.status === "ผ่าน" || c.status === "ผ่านการคัดเลือก" || c.status === "approved"
                                                                         ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                                                                        : c.status === "interview" || c.status === "นัดสัมภาษณ์แล้ว"
-                                                                            ? "bg-indigo-50 text-[#4169E1] border-indigo-200 hover:bg-indigo-100"
-                                                                            : c.status === "รอนัดสัมภาษณ์"
-                                                                                ? "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
-                                                                                : c.status === "ปฏิเสธ"
-                                                                                    ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
-                                                                                    : "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+                                                                        : c.status === "พิจารณาเพิ่ม" || c.status === "รอพิจารณา" || c.status === "pending"
+                                                                            ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+                                                                            : c.status === "ไม่ผ่าน" || c.status === "ปฏิเสธ" || c.status === "rejected"
+                                                                                ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                                                                                : c.status === "interview" || c.status === "นัดสัมภาษณ์แล้ว"
+                                                                                    ? "bg-indigo-50 text-[#4169E1] border-indigo-200 hover:bg-indigo-100"
+                                                                                    : "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
                                                                 }`}
                                                             >
-                                                                <option value="รอพิจารณา">🟡 รอพิจารณา</option>
+                                                                <option value="ผ่าน">🟢 ผ่าน</option>
+                                                                <option value="พิจารณาเพิ่ม">🟡 พิจารณาเพิ่ม</option>
+                                                                <option value="ไม่ผ่าน">🔴 ไม่ผ่าน</option>
                                                                 <option value="รอนัดสัมภาษณ์">🟣 รอนัดสัมภาษณ์</option>
                                                                 <option value="นัดสัมภาษณ์แล้ว">🔵 นัดสัมภาษณ์แล้ว</option>
-                                                                <option value="ผ่านการคัดเลือก">🟢 ผ่านการคัดเลือก</option>
-                                                                <option value="ปฏิเสธ">🔴 ปฏิเสธ</option>
                                                             </select>
                                                             <ChevronDown className="w-3 h-3 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
                                                         </div>
@@ -917,32 +1006,90 @@ export default function CandidatesPage() {
                         {/* Top Overview Cards */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="bg-gradient-to-br from-indigo-50 to-blue-50/50 rounded-2xl p-4 border border-indigo-100 text-center">
-                                <span className="text-xs text-indigo-500 font-bold uppercase tracking-wider block">คะแนน PTS สรุป</span>
-                                <span className="text-3xl font-black text-[#4169E1] font-mono mt-1 block">{selectedCandidateModal.aiScore} / 100</span>
+                                <span className="text-xs text-indigo-500 font-bold uppercase tracking-wider block">คะแนน PTS สรุป (ปรับแก้ไขได้)</span>
+                                {editingScoreId === selectedCandidateModal.id ? (
+                                    <div className="flex items-center justify-center gap-2 mt-1">
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={100}
+                                            value={editingScoreValue}
+                                            onChange={e => setEditingScoreValue(e.target.value)}
+                                            onKeyDown={e => {
+                                                if (e.key === "Enter") {
+                                                    const val = parseInt(String(editingScoreValue));
+                                                    if (!isNaN(val)) handleScoreChange(selectedCandidateModal.id, val);
+                                                    setEditingScoreId(null);
+                                                } else if (e.key === "Escape") {
+                                                    setEditingScoreId(null);
+                                                }
+                                            }}
+                                            className="w-20 px-2 py-1 bg-white border-2 border-[#4169E1] rounded-xl text-xl font-black font-mono text-slate-800 outline-none text-center shadow-xs"
+                                            autoFocus
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                const val = parseInt(String(editingScoreValue));
+                                                if (!isNaN(val)) handleScoreChange(selectedCandidateModal.id, val);
+                                                setEditingScoreId(null);
+                                            }}
+                                            className="p-1.5 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-all cursor-pointer"
+                                            title="บันทึกคะแนน"
+                                        >
+                                            <Check className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => setEditingScoreId(null)}
+                                            className="p-1.5 bg-slate-200 text-slate-600 rounded-xl hover:bg-slate-300 transition-all cursor-pointer"
+                                            title="ยกเลิก"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center justify-center gap-2 mt-1">
+                                        <span className="text-3xl font-black text-[#4169E1] font-mono">{selectedCandidateModal.aiScore} / 100</span>
+                                        <button
+                                            onClick={() => {
+                                                setEditingScoreId(selectedCandidateModal.id);
+                                                setEditingScoreValue(selectedCandidateModal.aiScore);
+                                            }}
+                                            className="p-1.5 hover:bg-indigo-100/60 text-[#4169E1] rounded-xl transition-all cursor-pointer"
+                                            title="คลิกเพื่อปรับแก้ไขคะแนน PTS"
+                                        >
+                                            <Edit3 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                )}
                                 <span className="text-xs text-slate-500 mt-1 block font-medium">คำนวณจากค่าน้ำหนัก Criteria</span>
                             </div>
                             <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col items-center justify-center text-center">
                                 <span className="text-xs text-slate-400 font-bold uppercase tracking-wider block mb-1.5">เปลี่ยนสถานะผู้สมัคร</span>
                                 <select
-                                    value={selectedCandidateModal.status === "interview" ? "นัดสัมภาษณ์แล้ว" : selectedCandidateModal.status}
+                                    value={
+                                        selectedCandidateModal.status === "approved" || selectedCandidateModal.status === "ผ่านการคัดเลือก" ? "ผ่าน" :
+                                        selectedCandidateModal.status === "rejected" || selectedCandidateModal.status === "ปฏิเสธ" ? "ไม่ผ่าน" :
+                                        selectedCandidateModal.status === "pending" || selectedCandidateModal.status === "รอพิจารณา" ? "พิจารณาเพิ่ม" :
+                                        selectedCandidateModal.status === "interview" ? "นัดสัมภาษณ์แล้ว" : selectedCandidateModal.status
+                                    }
                                     onChange={e => handleStatusChange(selectedCandidateModal.id, e.target.value)}
                                     className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all border outline-none cursor-pointer text-center ${
-                                        selectedCandidateModal.status === "ผ่านการคัดเลือก"
+                                        selectedCandidateModal.status === "ผ่าน" || selectedCandidateModal.status === "ผ่านการคัดเลือก" || selectedCandidateModal.status === "approved"
                                             ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                                            : selectedCandidateModal.status === "interview" || selectedCandidateModal.status === "นัดสัมภาษณ์แล้ว"
-                                                ? "bg-indigo-50 text-[#4169E1] border-indigo-200 hover:bg-indigo-100"
-                                                : selectedCandidateModal.status === "รอนัดสัมภาษณ์"
-                                                    ? "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
-                                                    : selectedCandidateModal.status === "ปฏิเสธ"
-                                                        ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
-                                                        : "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+                                            : selectedCandidateModal.status === "พิจารณาเพิ่ม" || selectedCandidateModal.status === "รอพิจารณา" || selectedCandidateModal.status === "pending"
+                                                ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+                                                : selectedCandidateModal.status === "ไม่ผ่าน" || selectedCandidateModal.status === "ปฏิเสธ" || selectedCandidateModal.status === "rejected"
+                                                    ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                                                    : selectedCandidateModal.status === "interview" || selectedCandidateModal.status === "นัดสัมภาษณ์แล้ว"
+                                                        ? "bg-indigo-50 text-[#4169E1] border-indigo-200 hover:bg-indigo-100"
+                                                        : "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
                                     }`}
                                 >
-                                    <option value="รอพิจารณา">🟡 รอพิจารณา</option>
+                                    <option value="ผ่าน">🟢 ผ่าน</option>
+                                    <option value="พิจารณาเพิ่ม">🟡 พิจารณาเพิ่ม</option>
+                                    <option value="ไม่ผ่าน">🔴 ไม่ผ่าน</option>
                                     <option value="รอนัดสัมภาษณ์">🟣 รอนัดสัมภาษณ์</option>
                                     <option value="นัดสัมภาษณ์แล้ว">🔵 นัดสัมภาษณ์แล้ว</option>
-                                    <option value="ผ่านการคัดเลือก">🟢 ผ่านการคัดเลือก</option>
-                                    <option value="ปฏิเสธ">🔴 ปฏิเสธ</option>
                                 </select>
                             </div>
                             <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 text-center">
