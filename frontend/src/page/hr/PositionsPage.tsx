@@ -1206,7 +1206,7 @@ export default function PositionsPage() {
                                     sub
                                 ) => {
                                     userContent +=
-                                        `\n- ${sub.title}: ${sub.description} (${sub.weight}%)`;
+                                        `\n- ${sub.title}: ${sub.description} (${sub.weight}คะแนน)`;
                                 }
                             );
                         }
@@ -2303,11 +2303,11 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                                                                                             .value
                                                                                                                     )
                                                                                                                 }
-                                                                                                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 text-sm text-center font-bold outline-none"
+                                                                                                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-1 py-2 text-sm text-center font-bold outline-none"
                                                                                                             />
 
                                                                                                             <span className="text-xs text-slate-400">
-                                                                                                                %
+                                                                                                                คะแนน
                                                                                                             </span>
                                                                                                         </div>
                                                                                                     </div>
