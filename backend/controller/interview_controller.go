@@ -242,7 +242,10 @@ func (c *InterviewController) GetCandidatesForInterview(ctx *gin.Context) {
 	var applications []entity.Application
 	if err := c.db.
 		Preload("Candidate").
-		Preload("JobPosition").
+		Preload("JobPosition.Criteria.SubCriteria").
+		Preload("AIScreening").
+		Preload("Documents").
+		Order("created_at desc").
 		Find(&applications).Error; err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลผู้สมัครได้"})
 		return

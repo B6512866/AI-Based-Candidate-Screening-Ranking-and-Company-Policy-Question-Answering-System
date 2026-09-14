@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 
@@ -20,11 +21,22 @@ import (
 
 func startTyphoonAI() {
 	go func() {
+		client := http.Client{Timeout: 2 * time.Second}
+		resp, err := client.Get("http://127.0.0.1:8000/health")
+		if err == nil && resp != nil && resp.StatusCode == 200 {
+			resp.Body.Close()
+			fmt.Println("✅ Typhoon AI Service is already running on port 8000.")
+			return
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+
 		fmt.Println("🤖 Starting Typhoon AI Service on port 8000...")
-		cmd := exec.Command("python", "-u", "-m", "uvicorn", "typhoon.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload")
+		cmd := exec.Command("python", "-u", "-m", "uvicorn", "typhoon.main:app", "--host", "0.0.0.0", "--port", "8000")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		err := cmd.Run()
+		err = cmd.Run()
 		if err != nil {
 			log.Println("⚠️ Typhoon AI process ended or failed:", err)
 		}

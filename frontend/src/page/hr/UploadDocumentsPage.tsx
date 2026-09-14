@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { deleteApplicationDocument, getalljobs, getJobPositionDocuments, uploadApplicationDocument } from "../../services/jobPositionService";
 import { Upload, FileText, Link as LinkIcon, BriefcaseBusiness, ClipboardCheck, NotebookText, Trash2 } from "lucide-react";
+import { getBackendBaseUrl } from "../../services/apiClient";
 
 interface JobPosition {
   ID: number;
@@ -281,7 +282,7 @@ export default function UploadDocumentsPage() {
 
                   <div className="mt-3 flex items-center justify-between gap-3">
                     <a
-                      href={`${import.meta.env.VITE_API_URL || "http://localhost:8080"}${doc.file_url}`}
+                      href={`${getBackendBaseUrl()}${doc.file_url}`}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex items-center gap-1 text-xs font-semibold text-[#4169E1]"
