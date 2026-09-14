@@ -4,7 +4,6 @@ import {
     Users,
     Briefcase,
     CalendarCheck,
-    Clock,
     ArrowUpRight,
     CheckCircle2,
     AlertCircle,
@@ -12,10 +11,7 @@ import {
     TrendingUp,
     RefreshCw,
     Award,
-    XCircle,
-    UserCheck,
-    ChevronRight,
-    Percent
+    ChevronRight
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { getalljobs } from "../../services/jobPositionService";
@@ -77,6 +73,7 @@ export default function HRDashboard() {
         avgScore: 0,
         statusCounts: {
             pending: 0,
+            shortlisted: 0,
             interview: 0,
             passed: 0,
             rejected: 0,
@@ -109,6 +106,7 @@ export default function HRDashboard() {
             let totalScoreSum = 0;
             let scoredCount = 0;
             let pendingCount = 0;
+            let shortlistedCount = 0;
             let interviewCount = 0;
             let passedCount = 0;
             let rejectedCount = 0;
@@ -124,11 +122,13 @@ export default function HRDashboard() {
                 }
 
                 const st = (app.status || "รอพิจารณา").toLowerCase();
-                if (st.includes("สัมภาษณ์")) {
+                if (st.includes("รอนัดสัมภาษณ์") || st.includes("shortlisted")) {
+                    shortlistedCount++;
+                } else if (st.includes("สัมภาษณ์") || st.includes("interview")) {
                     interviewCount++;
-                } else if (st.includes("ผ่าน") || st.includes("รับเข้า")) {
+                } else if (st.includes("ผ่าน") || st.includes("รับเข้า") || st.includes("passed") || st.includes("approved")) {
                     passedCount++;
-                } else if (st.includes("ไม่ผ่าน") || st.includes("ปฏิเสธ")) {
+                } else if (st.includes("ไม่ผ่าน") || st.includes("ปฏิเสธ") || st.includes("rejected")) {
                     rejectedCount++;
                 } else {
                     pendingCount++;
@@ -143,6 +143,7 @@ export default function HRDashboard() {
                 avgScore: scoredCount > 0 ? Math.round(totalScoreSum / scoredCount) : 0,
                 statusCounts: {
                     pending: pendingCount,
+                    shortlisted: shortlistedCount,
                     interview: interviewCount,
                     passed: passedCount,
                     rejected: rejectedCount,
@@ -271,8 +272,8 @@ export default function HRDashboard() {
                         </span>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-2">
-                        <div className="bg-amber-50/60 border border-amber-100 rounded-2xl p-4 text-center">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 py-2">
+                        <div className="bg-amber-50/60 border border-amber-100 rounded-2xl p-3.5 text-center">
                             <span className="text-amber-600 text-xs font-bold block mb-1">รอพิจารณา</span>
                             <span className="text-2xl font-black text-amber-700 font-mono">{stats.statusCounts.pending}</span>
                             <span className="text-[10px] text-amber-500 block mt-1 font-semibold">
@@ -280,7 +281,15 @@ export default function HRDashboard() {
                             </span>
                         </div>
 
-                        <div className="bg-blue-50/60 border border-blue-100 rounded-2xl p-4 text-center">
+                        <div className="bg-purple-50/60 border border-purple-100 rounded-2xl p-3.5 text-center">
+                            <span className="text-purple-600 text-xs font-bold block mb-1">รอนัดสัมภาษณ์</span>
+                            <span className="text-2xl font-black text-purple-700 font-mono">{stats.statusCounts.shortlisted}</span>
+                            <span className="text-[10px] text-purple-500 block mt-1 font-semibold">
+                                {stats.totalApplicants > 0 ? Math.round((stats.statusCounts.shortlisted / stats.totalApplicants) * 100) : 0}%
+                            </span>
+                        </div>
+
+                        <div className="bg-blue-50/60 border border-blue-100 rounded-2xl p-3.5 text-center">
                             <span className="text-blue-600 text-xs font-bold block mb-1">นัดสัมภาษณ์แล้ว</span>
                             <span className="text-2xl font-black text-blue-700 font-mono">{stats.statusCounts.interview}</span>
                             <span className="text-[10px] text-blue-500 block mt-1 font-semibold">
@@ -288,7 +297,7 @@ export default function HRDashboard() {
                             </span>
                         </div>
 
-                        <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-4 text-center">
+                        <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-3.5 text-center">
                             <span className="text-emerald-600 text-xs font-bold block mb-1">ผ่านการคัดเลือก</span>
                             <span className="text-2xl font-black text-emerald-700 font-mono">{stats.statusCounts.passed}</span>
                             <span className="text-[10px] text-emerald-500 block mt-1 font-semibold">
@@ -296,8 +305,8 @@ export default function HRDashboard() {
                             </span>
                         </div>
 
-                        <div className="bg-rose-50/60 border border-rose-100 rounded-2xl p-4 text-center">
-                            <span className="text-rose-600 text-xs font-bold block mb-1">ไม่ผ่านการคัดเลือก</span>
+                        <div className="bg-rose-50/60 border border-rose-100 rounded-2xl p-4 sm:col-span-1 col-span-2 text-center">
+                            <span className="text-rose-600 text-xs font-bold block mb-1">ปฏิเสธ</span>
                             <span className="text-2xl font-black text-rose-700 font-mono">{stats.statusCounts.rejected}</span>
                             <span className="text-[10px] text-rose-500 block mt-1 font-semibold">
                                 {stats.totalApplicants > 0 ? Math.round((stats.statusCounts.rejected / stats.totalApplicants) * 100) : 0}%
@@ -325,6 +334,11 @@ export default function HRDashboard() {
                                         title="นัดสัมภาษณ์แล้ว"
                                     />
                                     <div
+                                        style={{ width: `${(stats.statusCounts.shortlisted / stats.totalApplicants) * 100}%` }}
+                                        className="bg-purple-500 h-full transition-all"
+                                        title="รอนัดสัมภาษณ์"
+                                    />
+                                    <div
                                         style={{ width: `${(stats.statusCounts.pending / stats.totalApplicants) * 100}%` }}
                                         className="bg-amber-400 h-full transition-all"
                                         title="รอพิจารณา"
@@ -332,7 +346,7 @@ export default function HRDashboard() {
                                     <div
                                         style={{ width: `${(stats.statusCounts.rejected / stats.totalApplicants) * 100}%` }}
                                         className="bg-rose-400 h-full rounded-r-full transition-all"
-                                        title="ไม่ผ่าน"
+                                        title="ปฏิเสธ"
                                     />
                                 </>
                             )}

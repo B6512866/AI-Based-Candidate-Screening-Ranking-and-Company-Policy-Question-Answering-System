@@ -212,6 +212,7 @@ func (c *InterviewController) GetCandidatesForInterview(ctx *gin.Context) {
 		Preload("Candidate").
 		Preload("JobPosition.Criteria.SubCriteria").
 		Preload("AIScreening").
+		Preload("Documents").
 		Order("created_at desc").
 		Find(&applications).Error; err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลผู้สมัครได้"})

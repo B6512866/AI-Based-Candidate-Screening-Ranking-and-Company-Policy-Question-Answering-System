@@ -42,7 +42,7 @@ import {
     type JobStatus,
 } from "../../services/jobPositionService";
 
-import apiClient from "../../services/apiClient";
+import apiClient, { getTyphoonApiUrl } from "../../services/apiClient";
 
 interface SubCriterion {
     ID?: number;
@@ -1129,10 +1129,7 @@ export default function PositionsPage() {
        BULK AI SCREENING
     ===================================================== */
 
-    const TYPHOON_API =
-        import.meta.env
-            .VITE_TYPHOON_API_URL ||
-        "http://localhost:8000";
+    const TYPHOON_API = getTyphoonApiUrl();
 
     const runBulkAnalysis = async () => {
         if (

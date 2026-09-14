@@ -260,6 +260,18 @@ export async function updateJobStatus(
     return res.data;
 }
 
+export async function updateApplicationStatus(
+    appId: string | number,
+    status: string
+) {
+    const res = await apiClient.patch(
+        `/applications/${appId}/status`,
+        { status }
+    );
+
+    return res.data;
+}
+
 /* =========================================================
    DELETE JOB
 ========================================================= */

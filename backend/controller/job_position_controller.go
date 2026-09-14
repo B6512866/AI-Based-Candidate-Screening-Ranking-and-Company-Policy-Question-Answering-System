@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,65 @@ import (
 
 type JobPositionController struct {
 	db *gorm.DB
+}
+
+// CleanCandidateName cleans prefixes, nicknames in brackets, job titles, and extra description words from raw candidate names
+func CleanCandidateName(rawName string) (firstName, lastName string) {
+	if rawName == "" {
+		return "", ""
+	}
+
+	clean := rawName
+
+	// 1. Cut off at line breaks
+	if idx := strings.IndexAny(clean, "\n\r"); idx != -1 {
+		clean = clean[:idx]
+	}
+
+	// 2. Cut off at colon (e.g. "ชื่อ: สมชาย ใจดี")
+	if idx := strings.Index(clean, ":"); idx != -1 {
+		clean = clean[idx+1:]
+	}
+
+	// 3. Cut off at delimiters followed by titles/extra details (e.g. "สมชาย ใจดี | Developer")
+	delims := []string{"|", "/", "—", "–", " - ", "ตำแหน่ง", "เป็น", "โดย", "อายุ", " (", " ["}
+	for _, delim := range delims {
+		if idx := strings.Index(clean, delim); idx != -1 {
+			clean = clean[:idx]
+		}
+	}
+
+	// 4. Remove brackets and contents (e.g. (ต้อม), [Tom])
+	reBracket := regexp.MustCompile(`[\(\[\{].*?[\)\]\}]`)
+	clean = reBracket.ReplaceAllString(clean, "")
+
+	// 5. Remove common prefixes
+	prefixes := []string{
+		"คุณ", "นาย", "นางสาว", "นาง", "ดร.", "ศ.", "ผศ.", "รศ.",
+		"Mr.", "Mr ", "Mrs.", "Mrs ", "Ms.", "Ms ", "Dr.", "Dr ",
+		"ผู้สมัครชื่อ", "ผู้สมัคร", "ชื่อ-นามสกุล", "ชื่อนามสกุล", "ชื่อ", "Name", "Candidate",
+	}
+
+	clean = strings.TrimSpace(clean)
+	for _, p := range prefixes {
+		if strings.HasPrefix(strings.ToLower(clean), strings.ToLower(p)) {
+			clean = strings.TrimSpace(clean[len(p):])
+		}
+	}
+
+	// 6. Clean up symbols
+	clean = strings.Trim(clean, " \t\n\r-*•:;,.|/\\_")
+
+	// 7. Split into FirstName and LastName
+	parts := strings.Fields(clean)
+	if len(parts) == 0 {
+		return "", ""
+	}
+	firstName = parts[0]
+	if len(parts) > 1 {
+		lastName = strings.Join(parts[1:], " ")
+	}
+	return firstName, lastName
 }
 
 func mustMarshalJSON(values []string) datatypes.JSON {
@@ -599,39 +659,17 @@ func (c *JobPositionController) Apply(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "กรุณากรอกข้อมูลและอัปโหลดเอกสารให้ครบถ้วน"})
 		return
 	}
-	// 2. ค้นหา Candidate เดิม หรือถ้าไม่มีให้สร้างขึ้นใหม่ (Find or Create by Email)
-	var candidate entity.Candidate
-	err = c.db.Where("email = ?", req.Email).First(&candidate).Error
-	if err != nil {
-		// ถ้าไม่พบ ให้สร้าง Candidate ใหม่
-		candidate = entity.Candidate{
-			FirstName: req.FirstName,
-			LastName:  req.LastName,
-			Email:     req.Email,
-			Phone:     req.Phone,
-		}
-		if err := c.db.Create(&candidate).Error; err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกข้อมูลผู้สมัครได้"})
-			return
-		}
-	} else {
-		// ถ้าพบ Candidate เดิม ให้อัปเดตชื่อ นามสกุล และ เบอร์โทร หากค่าเดิมเป็น "0" หรือว่างเปล่า หรือมีข้อมูลใหม่มา
-		updated := false
-		if req.FirstName != "" && req.FirstName != "0" {
-			candidate.FirstName = req.FirstName
-			updated = true
-		}
-		if req.LastName != "" && req.LastName != "0" {
-			candidate.LastName = req.LastName
-			updated = true
-		}
-		if req.Phone != "" && req.Phone != "0" {
-			candidate.Phone = req.Phone
-			updated = true
-		}
-		if updated {
-			c.db.Save(&candidate)
-		}
+	// 2. สร้าง Candidate ใหม่สำหรับทุกใบสมัคร (เพื่อให้ข้อมูลชื่อ-นามสกุล และเบอร์โทร อิสระจากกันไม่เขียนทับใบสมัครเดิม)
+	candidate := entity.Candidate{
+		FirstName:  req.FirstName,
+		LastName:   req.LastName,
+		Email:      req.Email,
+		Phone:      req.Phone,
+		ResumeText: req.ResumeText,
+	}
+	if err := c.db.Create(&candidate).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกข้อมูลผู้สมัครได้"})
+		return
 	}
 	// 3. สร้างข้อมูลใบสมัคร (Application) บันทึกคู่กับ JobPositionID
 	app := entity.Application{
@@ -817,6 +855,7 @@ func (c *JobPositionController) UpdateApplicationScreening(ctx *gin.Context) {
 	}
 
 	var req struct {
+		Status              string  `json:"status"`
 		Score               float64 `json:"score"`
 		Strengths           string  `json:"strengths"`
 		AnalysisData        string  `json:"analysis_data"`
@@ -833,6 +872,10 @@ func (c *JobPositionController) UpdateApplicationScreening(ctx *gin.Context) {
 	if err := c.db.First(&app, appID).Error; err != nil {
 		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบใบสมัครนี้"})
 		return
+	}
+
+	if req.Status != "" {
+		app.Status = req.Status
 	}
 
 	if req.ResumeText != "" {
@@ -929,6 +972,38 @@ func (c *JobPositionController) UpdateApplicationScreening(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"message": "วิเคราะห์ผู้สมัครและบันทึกคะแนน AI สำเร็จ", "data": scr})
+}
+
+// PATCH /api/applications/:appId/status
+func (c *JobPositionController) UpdateApplicationStatus(ctx *gin.Context) {
+	idStr := ctx.Param("appId")
+	appID, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ID ใบสมัครไม่ถูกต้อง"})
+		return
+	}
+
+	var req struct {
+		Status string `json:"status" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาระบุสถานะที่ต้องการเปลี่ยน"})
+		return
+	}
+
+	var app entity.Application
+	if err := c.db.First(&app, appID).Error; err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบใบสมัครนี้"})
+		return
+	}
+
+	app.Status = req.Status
+	if err := c.db.Save(&app).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอัปเดตสถานะใบสมัครได้"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"message": "อัปเดตสถานะผู้สมัครสำเร็จ", "status": app.Status, "data": app})
 }
 
 // DELETE /api/applications/:appId
