@@ -255,3 +255,199 @@ func SendCustomInterviewEmail(toEmail string, jobTitle string, customContent str
 	return nil
 }
 
+// SendInterviewEmailWithButtons ส่งอีเมลแจ้งนัดหมายสัมภาษณ์พร้อมปุ่มตอบกลับ (ยืนยัน/เลื่อน/ปฏิเสธ)
+func SendInterviewEmailWithButtons(toEmail string, candidateName string, appCode string, jobTitle string, interviewDate string, location string, notes string, responseToken string, baseURL string, interviewID uint) error {
+	fromEmail := config.Env.SMTPEmail
+	if fromEmail == "" {
+		fromEmail = "guymini02479@gmail.com"
+	}
+
+	appPassword := config.Env.SMTPPassword
+	if appPassword == "" {
+		appPassword = "gjsrvsyeqsixfvlk"
+	}
+	appPassword = strings.ReplaceAll(appPassword, " ", "")
+
+	smtpHost := "smtp.gmail.com"
+	smtpPort := "587"
+
+	subject := fmt.Sprintf("Subject: [HireAI] แจ้งนัดหมายสัมภาษณ์งาน - ตำแหน่ง %s\r\n", jobTitle)
+	headers := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\r\n"
+	fromHeader := fmt.Sprintf("From: HireAI Recruitment <%s>\r\n", fromEmail)
+	toHeader := fmt.Sprintf("To: %s\r\n\r\n", toEmail)
+
+	notesHtml := ""
+	if notes != "" {
+		notesHtml = fmt.Sprintf(`<div class="info-row"><div class="info-label">📝 หมายเหตุเพิ่มเติม</div><div class="info-value">%s</div></div>`, notes)
+	}
+
+	confirmURL := fmt.Sprintf("%s/api/interviews/respond?id=%d&action=confirm&token=%s", baseURL, interviewID, responseToken)
+	rescheduleURL := fmt.Sprintf("%s/api/interviews/respond?id=%d&action=reschedule&token=%s", baseURL, interviewID, responseToken)
+	rejectURL := fmt.Sprintf("%s/api/interviews/respond?id=%d&action=reject&token=%s", baseURL, interviewID, responseToken)
+
+	body := fmt.Sprintf(`
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f1f5f9; margin: 0; padding: 20px; }
+        .card { max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+        .header { background: linear-gradient(135deg, #10B981, #059669); color: #ffffff; padding: 32px 24px; text-align: center; }
+        .header h1 { margin: 0; font-size: 22px; font-weight: 800; }
+        .header p { margin: 6px 0 0 0; font-size: 13px; opacity: 0.9; }
+        .content { padding: 32px 28px; color: #334155; }
+        .info-box { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 16px; padding: 20px; margin: 24px 0; }
+        .info-row { margin-bottom: 12px; font-size: 14px; }
+        .info-label { font-weight: 800; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+        .info-value { font-weight: 700; color: #1e293b; margin-top: 2px; }
+        .btn-group { text-align: center; margin: 28px 0 8px 0; }
+        .btn { display: inline-block; padding: 14px 28px; border-radius: 12px; text-decoration: none; font-weight: 800; font-size: 14px; margin: 6px; }
+        .btn-confirm { background: linear-gradient(135deg, #10B981, #059669); color: #ffffff !important; }
+        .btn-reschedule { background: linear-gradient(135deg, #F59E0B, #D97706); color: #ffffff !important; }
+        .btn-reject { background: linear-gradient(135deg, #EF4444, #DC2626); color: #ffffff !important; }
+        .footer { background: #f8fafc; padding: 16px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <h1>HireAI Recruitment</h1>
+            <p>แจ้งนัดหมายเข้ารับการสัมภาษณ์งาน</p>
+        </div>
+        <div class="content">
+            <p style="font-size: 15px; margin-top: 0;">สวัสดีคุณ <b>%s</b>,</p>
+            <p style="font-size: 14px; line-height: 1.6; color: #475569;">
+                ขอแสดงความยินดีด้วย! ฝ่ายทรัพยากรบุคคลขอเรียนเชิญคุณเข้ารับการสัมภาษณ์งานในตำแหน่ง <b>"%s"</b> โดยมีรายละเอียดนัดหมายดังนี้:
+            </p>
+            
+            <div class="info-box">
+                <div class="info-row">
+                    <div class="info-label">📋 รหัสประจำตัวใบสมัคร</div>
+                    <div class="info-value" style="color: #2563eb; font-family: monospace; font-size: 16px;">%s</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">📅 วันและเวลาสัมภาษณ์</div>
+                    <div class="info-value">%s</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">📍 รูปแบบ / สถานที่นัดหมาย</div>
+                    <div class="info-value">%s</div>
+                </div>
+                %s
+            </div>
+
+            <p style="font-size: 13px; color: #475569; line-height: 1.6; margin-bottom: 4px;">
+                กรุณาตอบกลับเพื่อยืนยัน ขอเลื่อนนัด หรือปฏิเสธ โดยกดปุ่มด้านล่าง:
+            </p>
+
+            <div class="btn-group">
+                <a href="%s" class="btn btn-confirm">✅ ยืนยันเข้าร่วม</a>
+                <a href="%s" class="btn btn-reschedule">📅 ขอเลื่อนนัด</a>
+                <a href="%s" class="btn btn-reject">❌ ปฏิเสธ</a>
+            </div>
+        </div>
+        <div class="footer">
+            อีเมลนี้เป็นข้อความแจ้งนัดหมายอัตโนมัติจากระบบ HireAI Recruitment
+        </div>
+    </div>
+</body>
+</html>
+`, candidateName, jobTitle, appCode, interviewDate, location, notesHtml, confirmURL, rescheduleURL, rejectURL)
+
+	msg := []byte(subject + headers + fromHeader + toHeader + body)
+	auth := smtp.PlainAuth("", fromEmail, appPassword, smtpHost)
+
+	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, fromEmail, []string{toEmail}, msg)
+	if err != nil {
+		fmt.Printf("❌ [SMTP Interview Error] ส่งอีเมลสัมภาษณ์ไปยัง %s ล้มเหลว: %v\n", toEmail, err)
+		return err
+	}
+
+	fmt.Printf("📧 [SMTP Interview Success] ส่งอีเมลแจ้งนัดหมายสัมภาษณ์พร้อมปุ่มตอบกลับไปยัง %s สำเร็จเรียบร้อย!\n", toEmail)
+	return nil
+}
+
+// SendCustomInterviewEmailWithButtons ส่งอีเมลแจ้งนัดหมายสัมภาษณ์ตามเนื้อหาที่ HR กำหนดพร้อมปุ่มตอบกลับ
+func SendCustomInterviewEmailWithButtons(toEmail string, jobTitle string, customContent string, responseToken string, baseURL string, interviewID uint) error {
+	fromEmail := config.Env.SMTPEmail
+	if fromEmail == "" {
+		fromEmail = "guymini02479@gmail.com"
+	}
+
+	appPassword := config.Env.SMTPPassword
+	if appPassword == "" {
+		appPassword = "gjsrvsyeqsixfvlk"
+	}
+	appPassword = strings.ReplaceAll(appPassword, " ", "")
+
+	smtpHost := "smtp.gmail.com"
+	smtpPort := "587"
+
+	subject := fmt.Sprintf("Subject: [HireAI] แจ้งนัดหมายสัมภาษณ์งาน - ตำแหน่ง %s\r\n", jobTitle)
+	headers := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\r\n"
+	fromHeader := fmt.Sprintf("From: HireAI Recruitment <%s>\r\n", fromEmail)
+	toHeader := fmt.Sprintf("To: %s\r\n\r\n", toEmail)
+
+	// แปลง newline ให้เป็น <br/> เพื่อให้แสดงผลขึ้นบรรทัดใหม่ในโปรแกรมเปิดเมลได้ถูกต้อง
+	formattedContent := strings.ReplaceAll(customContent, "\n", "<br/>")
+
+	confirmURL := fmt.Sprintf("%s/api/interviews/respond?id=%d&action=confirm&token=%s", baseURL, interviewID, responseToken)
+	rescheduleURL := fmt.Sprintf("%s/api/interviews/respond?id=%d&action=reschedule&token=%s", baseURL, interviewID, responseToken)
+	rejectURL := fmt.Sprintf("%s/api/interviews/respond?id=%d&action=reject&token=%s", baseURL, interviewID, responseToken)
+
+	body := fmt.Sprintf(`
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f1f5f9; margin: 0; padding: 20px; }
+        .card { max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+        .header { background: linear-gradient(135deg, #4169E1, #3152c4); color: #ffffff; padding: 28px 24px; text-align: center; }
+        .header h1 { margin: 0; font-size: 20px; font-weight: 800; }
+        .header p { margin: 4px 0 0 0; font-size: 13px; opacity: 0.9; }
+        .content { padding: 32px 28px; color: #334155; font-size: 14px; line-height: 1.8; word-break: break-word; }
+        .btn-group { text-align: center; margin: 28px 0 8px 0; padding: 0 28px; }
+        .btn { display: inline-block; padding: 14px 28px; border-radius: 12px; text-decoration: none; font-weight: 800; font-size: 14px; margin: 6px; }
+        .btn-confirm { background: linear-gradient(135deg, #10B981, #059669); color: #ffffff !important; }
+        .btn-reschedule { background: linear-gradient(135deg, #F59E0B, #D97706); color: #ffffff !important; }
+        .btn-reject { background: linear-gradient(135deg, #EF4444, #DC2626); color: #ffffff !important; }
+        .footer { background: #f8fafc; padding: 16px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <h1>HireAI Recruitment</h1>
+            <p>แจ้งนัดหมายเข้ารับการสัมภาษณ์งาน</p>
+        </div>
+        <div class="content">
+            %s
+        </div>
+        <div class="btn-group">
+            <a href="%s" class="btn btn-confirm">✅ ยืนยันเข้าร่วม</a>
+            <a href="%s" class="btn btn-reschedule">📅 ขอเลื่อนนัด</a>
+            <a href="%s" class="btn btn-reject">❌ ปฏิเสธ</a>
+        </div>
+        <div class="footer">
+            อีเมลนี้เป็นข้อความแจ้งนัดหมายจากระบบ HireAI Recruitment
+        </div>
+    </div>
+</body>
+</html>
+`, formattedContent, confirmURL, rescheduleURL, rejectURL)
+
+	msg := []byte(subject + headers + fromHeader + toHeader + body)
+	auth := smtp.PlainAuth("", fromEmail, appPassword, smtpHost)
+
+	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, fromEmail, []string{toEmail}, msg)
+	if err != nil {
+		fmt.Printf("❌ [SMTP Custom Interview Error] ส่งอีเมลสัมภาษณ์ไปยัง %s ล้มเหลว: %v\n", toEmail, err)
+		return err
+	}
+
+	fmt.Printf("📧 [SMTP Custom Interview Success] ส่งอีเมลเชิญสัมภาษณ์พร้อมปุ่มตอบกลับไปยัง %s สำเร็จเรียบร้อย!\n", toEmail)
+	return nil
+}
+

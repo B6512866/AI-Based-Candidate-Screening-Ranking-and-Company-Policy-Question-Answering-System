@@ -17,6 +17,7 @@ type Config struct {
 	DBPort       string
 	JWTSecret    string
 	FrontendURL  string
+	BackendURL   string
 	SMTPEmail    string
 	SMTPPassword string
 	GeminiAPIKey string
@@ -36,6 +37,7 @@ func LoadEnv() {
 		DBPort:       getEnv("DB_PORT", "5432"),
 		JWTSecret:    getEnv("JWT_SECRET", "mysecretkey123"),
 		FrontendURL:  getEnv("FRONTEND_URL", "http://localhost:5173"),
+		BackendURL:   getEnv("BACKEND_URL", "http://localhost:8080"),
 		SMTPEmail:    getEnv("SMTP_EMAIL", "guymini02479@gmail.com"),
 		SMTPPassword: getEnv("SMTP_PASSWORD", "gjsrvsyeqsixfvlk"),
 		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""), // <--- เพิ่มบรรทัดนี้ครับ!
