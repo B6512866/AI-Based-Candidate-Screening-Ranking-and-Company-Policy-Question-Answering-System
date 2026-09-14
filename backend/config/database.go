@@ -55,6 +55,12 @@ func ConnectDatabase() {
 		panic("Job position status migration failed: " + err.Error())
 	}
 
+	// ลบ Unique Constraint เก่าจากคอลัมน์ email ในตาราง candidates เพื่อให้แต่ละใบสมัครมีโปรไฟล์แยกกันอิสระ
+	db.Exec("ALTER TABLE candidates DROP CONSTRAINT IF EXISTS uni_candidates_email CASCADE;")
+	db.Exec("ALTER TABLE candidates DROP CONSTRAINT IF EXISTS candidates_email_key CASCADE;")
+	db.Exec("DROP INDEX IF EXISTS idx_candidates_email CASCADE;")
+	db.Exec("DROP INDEX IF EXISTS uni_candidates_email CASCADE;")
+
 	fmt.Println("Database connected!")
 	DB = db
 }

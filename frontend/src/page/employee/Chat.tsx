@@ -3,8 +3,9 @@ import { useAuth } from "../../context/AuthContext";
 import { Send, Bot, Wifi, WifiOff, MessageSquare, Plus, Search, Menu, ChevronLeft, ChevronRight } from "lucide-react";
 import { getallknowledge } from "../../services/knowledgeService";
 import { getChatHistory, saveChatMessage, getChatSessions, ChatSessionData } from "../../services/chatService";
+import { getTyphoonApiUrl } from "../../services/apiClient";
 
-const TYPHOON_API = import.meta.env.VITE_TYPHOON_API_URL || "http://localhost:8000";
+const TYPHOON_API = getTyphoonApiUrl();
 
 interface Message {
     id: number;

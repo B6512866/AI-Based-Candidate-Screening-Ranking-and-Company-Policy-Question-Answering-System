@@ -30,7 +30,7 @@ OCR_MODEL_ID  = "typhoon-ai/typhoon-ocr1.5-2b"
 
 # ─── Toggle AI Models ─────────────────────────────────────────────────────────
 # เปลี่ยน False → True เมื่อต้องการโหลด AI models
-LOAD_MODELS = False
+LOAD_MODELS = True
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ─── Global holders ───────────────────────────────────────────────────────────
@@ -124,20 +124,45 @@ async def lifespan(app: FastAPI):
         )
 
         models["chat_tokenizer"] = AutoTokenizer.from_pretrained(CHAT_MODEL_ID)
-        models["chat_model"] = AutoModelForCausalLM.from_pretrained(
+        base_chat_model = AutoModelForCausalLM.from_pretrained(
             CHAT_MODEL_ID,
             quantization_config=quant_config,
             device_map="auto",
+            attn_implementation="sdpa",
         )
-        logger.info("✅ Chat model loaded on GPU (4-bit).")
+
+        lora_dir = os.path.join(current_dir, "typhoon_resume_lora")
+        if os.path.exists(lora_dir):
+            try:
+                from peft import PeftModel
+                logger.info(f"🎯 Found fine-tuned LoRA Adapter at {lora_dir}. Loading adapter...")
+                models["lora_model"] = PeftModel.from_pretrained(base_chat_model, lora_dir)
+                logger.info("✅ Fine-tuned LoRA Adapter loaded into models['lora_model'].")
+            except Exception as lora_err:
+                logger.warning(f"⚠️ Failed to load LoRA adapter: {lora_err}")
+
+        models["chat_model"] = base_chat_model
+        logger.info("✅ Base Typhoon 2.5 chat model loaded on GPU (4-bit).")
     except Exception as e:
         logger.warning(f"⚠️ GPU/4-bit failed, falling back to CPU: {e}")
         try:
-            models["chat_model"] = AutoModelForCausalLM.from_pretrained(
+            base_chat_model = AutoModelForCausalLM.from_pretrained(
                 CHAT_MODEL_ID,
                 torch_dtype=torch.float32,
                 device_map={"": "cpu"},
             )
+            lora_dir = os.path.join(current_dir, "typhoon_resume_lora")
+            if os.path.exists(lora_dir):
+                try:
+                    from peft import PeftModel
+                    logger.info(f"🎯 Loading fine-tuned LoRA Adapter on CPU...")
+                    models["chat_model"] = PeftModel.from_pretrained(base_chat_model, lora_dir)
+                    logger.info("✅ Fine-tuned LoRA Adapter loaded on CPU!")
+                except Exception as lora_err:
+                    logger.warning(f"⚠️ Failed to load LoRA adapter on CPU: {lora_err}")
+                    models["chat_model"] = base_chat_model
+            else:
+                models["chat_model"] = base_chat_model
             logger.info("✅ Chat model loaded on CPU.")
         except Exception as e2:
             logger.error(f"❌ Failed to load Chat even on CPU: {e2}")
@@ -255,8 +280,27 @@ async def ocr_endpoint(file: UploadFile = File(...)):
             reader = PdfReader(io.BytesIO(content))
             text = ""
             for page in reader.pages:
-                text += page.extract_text()
-            return {"text": text, "type": "pdf"}
+                text += (page.extract_text() or "") + "\n"
+
+            # If PDF text is empty or too short (e.g. scanned/image PDF), fallback to Typhoon OCR on images
+            if len(text.strip()) < 30 and "ocr_model" in models:
+                logger.info(f"[OCR] PDF text empty for {filename}. Running Typhoon OCR on PDF page images...")
+                ocr_texts = []
+                for page in reader.pages:
+                    for img_obj in page.images:
+                        try:
+                            from PIL import Image
+                            img = Image.open(io.BytesIO(img_obj.data)).convert("RGB")
+                            img = resize_if_needed(img)
+                            t = _run_ocr_on_image(img, filename)
+                            if t:
+                                ocr_texts.append(t)
+                        except Exception as ie:
+                            logger.warning(f"Failed PDF image OCR: {ie}")
+                if ocr_texts:
+                    text = "\n".join(ocr_texts)
+
+            return {"text": text.strip(), "type": "pdf"}
         except Exception as e:
             raise HTTPException(500, f"PDF Error: {e}")
 
@@ -341,8 +385,25 @@ async def chat_endpoint(req: ChatRequest):
             generation_kwargs["top_p"] = req.top_p
         
 
-        # Run generation in a separate thread
-        thread = threading.Thread(target=model.generate, kwargs=generation_kwargs)
+        def run_generation():
+            try:
+                if "lora_model" in models:
+                    lora_m = models["lora_model"]
+                    if hasattr(lora_m, "disable_adapter"):
+                        with lora_m.disable_adapter():
+                            model.generate(**generation_kwargs)
+                    elif hasattr(lora_m, "disable_adapters"):
+                        with lora_m.disable_adapters():
+                            model.generate(**generation_kwargs)
+                    else:
+                        model.generate(**generation_kwargs)
+                else:
+                    model.generate(**generation_kwargs)
+            except Exception as gen_err:
+                logger.error(f"Generation error: {gen_err}", exc_info=True)
+                streamer.end()
+
+        thread = threading.Thread(target=run_generation)
         thread.start()
 
         def generate_and_stream():
@@ -719,6 +780,23 @@ async def _ocr_file(filename: str) -> str:
             import io as _io
             reader = PdfReader(_io.BytesIO(content))
             text = "\n".join(p.extract_text() or "" for p in reader.pages)
+
+            if len(text.strip()) < 30 and "ocr_model" in models:
+                logger.info(f"[OCR Cache] PDF text empty for {filename}, falling back to Typhoon OCR on images...")
+                ocr_texts = []
+                for p in reader.pages:
+                    for img_obj in p.images:
+                        try:
+                            from PIL import Image
+                            img = Image.open(_io.BytesIO(img_obj.data)).convert("RGB")
+                            img = resize_if_needed(img)
+                            t = _run_ocr_on_image(img, filename)
+                            if t:
+                                ocr_texts.append(t)
+                        except Exception as ie:
+                            logger.warning(f"Failed to OCR PDF image: {ie}")
+                if ocr_texts:
+                    text = "\n".join(ocr_texts)
         except Exception:
             text = ""
 
