@@ -12,6 +12,7 @@ func InterviewRoutes(api *gin.RouterGroup, db *gorm.DB) {
 
 	// Route สำหรับผู้สมัครกดจากอีเมล — ไม่ต้อง login
 	api.GET("/interviews/respond", interviewController.Respond)
+	api.GET("/interviews/acknowledge-result", interviewController.AcknowledgeResult)
 
 	i := api.Group("/interviews")
 	i.Use(middleware.AuthMiddleware())
@@ -23,5 +24,7 @@ func InterviewRoutes(api *gin.RouterGroup, db *gorm.DB) {
 		i.PUT("/:id", interviewController.Update)
 		i.DELETE("/:id", interviewController.Delete)
 		i.POST("/:id/send-email", interviewController.SendEmail)
+		i.POST("/:id/notify-result", interviewController.NotifyResult)
+		i.PUT("/:id/score", interviewController.UpdateScore)
 	}
 }

@@ -23,6 +23,15 @@ type Interview struct {
 	// Token สำหรับตอบกลับจากอีเมล (ยืนยัน/เลื่อน/ปฏิเสธ)
 	ResponseToken string `json:"response_token" gorm:"size:64;index"`
 
+	// ── ผลสัมภาษณ์ (Interview Result) ──
+	// passed, failed หรือ "" (ยังไม่ประเมิน)
+	InterviewResult    string     `json:"interview_result" gorm:"size:20;default:''"`
+	InterviewerScore   *float64   `json:"interviewer_score" gorm:"default:null"`
+	ResultNotes        string     `json:"result_notes" gorm:"type:text"`
+	ResultNotifiedAt   *time.Time `json:"result_notified_at"`
+	ResultAcknowledged bool       `json:"result_acknowledged" gorm:"default:false"`
+	ResultToken        string     `json:"result_token" gorm:"size:64;index"`
+
 	ApplicationID uint        `json:"application_id" gorm:"index"`
 	Application   Application `json:"application" gorm:"foreignKey:ApplicationID"`
 

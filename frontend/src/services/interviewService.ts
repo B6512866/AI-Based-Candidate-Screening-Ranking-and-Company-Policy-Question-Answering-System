@@ -67,3 +67,37 @@ export async function sendInterviewEmail(
   });
   return res.data;
 }
+
+// ── ส่งอีเมลแจ้งผลสัมภาษณ์ (ผ่าน/ไม่ผ่าน)
+export async function notifyInterviewResult(
+  interviewId: number,
+  result: "passed" | "failed",
+  resultNotes?: string,
+  emailContent?: string,
+  interviewerScore?: number | null
+) {
+  const payload: any = {
+    result,
+    result_notes: resultNotes || "",
+    email_content: emailContent || "",
+  };
+  if (interviewerScore !== undefined && interviewerScore !== null) {
+    payload.interviewer_score = interviewerScore;
+  }
+  const res = await apiClient.post(`/interviews/${interviewId}/notify-result`, payload);
+  return res.data;
+}
+
+// ── อัปเดตคะแนนและหมายเหตุของผู้สัมภาษณ์
+export async function updateInterviewScore(
+  interviewId: number,
+  data: {
+    interviewer_score?: number | null;
+    result_notes?: string;
+    interview_result?: string;
+  }
+) {
+  const res = await apiClient.put(`/interviews/${interviewId}/score`, data);
+  return res.data;
+}
+
