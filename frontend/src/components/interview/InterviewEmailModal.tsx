@@ -107,9 +107,9 @@ export function InterviewEmailModal({
                         </div>
                         {/* ปุ่มตัวอย่างในอีเมล */}
                         <div className="px-5 pb-3 flex flex-wrap items-center justify-center gap-2">
-                            <span className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-emerald-500 text-white text-xs font-bold shadow-sm">✅ ยืนยันเข้าร่วม / Confirm</span>
-                            <span className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-amber-500 text-white text-xs font-bold shadow-sm">📅 ขอเลื่อนนัด / Reschedule</span>
-                            <span className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-rose-500 text-white text-xs font-bold shadow-sm">❌ ปฏิเสธ / Decline</span>
+                            <span className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-emerald-500 text-white text-xs font-bold shadow-sm">ยืนยันเข้าร่วม / Confirm</span>
+                            <span className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-amber-500 text-white text-xs font-bold shadow-sm">ขอเลื่อนนัด / Reschedule</span>
+                            <span className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-rose-500 text-white text-xs font-bold shadow-sm">ปฏิเสธ / Decline</span>
                         </div>
                     </div>
                 )}

@@ -89,6 +89,16 @@ function formatTime(dateStr: string): string {
 export default function InterviewsPage() {
     // ── Tab state ──
     const [activeTab, setActiveTab] = useState<"create" | "table">("create");
+    const [tableFilterStatus, setTableFilterStatus] = useState("ทั้งหมด");
+
+    const handleStatCardClick = (status: string) => {
+        setActiveTab("table");
+        if (activeTab === "table" && tableFilterStatus === status) {
+            setTableFilterStatus("ทั้งหมด");
+        } else {
+            setTableFilterStatus(status);
+        }
+    };
 
     // ── Data from API ──
     const [interviews, setInterviews] = useState<any[]>([]);
@@ -399,16 +409,17 @@ export default function InterviewsPage() {
         const formatStr = iv.format || "online";
         const rawLinkStr = iv.format_description || "";
         const parsed = parseInterviewFormatDescription(rawLinkStr);
-        let linkStr = parsed.link;
-        if (formatStr === "phone") {
-            linkStr = formatPhoneNumber(linkStr) || candPhone;
-        }
         const cand = iv.application?.Candidate || iv.Application?.Candidate;
         const candPhone = formatPhoneNumber(cand?.phone || cand?.Phone || "");
         const job = iv.application?.JobPosition || iv.Application?.JobPosition;
         const candName = cand ? `${cand.first_name} ${cand.last_name}` : "ผู้สมัคร";
         const posTitle = job?.title || iv.position || "ตำแหน่งงาน";
         const appCode = appId ? `APP-${10000 + appId}` : "-";
+        
+        let linkStr = parsed.link;
+        if (formatStr === "phone") {
+            linkStr = formatPhoneNumber(linkStr) || candPhone;
+        }
 
         setSelectedAppId(appId);
         setInterviewDate(dateStr);
@@ -502,53 +513,150 @@ export default function InterviewsPage() {
 
     return (
         <div className="p-6 md:p-8 space-y-6 font-sans">
-            {/* ── Statistics Cards ────────────────────────────────── */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center gap-3.5">
-                    <div className="w-11 h-11 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
-                        <Users className="w-5 h-5 text-[#4169E1]" />
+            {/* ── Statistics Cards (Large & Clickable - matching InterviewResultsPage) ── */}
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5 sm:gap-4">
+                {/* 1. All */}
+                <button
+                    type="button"
+                    onClick={() => handleStatCardClick("ทั้งหมด")}
+                    className={`p-4 sm:p-5 rounded-3xl border text-left transition-all duration-200 cursor-pointer relative overflow-hidden group ${
+                        activeTab === "table" && tableFilterStatus === "ทั้งหมด"
+                            ? "bg-white border-[#4169E1] ring-2 ring-[#4169E1]/15 shadow-md"
+                            : "bg-white border-slate-100 hover:border-slate-200 shadow-sm hover:shadow hover:-translate-y-0.5"
+                    }`}
+                >
+                    <div className="flex items-center justify-between">
+                        <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center text-[#4169E1] transition-transform group-hover:scale-105">
+                            <Users className="w-5 h-5" />
+                        </div>
+                        {activeTab === "table" && tableFilterStatus === "ทั้งหมด" && (
+                            <span className="text-[10px] font-bold text-[#4169E1] bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+                                กำลังดู
+                            </span>
+                        )}
                     </div>
-                    <div className="min-w-0">
-                        <p className="text-xl font-black text-slate-800 leading-tight">{totalCount}</p>
-                        <p className="text-xs text-slate-400 font-semibold truncate">นัดหมายทั้งหมด</p>
+                    <div className="mt-3.5">
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">นัดหมายทั้งหมด</p>
+                        <p className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight mt-0.5">{totalCount}</p>
+                        <p className="text-[10px] text-slate-400 font-medium mt-1">รายการนัดหมายในระบบทั้งหมด</p>
                     </div>
-                </div>
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center gap-3.5">
-                    <div className="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                        <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                </button>
+
+                {/* 2. Confirmed */}
+                <button
+                    type="button"
+                    onClick={() => handleStatCardClick("ยืนยันแล้ว")}
+                    className={`p-4 sm:p-5 rounded-3xl border text-left transition-all duration-200 cursor-pointer relative overflow-hidden group ${
+                        activeTab === "table" && tableFilterStatus === "ยืนยันแล้ว"
+                            ? "bg-white border-emerald-500 ring-2 ring-emerald-500/20 shadow-md"
+                            : "bg-white border-slate-100 hover:border-emerald-200 shadow-sm hover:shadow hover:-translate-y-0.5"
+                    }`}
+                >
+                    <div className="flex items-center justify-between">
+                        <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 transition-transform group-hover:scale-105">
+                            <CheckCircle2 className="w-5 h-5" />
+                        </div>
+                        {activeTab === "table" && tableFilterStatus === "ยืนยันแล้ว" && (
+                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                                กำลังดู
+                            </span>
+                        )}
                     </div>
-                    <div className="min-w-0">
-                        <p className="text-xl font-black text-slate-800 leading-tight">{confirmedCount}</p>
-                        <p className="text-xs text-slate-400 font-semibold truncate">ยืนยันแล้ว</p>
+                    <div className="mt-3.5">
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">ยืนยันแล้ว</p>
+                        <p className="text-2xl sm:text-3xl font-black text-emerald-600 tracking-tight mt-0.5">{confirmedCount}</p>
+                        <p className="text-[10px] text-emerald-600/80 font-medium mt-1">ผู้สมัครกดยืนยันนัดหมายแล้ว</p>
                     </div>
-                </div>
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center gap-3.5">
-                    <div className="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
-                        <Clock className="w-5 h-5 text-amber-500" />
+                </button>
+
+                {/* 3. Pending */}
+                <button
+                    type="button"
+                    onClick={() => handleStatCardClick("รอยืนยัน")}
+                    className={`p-4 sm:p-5 rounded-3xl border text-left transition-all duration-200 cursor-pointer relative overflow-hidden group ${
+                        activeTab === "table" && tableFilterStatus === "รอยืนยัน"
+                            ? "bg-white border-amber-400 ring-2 ring-amber-400/20 shadow-md"
+                            : "bg-white border-slate-100 hover:border-amber-200 shadow-sm hover:shadow hover:-translate-y-0.5"
+                    }`}
+                >
+                    <div className="flex items-center justify-between">
+                        <div className="w-11 h-11 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-500 transition-transform group-hover:scale-105">
+                            <Clock className="w-5 h-5" />
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            {pendingCount > 0 && (
+                                <span className="flex h-2.5 w-2.5 relative">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                                </span>
+                            )}
+                            {activeTab === "table" && tableFilterStatus === "รอยืนยัน" && (
+                                <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
+                                    กำลังดู
+                                </span>
+                            )}
+                        </div>
                     </div>
-                    <div className="min-w-0">
-                        <p className="text-xl font-black text-slate-800 leading-tight">{pendingCount}</p>
-                        <p className="text-xs text-slate-400 font-semibold truncate">รอยืนยัน</p>
+                    <div className="mt-3.5">
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">รอยืนยัน</p>
+                        <p className="text-2xl sm:text-3xl font-black text-amber-600 tracking-tight mt-0.5">{pendingCount}</p>
+                        <p className="text-[10px] text-amber-600/80 font-medium mt-1">รอผู้สมัครตอบรับการนัด</p>
                     </div>
-                </div>
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center gap-3.5">
-                    <div className="w-11 h-11 rounded-xl bg-orange-50 flex items-center justify-center flex-shrink-0">
-                        <AlertTriangle className="w-5 h-5 text-orange-500" />
+                </button>
+
+                {/* 4. Rescheduled */}
+                <button
+                    type="button"
+                    onClick={() => handleStatCardClick("ขอเลื่อนนัด")}
+                    className={`p-4 sm:p-5 rounded-3xl border text-left transition-all duration-200 cursor-pointer relative overflow-hidden group ${
+                        activeTab === "table" && tableFilterStatus === "ขอเลื่อนนัด"
+                            ? "bg-white border-orange-400 ring-2 ring-orange-400/20 shadow-md"
+                            : "bg-white border-slate-100 hover:border-orange-200 shadow-sm hover:shadow hover:-translate-y-0.5"
+                    }`}
+                >
+                    <div className="flex items-center justify-between">
+                        <div className="w-11 h-11 rounded-2xl bg-orange-50 flex items-center justify-center text-orange-500 transition-transform group-hover:scale-105">
+                            <AlertTriangle className="w-5 h-5" />
+                        </div>
+                        {activeTab === "table" && tableFilterStatus === "ขอเลื่อนนัด" && (
+                            <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-100">
+                                กำลังดู
+                            </span>
+                        )}
                     </div>
-                    <div className="min-w-0">
-                        <p className="text-xl font-black text-slate-800 leading-tight">{rescheduleCount}</p>
-                        <p className="text-xs text-slate-400 font-semibold truncate">ขอเลื่อนนัด</p>
+                    <div className="mt-3.5">
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">ขอเลื่อนนัด</p>
+                        <p className="text-2xl sm:text-3xl font-black text-orange-600 tracking-tight mt-0.5">{rescheduleCount}</p>
+                        <p className="text-[10px] text-orange-600/80 font-medium mt-1">ผู้สมัครแจ้งขอเปลี่ยนเวลา</p>
                     </div>
-                </div>
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center gap-3.5">
-                    <div className="w-11 h-11 rounded-xl bg-rose-50 flex items-center justify-center flex-shrink-0">
-                        <XCircle className="w-5 h-5 text-rose-500" />
+                </button>
+
+                {/* 5. Cancelled */}
+                <button
+                    type="button"
+                    onClick={() => handleStatCardClick("ยกเลิก")}
+                    className={`p-4 sm:p-5 rounded-3xl border text-left transition-all duration-200 cursor-pointer relative overflow-hidden group ${
+                        activeTab === "table" && tableFilterStatus === "ยกเลิก"
+                            ? "bg-white border-rose-400 ring-2 ring-rose-400/20 shadow-md"
+                            : "bg-white border-slate-100 hover:border-rose-200 shadow-sm hover:shadow hover:-translate-y-0.5"
+                    }`}
+                >
+                    <div className="flex items-center justify-between">
+                        <div className="w-11 h-11 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-500 transition-transform group-hover:scale-105">
+                            <XCircle className="w-5 h-5" />
+                        </div>
+                        {activeTab === "table" && tableFilterStatus === "ยกเลิก" && (
+                            <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">
+                                กำลังดู
+                            </span>
+                        )}
                     </div>
-                    <div className="min-w-0">
-                        <p className="text-xl font-black text-slate-800 leading-tight">{cancelledCount}</p>
-                        <p className="text-xs text-slate-400 font-semibold truncate">ยกเลิก</p>
+                    <div className="mt-3.5">
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">ยกเลิก</p>
+                        <p className="text-2xl sm:text-3xl font-black text-rose-600 tracking-tight mt-0.5">{cancelledCount}</p>
+                        <p className="text-[10px] text-rose-600/80 font-medium mt-1">ยกเลิกการนัดสัมภาษณ์</p>
                     </div>
-                </div>
+                </button>
             </div>
 
             {/* ── Tabs ────────────────────────────────────────────── */}
@@ -647,6 +755,8 @@ export default function InterviewsPage() {
                         formatLabels={formatLabels}
                         formatThaiDate={formatThaiDate}
                         formatTime={formatTime}
+                        filterStatus={tableFilterStatus}
+                        onFilterStatusChange={setTableFilterStatus}
                     />
                 )}
             </div>

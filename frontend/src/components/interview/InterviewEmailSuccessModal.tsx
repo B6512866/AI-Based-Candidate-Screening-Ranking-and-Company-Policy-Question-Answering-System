@@ -1,4 +1,4 @@
-import { CheckCircle2, Sparkles, X } from "lucide-react";
+import { CheckCircle2, X } from "lucide-react";
 
 export interface InterviewEmailSuccessModalProps {
     open: boolean;

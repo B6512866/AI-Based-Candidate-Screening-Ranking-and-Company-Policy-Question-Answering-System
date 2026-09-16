@@ -47,7 +47,7 @@ export default function HRLayout() {
         },
         {
             title: "การจัดการองค์กร",
-            items: hrMenuItems.filter(item => item.id === "knowledge" || item.id === "positions" || item.id === "candidates" || item.id === "interviews")
+            items: hrMenuItems.filter(item => item.id === "knowledge" || item.id === "positions" || item.id === "candidates" || item.id === "interviews" || item.id === "interview-results")
         }
     ];
 

@@ -8,7 +8,7 @@ import {
     FileSearch,
     BookOpen,
     Upload,
-    Award,
+    SendHorizontal,
 } from "lucide-react";
 
 export interface MenuItem {
@@ -64,7 +64,7 @@ export const hrMenuItems: MenuItem[] = [
     {
         id: "interview-results",
         label: "แจ้งผลการสัมภาษณ์",
-        icon: Award,
+        icon: SendHorizontal,
         path: "/hr/interview-results",
     },
 ];

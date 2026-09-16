@@ -251,3 +251,80 @@ export function serializeInterviewFormatDescription(params: {
     return cleanLink;
 }
 
+export interface ResultEmailParams {
+    result: "passed" | "failed";
+    candidateName: string;
+    position: string;
+    hrName?: string;
+    hrTel?: string;
+    hrMobile?: string;
+    hrEmail?: string;
+}
+
+/**
+ * ฟังก์ชันสร้างเนื้อหาอีเมลแจ้งผลการสัมภาษณ์แบบสองภาษา (ไทย + อังกฤษ)
+ */
+export function buildResultEmailContent(params: ResultEmailParams): string {
+    const hrName = params.hrName?.trim() || "HR Recruitment Team";
+    const hrTel = params.hrTel?.trim() || "02-123-4567";
+    const hrMobile = params.hrMobile?.trim() || "081-234-5678";
+    const hrEmail = params.hrEmail?.trim() || "hr@hireai-recruitment.com";
+
+    const hrBlock = `${hrName}
+HR - Human Resources Department
+Tel. : ${hrTel}
+Mobile : ${hrMobile}
+Email : ${hrEmail}`;
+
+    // แยกชื่อตำแหน่งภาษาอังกฤษสำหรับเนื้อหาภาษาอังกฤษ (หากระบุเป็น "ภาษาไทย (English)")
+    const engMatch = params.position.match(/\(([^)]+)\)/);
+    const engPosition = engMatch ? engMatch[1].trim() : params.position;
+
+    if (params.result === "failed") {
+        return `เรียน คุณ ${params.candidateName}
+
+ขอขอบคุณสำหรับความสนใจร่วมงานกับบริษัทฯ และสำหรับการสละเวลาเข้าร่วมกระบวนการสัมภาษณ์กับทางบริษัทฯ
+
+หลังจากที่ท่านได้ผ่านการสัมภาษณ์ในรอบ HR และทางบริษัทฯ ได้นำข้อมูลของท่านส่งต่อให้หน่วยงานที่เกี่ยวข้องพิจารณา ทางบริษัทฯ ได้ดำเนินการพิจารณาเรียบร้อยแล้ว
+
+ทั้งนี้ บริษัทฯ ขอแจ้งให้ทราบว่า ในครั้งนี้ท่านไม่ได้รับการคัดเลือกสำหรับตำแหน่ง ${params.position} ดังกล่าว
+
+บริษัทฯ ขอขอบคุณสำหรับความสนใจ เวลา และความตั้งใจที่ท่านมีให้กับกระบวนการคัดเลือก และหวังเป็นอย่างยิ่งว่าจะมีโอกาสได้พิจารณาใบสมัครของท่านสำหรับตำแหน่งที่เหมาะสมในอนาคต
+
+ขออวยพรให้ท่านประสบความสำเร็จในหน้าที่การงานและเส้นทางอาชีพต่อไป
+
+Dear ${params.candidateName},
+
+Thank you for your interest in joining our company and for taking the time to participate in our interview process.
+
+Following your successful completion of the HR interview, your profile was forwarded to the relevant department for further consideration. After careful consideration, we regret to inform you that you have not been selected for the ${engPosition} position at this time.
+
+We sincerely appreciate your interest, time, and effort throughout the recruitment process. We hope to have the opportunity to consider your application for other suitable positions within our company in the future.
+
+We wish you continued success in your career and future endeavors.
+
+Sincerely yours,
+
+${hrBlock}`;
+    }
+
+    return `เรียน คุณ ${params.candidateName}
+
+ขอขอบคุณสำหรับความสนใจร่วมงานกับบริษัทฯ และสำหรับการสละเวลาเข้าร่วมกระบวนการสัมภาษณ์กับทางบริษัทฯ
+
+หลังจากที่ท่านได้ผ่านการสัมภาษณ์ในรอบ HR และทางบริษัทฯ ได้นำข้อมูลของท่านส่งต่อให้หน่วยงานที่เกี่ยวข้องพิจารณา ทางบริษัทฯ มีความยินดีเป็นอย่างยิ่งที่จะแจ้งให้ทราบว่า ท่านได้รับการคัดเลือกสำหรับตำแหน่ง ${params.position} ดังกล่าว
+
+ทีมงานยินดีต้อนรับท่านเข้าสู่ขั้นตอนถัดไป โดยเจ้าหน้าที่ฝ่ายทรัพยากรบุคคลจะติดต่อกลับเพื่อแจ้งรายละเอียด ข้อเสนอการจ้างงาน และกำหนดการเริ่มงานต่อไป
+
+Dear ${params.candidateName},
+
+Thank you for your interest in joining our company and for taking the time to participate in our interview process.
+
+Following your successful completion of the HR interview, your profile was forwarded to the relevant department for further consideration. We are pleased to inform you that you have been selected for the ${engPosition} position.
+
+We are delighted to welcome you to our team. Our Human Resources department will contact you shortly with further details and onboarding schedule.
+
+Sincerely yours,
+
+${hrBlock}`;
+}

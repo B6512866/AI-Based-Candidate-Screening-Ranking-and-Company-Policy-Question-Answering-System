@@ -531,7 +531,7 @@ export function ScheduleFormColumn({
                             )}
                             {(meetingId || passcode) && (
                                 <div className="flex gap-3 text-[11px] text-slate-500 font-mono font-medium pt-1 border-t border-slate-100">
-                                    {meetingId && <span>ID: {meetingId}</span>}
+                                    {meetingId && <span>Meeting ID: {meetingId}</span>}
                                     {passcode && <span>Passcode: {passcode}</span>}
                                 </div>
                             )}

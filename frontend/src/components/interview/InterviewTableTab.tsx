@@ -26,6 +26,8 @@ export interface InterviewTableTabProps {
     formatLabels: Record<string, string>;
     formatThaiDate: (dateStr: string) => string;
     formatTime: (dateStr: string) => string;
+    filterStatus?: string;
+    onFilterStatusChange?: (status: string) => void;
 }
 
 /**
@@ -43,8 +45,19 @@ export function InterviewTableTab({
     formatLabels,
     formatThaiDate,
     formatTime,
+    filterStatus: propFilterStatus,
+    onFilterStatusChange,
 }: InterviewTableTabProps) {
-    const [filterStatus, setFilterStatus] = useState("ทั้งหมด");
+    const [internalFilterStatus, setInternalFilterStatus] = useState("ทั้งหมด");
+    const filterStatus = propFilterStatus !== undefined ? propFilterStatus : internalFilterStatus;
+
+    const setFilterStatus = (status: string) => {
+        if (onFilterStatusChange) {
+            onFilterStatusChange(status);
+        } else {
+            setInternalFilterStatus(status);
+        }
+    };
 
     const filteredInterviews =
         filterStatus === "ทั้งหมด"

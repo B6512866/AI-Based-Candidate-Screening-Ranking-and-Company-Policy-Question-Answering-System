@@ -1188,10 +1188,18 @@ func renderAcknowledgePromptPage(interviewID uint, token, candName, appCode, job
 		badgeColor = "#065f46"
 		resultText = "ผ่านการสัมภาษณ์"
 	} else {
-		headerGradient = "linear-gradient(135deg, #6366f1, #8b5cf6)"
-		badgeBg = "#e0e7ff"
-		badgeColor = "#4338ca"
+		headerGradient = "linear-gradient(135deg, #991b1b, #b91c1c)"
+		badgeBg = "#fee2e2"
+		badgeColor = "#991b1b"
 		resultText = "ไม่ผ่านการสัมภาษณ์"
+	}
+
+	// รูปแบบการแสดงชื่อตำแหน่ง
+	jobTitleHtml := jobTitle
+	if idx := strings.Index(jobTitle, "("); idx > 0 && strings.HasSuffix(jobTitle, ")") {
+		thaiPart := strings.TrimSpace(jobTitle[:idx])
+		engPart := strings.TrimSpace(jobTitle[idx:])
+		jobTitleHtml = fmt.Sprintf(`<div>%s</div><div style="font-size: 12px; font-weight: 500; color: #64748b; margin-top: 2px;">%s</div>`, thaiPart, engPart)
 	}
 
 	acknowledgedNotice := ""
@@ -1236,7 +1244,7 @@ func renderAcknowledgePromptPage(interviewID uint, token, candName, appCode, job
             background: #ffffff;
             border-radius: 24px;
             box-shadow: 0 8px 30px rgba(0,0,0,0.06);
-            max-width: 440px;
+            max-width: 480px;
             width: 100%%;
             overflow: hidden;
             border: 1px solid #e2e8f0;
@@ -1257,7 +1265,7 @@ func renderAcknowledgePromptPage(interviewID uint, token, candName, appCode, job
             display: inline-block;
             background: %s;
             color: %s;
-            padding: 8px 20px;
+            padding: 8px 22px;
             border-radius: 100px;
             font-size: 14px;
             font-weight: 800;
@@ -1266,23 +1274,38 @@ func renderAcknowledgePromptPage(interviewID uint, token, candName, appCode, job
         .info-box {
             background: #f8fafc;
             border: 1px solid #e2e8f0;
-            border-radius: 14px;
-            padding: 14px;
+            border-radius: 16px;
+            padding: 14px 18px;
             margin: 16px 0;
         }
         .info-row {
             display: flex;
             justify-content: space-between;
-            padding: 6px 0;
-            font-size: 13px;
+            align-items: flex-start;
+            gap: 16px;
+            padding: 9px 0;
+            font-size: 13.5px;
             border-bottom: 1px solid #f1f5f9;
         }
         .info-row:last-child { border-bottom: none; }
-        .info-label { color: #64748b; font-weight: 600; }
-        .info-val { color: #0f172a; font-weight: 700; }
+        .info-label {
+            color: #64748b;
+            font-weight: 600;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .info-val {
+            color: #0f172a;
+            font-weight: 700;
+            text-align: right;
+            word-break: break-word;
+            line-height: 1.4;
+        }
         .btn-acknowledge {
             display: block;
+            box-sizing: border-box;
             width: 100%%;
+            max-width: 100%%;
             text-align: center;
             padding: 14px 20px;
             border-radius: 14px;
@@ -1333,7 +1356,6 @@ func renderAcknowledgePromptPage(interviewID uint, token, candName, appCode, job
             %s
             <div class="prompt-text">
                 กรุณากดปุ่มด้านล่างเพื่อยืนยันว่าคุณได้รับทราบผลการสัมภาษณ์แล้ว<br/>
-                <b style="color: #0f172a;">ขั้นตอนสุดท้าย: กดปุ่มยืนยันรับทราบ</b>
             </div>
             <a href="%s" class="btn-acknowledge">ยืนยันรับทราบผลการสัมภาษณ์</a>
         </div>
@@ -1346,7 +1368,7 @@ func renderAcknowledgePromptPage(interviewID uint, token, candName, appCode, job
 		badgeColor,
 		acknowledgedNotice,
 		resultText,
-		appCode, candName, jobTitle, resultText,
+		appCode, candName, jobTitleHtml, resultText,
 		notesHtml,
 		confirmURL,
 	)
@@ -1384,7 +1406,7 @@ func renderAcknowledgeSuccessPage(title, message, appCode, candName string) stri
             background: #ffffff;
             border-radius: 24px;
             box-shadow: 0 8px 30px rgba(0,0,0,0.06);
-            max-width: 440px;
+            max-width: 480px;
             width: 100%%;
             overflow: hidden;
             border: 1px solid #bbf7d0;
@@ -1413,9 +1435,11 @@ func renderAcknowledgeSuccessPage(title, message, appCode, candName string) stri
         .pill b { color: #0f172a; }
         .btn-close {
             display: inline-flex;
+            box-sizing: border-box;
             align-items: center;
             justify-content: center;
             width: 100%%;
+            max-width: 100%%;
             padding: 13px 20px;
             border-radius: 12px;
             background: #059669;
@@ -1451,7 +1475,6 @@ func renderAcknowledgeSuccessPage(title, message, appCode, candName string) stri
                 ผู้สมัคร: <b>%s</b> &bull; รหัส: <b style="font-family: monospace; color: #2563eb;">%s</b>
             </div>
             <button class="btn-close" onclick="window.close()">ปิดหน้าต่างนี้</button>
-            <p style="font-size: 11px; color: #94a3b8; margin-top: 12px;">ระบบได้บันทึกการรับทราบผลของคุณเรียบร้อยแล้ว</p>
         </div>
         <div class="footer">HireAI Recruitment Platform &copy; All Rights Reserved</div>
     </div>
