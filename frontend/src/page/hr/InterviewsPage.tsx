@@ -155,7 +155,7 @@ export default function InterviewsPage() {
         const rawCandPhone = cand?.phone || cand?.Phone || "";
         const candPhone = formatPhoneNumber(rawCandPhone);
         const posTitle = app?.JobPosition?.title || app?.position || "ตำแหน่งงาน";
-        const appCode = app?.ID ? `APP-${10000 + app.ID}` : "-";
+        const appCode = app?.application_code || app?.ApplicationCode || (app?.ID ? `APP-${10000 + app.ID}` : "-");
 
         const dateVal = targetDate !== undefined ? targetDate : interviewDate;
         const [y, m, d] = (dateVal || "").split("-");
@@ -208,7 +208,7 @@ export default function InterviewsPage() {
         const rawCandPhone = cand?.phone || cand?.Phone || "";
         const candPhone = formatPhoneNumber(rawCandPhone);
         const posTitle = app.JobPosition?.title || app.position || "ตำแหน่งงาน";
-        const appCode = `APP-${10000 + app.ID}`;
+        const appCode = app.application_code || app.ApplicationCode || (app.ID ? `APP-${10000 + app.ID}` : "-");
 
         if (existingIv) {
             // โหลดวันและเวลาจากการนัดหมายที่บันทึกไว้แล้ว
@@ -359,7 +359,7 @@ export default function InterviewsPage() {
                 const candName = cand ? `${cand.first_name} ${cand.last_name}` : "ผู้สมัคร";
                 const candPhone = formatPhoneNumber(cand?.phone || cand?.Phone || "");
                 const posTitle = selectedApp?.JobPosition?.title || selectedApp?.position || "ตำแหน่งงาน";
-                const appCode = selectedApp?.ID ? `APP-${10000 + selectedApp.ID}` : "-";
+                const appCode = selectedApp?.application_code || selectedApp?.ApplicationCode || (selectedApp?.ID ? `APP-${10000 + selectedApp.ID}` : "-");
                 const [y, m, d] = (interviewDate || "").split("-");
                 const displayDate = y && m && d ? `${d}/${m}/${y}` : interviewDate;
                 const linkVal = interviewFormat === "phone" ? formatPhoneNumber(interviewLink) : interviewLink;
@@ -414,7 +414,8 @@ export default function InterviewsPage() {
         const job = iv.application?.JobPosition || iv.Application?.JobPosition;
         const candName = cand ? `${cand.first_name} ${cand.last_name}` : "ผู้สมัคร";
         const posTitle = job?.title || iv.position || "ตำแหน่งงาน";
-        const appCode = appId ? `APP-${10000 + appId}` : "-";
+        const targetApp = iv.application || iv.Application;
+        const appCode = targetApp?.application_code || targetApp?.ApplicationCode || (appId ? `APP-${10000 + appId}` : "-");
         
         let linkStr = parsed.link;
         if (formatStr === "phone") {

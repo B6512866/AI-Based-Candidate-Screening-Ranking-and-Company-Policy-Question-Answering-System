@@ -4,7 +4,8 @@ import "gorm.io/gorm"
 
 type Application struct {
 	gorm.Model
-	Status         string  `json:"status"` // pending, approved, interview, rejected
+	ApplicationCode string  `json:"application_code" gorm:"type:varchar(50);uniqueIndex"`
+	Status          string  `json:"status"` // pending, approved, interview, rejected
 	AIScore        float64 `json:"ai_score"`
 	Position       string  `json:"position"`
 	ResumeURL      string  `json:"resume_url"`

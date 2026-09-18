@@ -59,7 +59,7 @@ export function InterviewEmailSuccessModal({
                         <div className="flex justify-between items-center py-0.5">
                             <span className="text-slate-400 font-semibold">รหัสใบสมัคร</span>
                             <span className="font-mono font-bold text-[#4169E1] bg-indigo-50/60 px-2 py-0.5 rounded border border-indigo-100/60">
-                                APP-{10000 + (selectedApp?.ID || 0)}
+                                {selectedApp?.application_code || selectedApp?.ApplicationCode || `APP-${10000 + (selectedApp?.ID || 0)}`}
                             </span>
                         </div>
                         <div className="flex justify-between items-center py-0.5">

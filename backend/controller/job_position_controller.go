@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -18,6 +19,19 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
+
+func generateRandomAppCode(db *gorm.DB) string {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for i := 0; i < 20; i++ {
+		code := fmt.Sprintf("APP-%05d", r.Intn(90000)+10000)
+		var count int64
+		db.Model(&entity.Application{}).Where("application_code = ?", code).Count(&count)
+		if count == 0 {
+			return code
+		}
+	}
+	return fmt.Sprintf("APP-%05d", time.Now().UnixNano()%90000+10000)
+}
 
 type JobPositionController struct {
 	db *gorm.DB
@@ -672,12 +686,14 @@ func (c *JobPositionController) Apply(ctx *gin.Context) {
 		return
 	}
 	// 3. สร้างข้อมูลใบสมัคร (Application) บันทึกคู่กับ JobPositionID
+	appCode := generateRandomAppCode(c.db)
 	app := entity.Application{
-		Status:         "รอพิจารณา",
-		Position:       job.Title,
-		ResumeText:     req.ResumeText,
-		ResumeURL:      req.ResumeURL,
-		TranscriptURL:  req.TranscriptURL,
+		ApplicationCode: appCode,
+		Status:          "รอพิจารณา",
+		Position:        job.Title,
+		ResumeText:      req.ResumeText,
+		ResumeURL:       req.ResumeURL,
+		TranscriptURL:   req.TranscriptURL,
 		TranscriptText: req.TranscriptText,
 		CandidateID:    candidate.ID,
 		JobPositionID:  job.ID,
@@ -687,17 +703,15 @@ func (c *JobPositionController) Apply(ctx *gin.Context) {
 		return
 	}
 
-	// สร้างรหัสประจำตัวใบสมัคร
-	applicationCode := "APP-" + strconv.FormatUint(uint64(app.ID+10000), 10)
 	candidateFullName := candidate.FirstName + " " + candidate.LastName
 
 	// 📧 ส่งอีเมลจริงไปยัง Gmail ของผู้สมัครผ่าน Background Goroutine
-	go services.SendApplicationEmail(candidate.Email, candidateFullName, job.Title, applicationCode)
+	go services.SendApplicationEmail(candidate.Email, candidateFullName, job.Title, app.ApplicationCode)
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"message":          "ส่งใบสมัครสำเร็จ!",
 		"application_id":   app.ID,
-		"application_code": applicationCode,
+		"application_code": app.ApplicationCode,
 	})
 }
 
@@ -946,6 +960,9 @@ func (c *JobPositionController) UpdateApplicationScreening(ctx *gin.Context) {
 			}
 
 			app.AIScore = req.Score
+			if app.Status == "รอพิจารณา" || app.Status == "pending" || app.Status == "" {
+				app.Status = "รอนัดสัมภาษณ์"
+			}
 			c.db.Save(&app)
 			ctx.JSON(http.StatusOK, gin.H{"message": "อัปเดตการประเมิน AI สำเร็จ", "data": scr})
 			return
@@ -966,6 +983,9 @@ func (c *JobPositionController) UpdateApplicationScreening(ctx *gin.Context) {
 
 	app.ScreeningID = &scr.ID
 	app.AIScore = req.Score
+	if app.Status == "รอพิจารณา" || app.Status == "pending" || app.Status == "" {
+		app.Status = "รอนัดสัมภาษณ์"
+	}
 	if err := c.db.Save(&app).Error; err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถเชื่อมโยงผลประเมิน AI กับใบสมัครได้"})
 		return
@@ -1031,35 +1051,47 @@ func (c *JobPositionController) DeleteApplication(ctx *gin.Context) {
 
 // GET /api/applications/status/:appCode
 func (c *JobPositionController) GetApplicationStatus(ctx *gin.Context) {
-	appCode := ctx.Param("appCode")
-	if len(appCode) < 5 {
+	rawAppCode := strings.TrimSpace(ctx.Param("appCode"))
+	if len(rawAppCode) < 3 {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "รหัสใบสมัครสั้นเกินไป"})
 		return
 	}
 
-	// ลบ prefix APP- (ถ้ามี)
-	parsedStr := appCode
-	if (len(appCode) >= 4) && (appCode[:4] == "APP-" || appCode[:4] == "app-") {
-		parsedStr = appCode[4:]
-	}
-
-	val, err := strconv.ParseUint(parsedStr, 10, 32)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "รหัสใบสมัครไม่ถูกต้อง"})
-		return
-	}
-
-	var appID uint = uint(val)
-	if appID > 10000 {
-		appID -= 10000
+	searchCode := rawAppCode
+	if !strings.HasPrefix(strings.ToUpper(searchCode), "APP-") {
+		searchCode = "APP-" + searchCode
 	}
 
 	var app entity.Application
-	// โหลดความสัมพันธ์ของ Candidate และ JobPosition
-	err = c.db.Preload("Candidate").Preload("JobPosition").First(&app, appID).Error
+	// 1. ลองค้นหาตรงๆ จาก application_code (ทั้งแบบมี APP- และไม่มี)
+	err := c.db.Preload("Candidate").Preload("JobPosition").
+		Where("application_code = ? OR application_code = ?", rawAppCode, searchCode).
+		First(&app).Error
+
+	// 2. ถ้าไม่พบ ให้ลอง fallback กับ id ย้อนหลัง
+	if err != nil {
+		parsedStr := rawAppCode
+		if len(rawAppCode) >= 4 && (strings.ToUpper(rawAppCode[:4]) == "APP-") {
+			parsedStr = rawAppCode[4:]
+		}
+
+		if val, parseErr := strconv.ParseUint(parsedStr, 10, 32); parseErr == nil {
+			appID := uint(val)
+			if appID > 10000 {
+				appID -= 10000
+			}
+			err = c.db.Preload("Candidate").Preload("JobPosition").First(&app, appID).Error
+		}
+	}
+
 	if err != nil {
 		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบข้อมูลใบสมัครงานสำหรับรหัสนี้"})
 		return
+	}
+
+	displayCode := app.ApplicationCode
+	if displayCode == "" {
+		displayCode = fmt.Sprintf("APP-%d", app.ID+10000)
 	}
 
 	// ปิดบังนามสกุลบางส่วนเพื่อความเป็นส่วนตัวในการค้นหาแบบสาธารณะ
@@ -1071,7 +1103,7 @@ func (c *JobPositionController) GetApplicationStatus(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"data": gin.H{
 			"id":             app.ID,
-			"code":           "APP-" + strconv.FormatUint(uint64(app.ID+10000), 10),
+			"code":           displayCode,
 			"first_name":     app.Candidate.FirstName,
 			"last_name":      maskedLastName,
 			"position_title": app.Position,

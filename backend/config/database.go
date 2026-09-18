@@ -61,6 +61,15 @@ func ConnectDatabase() {
 	db.Exec("DROP INDEX IF EXISTS idx_candidates_email CASCADE;")
 	db.Exec("DROP INDEX IF EXISTS uni_candidates_email CASCADE;")
 
+	// Backfill application_code for existing applications without code
+	var uncodedApps []entity.Application
+	if err := db.Where("application_code IS NULL OR application_code = ''").Find(&uncodedApps).Error; err == nil {
+		for _, app := range uncodedApps {
+			code := fmt.Sprintf("APP-%05d", 10000+app.ID)
+			db.Model(&app).Update("application_code", code)
+		}
+	}
+
 	fmt.Println("Database connected!")
 	DB = db
 }

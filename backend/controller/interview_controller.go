@@ -231,8 +231,8 @@ func (c *InterviewController) Delete(ctx *gin.Context) {
 		return
 	}
 
-	// อัปเดตสถานะของ Application กลับเป็น pending
-	c.db.Model(&entity.Application{}).Where("id = ?", interview.ApplicationID).Update("status", "pending")
+	// อัปเดตสถานะของ Application กลับเป็น รอนัดสัมภาษณ์
+	c.db.Model(&entity.Application{}).Where("id = ?", interview.ApplicationID).Update("status", "รอนัดสัมภาษณ์")
 
 	ctx.JSON(http.StatusOK, gin.H{"message": "ลบนัดสัมภาษณ์สำเร็จ"})
 }

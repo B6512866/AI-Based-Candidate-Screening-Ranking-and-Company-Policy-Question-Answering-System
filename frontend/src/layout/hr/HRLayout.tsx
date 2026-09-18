@@ -63,9 +63,8 @@ export default function HRLayout() {
                 <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between h-16">
                     {!isCollapsed ? (
                         <div className="flex items-center gap-3">
-                            <img src={logo} alt="HireAI Logo" className="h-10 w-auto object-contain" />
-                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100/60">
-                                PRO
+                            <span className="text-xs font-bold px-10 py-1 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100/60">
+                                HR
                             </span>
                         </div>
                     ) : (

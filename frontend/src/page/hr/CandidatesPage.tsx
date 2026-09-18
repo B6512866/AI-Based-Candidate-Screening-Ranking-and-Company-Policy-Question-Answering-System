@@ -132,7 +132,7 @@ export default function CandidatesPage() {
     const [search, setSearch] = useState("");
     const [activeTab, setActiveTab] = useState<string>("ทั้งหมด");
     const [selectedPosition, setSelectedPosition] = useState<string>("ทั้งหมด");
-    
+
     // UI Expand and Modal states
     const [expandedCandidateId, setExpandedCandidateId] = useState<string | null>(null);
     const [selectedCandidateModal, setSelectedCandidateModal] = useState<CandidateItem | null>(null);
@@ -214,7 +214,7 @@ export default function CandidatesPage() {
                     const cand = app.Candidate || app.candidate || {};
                     const aiScreening = app.AIScreening || app.ai_screening || {};
                     const analysisDataRaw = aiScreening.analysis_data || aiScreening.AnalysisData || "";
-                    
+
                     let parsedAnalysisObj: AnalysisDataObj | null = null;
                     if (analysisDataRaw) {
                         try {
@@ -274,8 +274,8 @@ export default function CandidatesPage() {
 
                             // Extract intelligent reason
                             let reason = "";
-                            const matchedRow = parsedTableRows.find(r => 
-                                r.name.toLowerCase().includes(title.toLowerCase()) || 
+                            const matchedRow = parsedTableRows.find(r =>
+                                r.name.toLowerCase().includes(title.toLowerCase()) ||
                                 title.toLowerCase().includes(r.name.toLowerCase())
                             ) || parsedTableRows[idx];
 
@@ -372,15 +372,15 @@ export default function CandidatesPage() {
                         const levelLabel = levelRatio === 1.0 ? "ดี (100%)" : levelRatio === 0.5 ? "ปานกลาง (50%)" : "แย่ (0%)";
 
                         let reason = crit.reason;
-                        const isGenericReason = !reason || 
-                            reason.trim() === "" || 
-                            reason.includes("คะแนนประเมินเฉพาะเกณฑ์") || 
+                        const isGenericReason = !reason ||
+                            reason.trim() === "" ||
+                            reason.includes("คะแนนประเมินเฉพาะเกณฑ์") ||
                             reason.includes("สกัดข้อมูลผลประเมิน");
 
                         if (isGenericReason) {
                             const title = crit.main_criterion_title || "";
-                            const matchedRow = parsedTableRows.find(r => 
-                                r.name.toLowerCase().includes(title.toLowerCase()) || 
+                            const matchedRow = parsedTableRows.find(r =>
+                                r.name.toLowerCase().includes(title.toLowerCase()) ||
                                 title.toLowerCase().includes(r.name.toLowerCase())
                             ) || parsedTableRows[idx];
 
@@ -444,8 +444,8 @@ export default function CandidatesPage() {
                     let rUrl = app.resume_url || app.ResumeURL || app.resumeUrl || cand.resume_url || cand.ResumeURL || cand.resumeUrl || "";
 
                     if (!rUrl && Array.isArray(app.documents) && app.documents.length > 0) {
-                        const resumeDoc = app.documents.find((d: any) => 
-                            (d.document_type && d.document_type.toLowerCase().includes("resume")) || 
+                        const resumeDoc = app.documents.find((d: any) =>
+                            (d.document_type && d.document_type.toLowerCase().includes("resume")) ||
                             (d.file_name && d.file_name.toLowerCase().includes("resume")) ||
                             (d.title && d.title.toLowerCase().includes("resume"))
                         ) || app.documents[0];
@@ -498,16 +498,16 @@ export default function CandidatesPage() {
     const uniquePositions = Array.from(new Set(candidates.map(c => c.position).filter(Boolean)));
 
     const filtered = candidates.filter(c => {
-        const matchSearch = c.name.toLowerCase().includes(search.toLowerCase()) || 
-                            c.position.toLowerCase().includes(search.toLowerCase()) || 
-                            c.email.toLowerCase().includes(search.toLowerCase());
-        const matchTab = activeTab === "ทั้งหมด" || 
-                            c.status === activeTab ||
-                            (activeTab === "ผ่าน" && (c.status === "ผ่าน" || c.status === "ผ่านการคัดเลือก" || c.status === "approved")) ||
-                            (activeTab === "พิจารณาเพิ่ม" && (c.status === "พิจารณาเพิ่ม" || c.status === "รอพิจารณา" || c.status === "pending")) ||
-                            (activeTab === "ไม่ผ่าน" && (c.status === "ไม่ผ่าน" || c.status === "ปฏิเสธ" || c.status === "rejected")) ||
-                            (activeTab === "รอนัดสัมภาษณ์" && (c.status === "shortlisted" || c.status === "รอนัดสัมภาษณ์")) ||
-                            (activeTab === "นัดสัมภาษณ์แล้ว" && (c.status === "interview" || c.status === "นัดสัมภาษณ์แล้ว"));
+        const matchSearch = c.name.toLowerCase().includes(search.toLowerCase()) ||
+            c.position.toLowerCase().includes(search.toLowerCase()) ||
+            c.email.toLowerCase().includes(search.toLowerCase());
+        const matchTab = activeTab === "ทั้งหมด" ||
+            c.status === activeTab ||
+            (activeTab === "ผ่าน" && (c.status === "ผ่าน" || c.status === "ผ่านการคัดเลือก" || c.status === "approved" || c.status === "accepted" || c.status === "passed" || c.status === "pass")) ||
+            (activeTab === "รอพิจารณา" && (c.status === "รอพิจารณา" || c.status === "pending" || c.status === "waiting")) ||
+            (activeTab === "ไม่ผ่าน" && (c.status === "ไม่ผ่าน" || c.status === "ปฏิเสธ" || c.status === "rejected" || c.status === "failed" || c.status === "fail")) ||
+            (activeTab === "รอนัดสัมภาษณ์" && (c.status === "shortlisted" || c.status === "รอนัดสัมภาษณ์")) ||
+            (activeTab === "นัดสัมภาษณ์แล้ว" && (c.status === "interview" || c.status === "นัดสัมภาษณ์แล้ว" || c.status === "interviewed"));
         const matchPosition = selectedPosition === "ทั้งหมด" || c.position === selectedPosition;
         return matchSearch && matchTab && matchPosition;
     });
@@ -517,30 +517,84 @@ export default function CandidatesPage() {
     };
 
     return (
-        <div className="p-8 space-y-6">
+        <div className="p-8 space-y-6 bg-slate-50/50 min-h-screen">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-black text-slate-800">จัดลำดับและโปรไฟล์ผู้สมัคร (PTS Ranking)</h1>
-                    <p className="text-slate-500 text-sm mt-1">
+                    <div className="flex items-center gap-2.5">
+                        <h1 className="text-2xl font-black text-slate-800 tracking-tight">จัดลำดับและโปรไฟล์ผู้สมัคร (PTS Ranking)</h1>
+                        <span className="bg-indigo-50 text-[#4169E1] text-xs font-bold px-2.5 py-0.5 rounded-full border border-indigo-100">
+                            {candidates.length} ผู้สมัคร
+                        </span>
+                    </div>
+                    <p className="text-slate-500 text-sm mt-1 font-medium">
                         รายชื่อผู้สมัครทั้งหมด เรียงลำดับตามคะแนน PTS พร้อมรายละเอียดเกณฑ์การประเมิน (Criteria, Sub-Criteria & Weights)
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
                     <button
                         onClick={fetchCandidates}
-                        className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl transition-all text-sm shadow-sm"
+                        className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 font-bold px-4 py-2.5 rounded-xl border border-slate-200/80 transition-all text-sm shadow-2xs cursor-pointer"
                     >
-                        <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                        <RefreshCw className={`w-4 h-4 text-slate-500 ${loading ? "animate-spin" : ""}`} />
                         รีเฟรชข้อมูล
                     </button>
                     <Link
                         to="/hr/screening"
-                        className="flex items-center gap-2 bg-[#4169E1] hover:bg-[#3152c4] text-white font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm shadow-indigo-200 text-sm"
+                        className="flex items-center gap-2 bg-gradient-to-r from-[#4169E1] to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold px-5 py-2.5 rounded-xl transition-all shadow-md shadow-indigo-200 text-sm cursor-pointer"
                     >
                         <Sparkles className="w-4 h-4" />
                         คัดกรอง Resume ด้วย AI
                     </Link>
+                </div>
+            </div>
+
+            {/* KPI Executive Overview Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center justify-between">
+                    <div>
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">ผู้สมัครทั้งหมด</span>
+                        <span className="text-2xl font-black text-slate-800 font-mono mt-0.5 block">{candidates.length} คน</span>
+                    </div>
+                    <div className="w-11 h-11 rounded-2xl bg-indigo-50 border border-indigo-100 text-[#4169E1] flex items-center justify-center font-bold">
+                        <Briefcase className="w-5 h-5" />
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center justify-between">
+                    <div>
+                        <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider block">ผ่านการคัดเลือก</span>
+                        <span className="text-2xl font-black text-emerald-600 font-mono mt-0.5 block">
+                            {candidates.filter(c => c.status === "ผ่าน" || c.status === "ผ่านการคัดเลือก" || c.status === "approved" || c.status === "accepted" || c.status === "passed" || c.status === "pass").length} คน
+                        </span>
+                    </div>
+                    <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center font-bold">
+                        <Check className="w-5 h-5" />
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center justify-between">
+                    <div>
+                        <span className="text-xs font-bold text-amber-600 uppercase tracking-wider block">รอพิจารณา / รอ</span>
+                        <span className="text-2xl font-black text-amber-600 font-mono mt-0.5 block">
+                            {candidates.filter(c => c.status === "รอพิจารณา" || c.status === "pending" || c.status === "waiting").length} คน
+                        </span>
+                    </div>
+                    <div className="w-11 h-11 rounded-2xl bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center font-bold">
+                        <Sparkles className="w-5 h-5" />
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center justify-between">
+                    <div>
+                        <span className="text-xs font-bold text-rose-600 uppercase tracking-wider block">ไม่ผ่าน / ปฏิเสธ</span>
+                        <span className="text-2xl font-black text-rose-600 font-mono mt-0.5 block">
+                            {candidates.filter(c => c.status === "ไม่ผ่าน" || c.status === "ปฏิเสธ" || c.status === "rejected" || c.status === "failed" || c.status === "fail").length} คน
+                        </span>
+                    </div>
+                    <div className="w-11 h-11 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center font-bold">
+                        <X className="w-5 h-5" />
+                    </div>
                 </div>
             </div>
 
@@ -571,15 +625,14 @@ export default function CandidatesPage() {
 
                     {/* Filter Status Tabs */}
                     <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0">
-                        {["ทั้งหมด", "ผ่าน", "พิจารณาเพิ่ม", "ไม่ผ่าน", "รอนัดสัมภาษณ์", "นัดสัมภาษณ์แล้ว"].map(tab => (
+                        {["ทั้งหมด", "ผ่าน", "รอพิจารณา", "ไม่ผ่าน", "รอนัดสัมภาษณ์", "นัดสัมภาษณ์แล้ว"].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
-                                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                                    activeTab === tab
+                                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${activeTab === tab
                                         ? "bg-indigo-50 text-[#4169E1] border border-indigo-100 shadow-xs"
                                         : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
-                                }`}
+                                    }`}
                             >
                                 {tab === "interview" ? "นัดสัมภาษณ์แล้ว" : tab}
                             </button>
@@ -633,8 +686,8 @@ export default function CandidatesPage() {
                                     const isExpanded = expandedCandidateId === c.id;
                                     return (
                                         <>
-                                            <tr 
-                                                key={c.id} 
+                                            <tr
+                                                key={c.id}
                                                 className={`transition-all hover:bg-slate-50/70 ${isExpanded ? "bg-indigo-50/20" : ""}`}
                                             >
                                                 <td className="py-4 px-4 text-center font-mono font-bold text-slate-400">
@@ -644,16 +697,16 @@ export default function CandidatesPage() {
                                                     <div className="space-y-1.5">
                                                         <p className="font-bold text-slate-800 text-base">{c.name}</p>
                                                         <p className="text-slate-400 text-xs">{c.email} • {c.phone}</p>
-                                                        
+
                                                         {/* 🌟 Display inline Criteria Score Badges (ดึงจากการวิเคราะห์ Resume) */}
                                                         {c.criteriaBreakdown && c.criteriaBreakdown.length > 0 && (
                                                             <div className="flex flex-wrap items-center gap-1.5 pt-1 max-w-xl">
                                                                 {c.criteriaBreakdown.map((crit, cIdx) => {
                                                                     const percent = crit.max_score > 0 ? (crit.score / crit.max_score) * 100 : 0;
-                                                                    const badgeColor = percent >= 80 
-                                                                        ? "bg-emerald-50 text-emerald-700 border-emerald-200/80" 
-                                                                        : percent >= 50 
-                                                                            ? "bg-amber-50 text-amber-700 border-amber-200/80" 
+                                                                    const badgeColor = percent >= 80
+                                                                        ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
+                                                                        : percent >= 50
+                                                                            ? "bg-amber-50 text-amber-700 border-amber-200/80"
                                                                             : "bg-rose-50 text-rose-700 border-rose-200/80";
 
                                                                     return (
@@ -712,28 +765,26 @@ export default function CandidatesPage() {
                                                         <div className="flex items-center gap-2 group">
                                                             <div className="w-20 bg-slate-100 rounded-full h-3 overflow-hidden p-0.5 border border-slate-100 shrink-0">
                                                                 <div
-                                                                    className={`h-full rounded-full transition-all ${
-                                                                        c.aiScore >= 80 
-                                                                            ? "bg-gradient-to-r from-emerald-500 to-emerald-400" 
-                                                                            : c.aiScore >= 50 
-                                                                                ? "bg-gradient-to-r from-amber-500 to-amber-400" 
-                                                                                : c.aiScore > 0 
-                                                                                    ? "bg-gradient-to-r from-rose-500 to-rose-400" 
+                                                                    className={`h-full rounded-full transition-all ${c.aiScore >= 80
+                                                                            ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
+                                                                            : c.aiScore >= 50
+                                                                                ? "bg-gradient-to-r from-amber-500 to-amber-400"
+                                                                                : c.aiScore > 0
+                                                                                    ? "bg-gradient-to-r from-rose-500 to-rose-400"
                                                                                     : "bg-slate-300"
-                                                                    }`}
+                                                                        }`}
                                                                     style={{ width: `${c.aiScore}%` }}
                                                                 />
                                                             </div>
                                                             <div className="flex items-center gap-1">
-                                                                <span className={`font-extrabold text-sm font-mono ${
-                                                                    c.aiScore >= 80 
-                                                                        ? "text-emerald-600" 
-                                                                        : c.aiScore >= 50 
-                                                                            ? "text-amber-600" 
-                                                                            : c.aiScore > 0 
-                                                                                ? "text-rose-600" 
+                                                                <span className={`font-extrabold text-sm font-mono ${c.aiScore >= 80
+                                                                        ? "text-emerald-600"
+                                                                        : c.aiScore >= 50
+                                                                            ? "text-amber-600"
+                                                                            : c.aiScore > 0
+                                                                                ? "text-rose-600"
                                                                                 : "text-slate-400"
-                                                                }`}>
+                                                                    }`}>
                                                                     {c.aiScore} PTS
                                                                 </span>
                                                                 <button
@@ -755,26 +806,25 @@ export default function CandidatesPage() {
                                                         <div className="relative inline-block">
                                                             <select
                                                                 value={
-                                                                    c.status === "approved" || c.status === "ผ่านการคัดเลือก" ? "ผ่าน" :
-                                                                    c.status === "rejected" || c.status === "ปฏิเสธ" ? "ไม่ผ่าน" :
-                                                                    c.status === "pending" || c.status === "รอพิจารณา" ? "พิจารณาเพิ่ม" :
-                                                                    c.status === "interview" ? "นัดสัมภาษณ์แล้ว" : c.status
+                                                                    c.status === "approved" || c.status === "accepted" || c.status === "passed" || c.status === "pass" || c.status === "ผ่านการคัดเลือก" ? "ผ่าน" :
+                                                                        c.status === "rejected" || c.status === "failed" || c.status === "fail" || c.status === "ปฏิเสธ" ? "ไม่ผ่าน" :
+                                                                            c.status === "pending" || c.status === "waiting" || c.status === "รอพิจารณา" ? "รอพิจารณา" :
+                                                                                c.status === "interview" || c.status === "interviewed" ? "นัดสัมภาษณ์แล้ว" : c.status
                                                                 }
                                                                 onChange={e => handleStatusChange(c.id, e.target.value)}
-                                                                className={`appearance-none outline-none cursor-pointer pl-3 pr-7 py-1 rounded-full text-xs font-extrabold transition-all border shadow-2xs ${
-                                                                    c.status === "ผ่าน" || c.status === "ผ่านการคัดเลือก" || c.status === "approved"
+                                                                className={`appearance-none outline-none cursor-pointer pl-3 pr-7 py-1 rounded-full text-xs font-extrabold transition-all border shadow-2xs ${c.status === "ผ่าน" || c.status === "ผ่านการคัดเลือก" || c.status === "approved" || c.status === "accepted" || c.status === "passed" || c.status === "pass"
                                                                         ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                                                                        : c.status === "พิจารณาเพิ่ม" || c.status === "รอพิจารณา" || c.status === "pending"
+                                                                        : c.status === "รอพิจารณา" || c.status === "pending" || c.status === "waiting"
                                                                             ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
-                                                                            : c.status === "ไม่ผ่าน" || c.status === "ปฏิเสธ" || c.status === "rejected"
+                                                                            : c.status === "ไม่ผ่าน" || c.status === "ปฏิเสธ" || c.status === "rejected" || c.status === "failed" || c.status === "fail"
                                                                                 ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
                                                                                 : c.status === "interview" || c.status === "นัดสัมภาษณ์แล้ว"
                                                                                     ? "bg-indigo-50 text-[#4169E1] border-indigo-200 hover:bg-indigo-100"
                                                                                     : "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
-                                                                }`}
+                                                                    }`}
                                                             >
                                                                 <option value="ผ่าน">🟢 ผ่าน</option>
-                                                                <option value="พิจารณาเพิ่ม">🟡 พิจารณาเพิ่ม</option>
+                                                                <option value="รอพิจารณา">🟡 รอพิจารณา</option>
                                                                 <option value="ไม่ผ่าน">🔴 ไม่ผ่าน</option>
                                                                 <option value="รอนัดสัมภาษณ์">🟣 รอนัดสัมภาษณ์</option>
                                                                 <option value="นัดสัมภาษณ์แล้ว">🔵 นัดสัมภาษณ์แล้ว</option>
@@ -808,18 +858,17 @@ export default function CandidatesPage() {
 
                                                         <button
                                                             onClick={() => toggleExpandRow(c.id)}
-                                                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                                                                isExpanded 
-                                                                    ? "bg-indigo-600 text-white border-indigo-600 shadow-sm" 
+                                                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${isExpanded
+                                                                    ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
                                                                     : "bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200"
-                                                            }`}
+                                                                }`}
                                                             title="ดูคะแนน Criteria & Sub-Criteria"
                                                         >
                                                             <BarChart3 className="w-3.5 h-3.5" />
                                                             <span>คะแนน Criteria</span>
                                                             {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                                                         </button>
-                                                        
+
                                                         <button
                                                             onClick={() => setSelectedCandidateModal(c)}
                                                             className="inline-flex items-center justify-center p-2 text-slate-400 hover:text-[#4169E1] hover:bg-indigo-50 rounded-xl transition-all border border-transparent hover:border-indigo-100"
@@ -892,13 +941,12 @@ export default function CandidatesPage() {
                                                                                             </h4>
                                                                                         </div>
                                                                                     </div>
-                                                                                    <span className={`px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap ${
-                                                                                        isGood
+                                                                                    <span className={`px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap ${isGood
                                                                                             ? "bg-emerald-100 text-emerald-700"
                                                                                             : isPoor
                                                                                                 ? "bg-rose-100 text-rose-700"
                                                                                                 : "bg-amber-100 text-amber-700"
-                                                                                    }`}>
+                                                                                        }`}>
                                                                                         {level}
                                                                                     </span>
                                                                                 </div>
@@ -1068,25 +1116,24 @@ export default function CandidatesPage() {
                                 <select
                                     value={
                                         selectedCandidateModal.status === "approved" || selectedCandidateModal.status === "ผ่านการคัดเลือก" ? "ผ่าน" :
-                                        selectedCandidateModal.status === "rejected" || selectedCandidateModal.status === "ปฏิเสธ" ? "ไม่ผ่าน" :
-                                        selectedCandidateModal.status === "pending" || selectedCandidateModal.status === "รอพิจารณา" ? "พิจารณาเพิ่ม" :
-                                        selectedCandidateModal.status === "interview" ? "นัดสัมภาษณ์แล้ว" : selectedCandidateModal.status
+                                            selectedCandidateModal.status === "rejected" || selectedCandidateModal.status === "ปฏิเสธ" ? "ไม่ผ่าน" :
+                                                selectedCandidateModal.status === "pending" || selectedCandidateModal.status === "รอพิจารณา" ? "รอพิจารณา" :
+                                                    selectedCandidateModal.status === "interview" ? "นัดสัมภาษณ์แล้ว" : selectedCandidateModal.status
                                     }
                                     onChange={e => handleStatusChange(selectedCandidateModal.id, e.target.value)}
-                                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all border outline-none cursor-pointer text-center ${
-                                        selectedCandidateModal.status === "ผ่าน" || selectedCandidateModal.status === "ผ่านการคัดเลือก" || selectedCandidateModal.status === "approved"
+                                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all border outline-none cursor-pointer text-center ${selectedCandidateModal.status === "ผ่าน" || selectedCandidateModal.status === "ผ่านการคัดเลือก" || selectedCandidateModal.status === "approved"
                                             ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                                            : selectedCandidateModal.status === "พิจารณาเพิ่ม" || selectedCandidateModal.status === "รอพิจารณา" || selectedCandidateModal.status === "pending"
+                                            : selectedCandidateModal.status === "รอพิจารณา" || selectedCandidateModal.status === "รอพิจารณา" || selectedCandidateModal.status === "pending"
                                                 ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
                                                 : selectedCandidateModal.status === "ไม่ผ่าน" || selectedCandidateModal.status === "ปฏิเสธ" || selectedCandidateModal.status === "rejected"
                                                     ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
                                                     : selectedCandidateModal.status === "interview" || selectedCandidateModal.status === "นัดสัมภาษณ์แล้ว"
                                                         ? "bg-indigo-50 text-[#4169E1] border-indigo-200 hover:bg-indigo-100"
                                                         : "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
-                                    }`}
+                                        }`}
                                 >
                                     <option value="ผ่าน">🟢 ผ่าน</option>
-                                    <option value="พิจารณาเพิ่ม">🟡 พิจารณาเพิ่ม</option>
+                                    <option value="รอพิจารณา">🟡 รอพิจารณา</option>
                                     <option value="ไม่ผ่าน">🔴 ไม่ผ่าน</option>
                                     <option value="รอนัดสัมภาษณ์">🟣 รอนัดสัมภาษณ์</option>
                                     <option value="นัดสัมภาษณ์แล้ว">🔵 นัดสัมภาษณ์แล้ว</option>
@@ -1137,9 +1184,8 @@ export default function CandidatesPage() {
                                                             <span className="text-xs text-slate-400 block font-medium">คะแนนที่ได้</span>
                                                             <span className="text-base font-extrabold text-slate-800 font-mono">{crit.score} / {crit.max_score}</span>
                                                         </div>
-                                                        <span className={`ml-2 px-3 py-1 rounded-xl text-xs font-bold ${
-                                                            isGood ? "bg-emerald-100 text-emerald-700" : isPoor ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
-                                                        }`}>
+                                                        <span className={`ml-2 px-3 py-1 rounded-xl text-xs font-bold ${isGood ? "bg-emerald-100 text-emerald-700" : isPoor ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
+                                                            }`}>
                                                             {level}
                                                         </span>
                                                     </div>

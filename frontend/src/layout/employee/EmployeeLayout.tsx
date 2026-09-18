@@ -39,13 +39,13 @@ export default function EmployeeLayout() {
             items: employeeMenuItems.filter(item => item.id === "chat")
         },
         {
-            title: "ส่วนตัว & เอกสาร",
+            title: "ส่วนตัว",
             items: employeeMenuItems.filter(item => item.id === "profile" || item.id === "documents" || item.id === "notifications")
         }
     ];
 
     return (
-        <div className="flex h-screen bg-[#f8fafc] font-sans antialiased text-slate-800 overflow-hidden">
+        <div className="flex h-screen bg-[#f8fafc] font-sans antialiased text-slate-800 overflow-hidden ">
             {/* Sidebar */}
             <aside
                 className={`bg-white border-r border-slate-200/80 flex flex-col z-30 transition-all duration-300 ease-in-out shadow-xs relative ${
@@ -56,9 +56,8 @@ export default function EmployeeLayout() {
                 <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between h-16">
                     {!isCollapsed ? (
                         <div className="flex items-center gap-3">
-                            <img src={logo} alt="HireAI Logo" className="h-10 w-auto object-contain" />
-                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-100/60">
-                                STAFF
+                            <span className="text-xs font-bold px-10 py-1 rounded-full bg-teal-50 text-teal-700 border border-teal-100/60 ">
+                                Employee
                             </span>
                         </div>
                     ) : (

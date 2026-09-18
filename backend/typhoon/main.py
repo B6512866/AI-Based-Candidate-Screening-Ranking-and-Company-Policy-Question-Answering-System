@@ -24,6 +24,23 @@ from fastapi.responses import StreamingResponse
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
+# ─── CUDA & CPU Acceleration Flags ───────────────────────────────────────────
+if torch.cuda.is_available():
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+    torch.backends.cudnn.benchmark = True
+    logger.info("⚡ CUDA TF32 & CUDNN Benchmark GPU acceleration enabled.")
+
+num_cpus = os.cpu_count() or 8
+try:
+    torch.set_num_threads(num_cpus)
+    torch.set_num_interop_threads(num_cpus)
+    logger.info(f"⚡ System RAM Optimization: Configured {num_cpus} PyTorch execution threads.")
+except Exception:
+    pass
+
 # ─── Model IDs ────────────────────────────────────────────────────────────────
 CHAT_MODEL_ID = "typhoon-ai/typhoon2.5-qwen3-4b"
 OCR_MODEL_ID  = "typhoon-ai/typhoon-ocr1.5-2b"
@@ -96,6 +113,7 @@ async def lifespan(app: FastAPI):
             OCR_MODEL_ID,
             quantization_config=quant_config_ocr,
             device_map="auto",
+            attn_implementation="sdpa",
         )
         models["ocr_processor"] = AutoProcessor.from_pretrained(OCR_MODEL_ID)
         logger.info("✅ OCR model loaded on GPU (4-bit).")
@@ -135,9 +153,14 @@ async def lifespan(app: FastAPI):
         if os.path.exists(lora_dir):
             try:
                 from peft import PeftModel
-                logger.info(f"🎯 Found fine-tuned LoRA Adapter at {lora_dir}. Loading adapter...")
-                models["lora_model"] = PeftModel.from_pretrained(base_chat_model, lora_dir)
-                logger.info("✅ Fine-tuned LoRA Adapter loaded into models['lora_model'].")
+                logger.info(f"🎯 Found fine-tuned LoRA Adapter at {lora_dir}. Merging adapter weights for max speed...")
+                lora_model = PeftModel.from_pretrained(base_chat_model, lora_dir)
+                try:
+                    base_chat_model = lora_model.merge_and_unload()
+                    logger.info("✅ LoRA Adapter merged into base model weights for maximum inference speed!")
+                except Exception as merge_err:
+                    logger.warning(f"Could not merge LoRA weights directly: {merge_err}")
+                    base_chat_model = lora_model
             except Exception as lora_err:
                 logger.warning(f"⚠️ Failed to load LoRA adapter: {lora_err}")
 
@@ -249,12 +272,16 @@ def _run_ocr_on_image(image: Image.Image, label: str = "") -> str:
     device = next(model.parameters()).device
     inputs = {k: v.to(device) for k, v in inputs.items()}
 
-    with torch.no_grad():
+    with torch.inference_mode():
         output_ids = model.generate(
             **inputs,
-            max_new_tokens=1024,
+            max_new_tokens=768,
             do_sample=False,
+            use_cache=True,
         )
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
     # Decode only newly generated tokens
     input_len = inputs["input_ids"].shape[1]
@@ -374,7 +401,9 @@ async def chat_endpoint(req: ChatRequest):
         generation_kwargs = dict(
             **inputs,
             streamer=streamer,
-            max_new_tokens=req.max_new_tokens,
+            max_new_tokens=min(req.max_new_tokens, 1024),
+            use_cache=True,
+            pad_token_id=tokenizer.eos_token_id,
             repetition_penalty=1.05,
         )
         if req.temperature == 0:
@@ -383,21 +412,10 @@ async def chat_endpoint(req: ChatRequest):
             generation_kwargs["do_sample"] = True
             generation_kwargs["temperature"] = req.temperature
             generation_kwargs["top_p"] = req.top_p
-        
 
         def run_generation():
             try:
-                if "lora_model" in models:
-                    lora_m = models["lora_model"]
-                    if hasattr(lora_m, "disable_adapter"):
-                        with lora_m.disable_adapter():
-                            model.generate(**generation_kwargs)
-                    elif hasattr(lora_m, "disable_adapters"):
-                        with lora_m.disable_adapters():
-                            model.generate(**generation_kwargs)
-                    else:
-                        model.generate(**generation_kwargs)
-                else:
+                with torch.inference_mode():
                     model.generate(**generation_kwargs)
             except Exception as gen_err:
                 logger.error(f"Generation error: {gen_err}", exc_info=True)
@@ -609,16 +627,19 @@ SUMMARY:
             return_dict=True,
         ).to(model_obj.device)
 
-        output_ids = model_obj.generate(
-            **inputs,
-            max_new_tokens=1024,
-            do_sample=True,
-            temperature=0.3,
-            top_p=0.9,
-            repetition_penalty=1.05,
-        )
+        with torch.inference_mode():
+            output_ids = model_obj.generate(
+                **inputs,
+                max_new_tokens=768,
+                do_sample=False,
+                use_cache=True,
+                pad_token_id=tokenizer.eos_token_id,
+            )
         generated = output_ids[0][inputs["input_ids"].shape[1]:]
-        return tokenizer.decode(generated, skip_special_tokens=True)
+        res_text = tokenizer.decode(generated, skip_special_tokens=True)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        return res_text
 
     raw_text = await asyncio.to_thread(_run_inference)
     logger.info(f"[_score_resume] raw AI output:\n{raw_text[:800]}")
@@ -969,7 +990,13 @@ async def api_analyze(role: str = "fullstack"):
         }
 
     import asyncio
-    tasks = [process_single(filename) for filename in files]
+    sem = asyncio.Semaphore(1)
+
+    async def process_with_sem(f):
+        async with sem:
+            return await process_single(f)
+
+    tasks = [process_with_sem(filename) for filename in files]
     results = await asyncio.gather(*tasks)
 
     results.sort(key=lambda x: x.get("score", 0), reverse=True)

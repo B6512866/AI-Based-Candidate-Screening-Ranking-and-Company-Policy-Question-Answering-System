@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
+import logo from "../../../assets/logo.png";
 import { 
-    Sparkles, 
     CheckCircle, 
     MessageSquare, 
     Zap,
@@ -17,10 +17,8 @@ export function Navbar({ onCheckStatusClick }: NavbarProps) {
     const navigate = useNavigate();
     return (
         <nav className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-xl border-b border-slate-200/50 flex justify-between items-center px-6 md:px-12 py-4">
-            <div className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-gradient-to-tr from-[#4169E1] to-[#3a5ec7] rounded-xl flex items-center justify-center shadow-lg shadow-indigo-150 transform hover:rotate-6 transition-transform">
-                    <Sparkles className="w-5 h-5 text-white" />
-                </div>
+            <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate("/")}>
+                <img src={logo} alt="HireAI Logo" className="h-15 w-auto object-contain hover:scale-110 transition-transform" />
                 <div className="text-slate-900 font-extrabold text-2xl tracking-tight font-sans">
                     Hire<span className="text-[#4169E1]">AI</span>
                 </div>
