@@ -186,10 +186,6 @@ export default function UploadDocumentsPage() {
                 <option value="additional_info_form">แบบฟอร์มกรอกข้อมูลเพิ่มเติม</option>
                 <option value="interview_material">เอกสารประกอบสัมภาษณ์</option>
                 <option value="job_description">รายละเอียดตำแหน่ง</option>
-                <option value="resume">Resume</option>
-                <option value="transcript">Transcript</option>
-                <option value="portfolio">Portfolio</option>
-                <option value="certificate">Certificate</option>
                 <option value="other">อื่น ๆ</option>
               </select>
             </div>
