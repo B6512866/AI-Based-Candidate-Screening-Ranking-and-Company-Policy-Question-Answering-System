@@ -648,7 +648,7 @@ export default function InterviewResultsPage() {
                                                 </p>
                                                 <div className="flex items-center gap-2 mt-0.5">
                                                     <span className="font-mono text-[10px] font-bold text-[#4169E1] bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100 flex-shrink-0">
-                                                        APP-{10000 + (iv.ApplicationID || app?.ID || 0)}
+                                                        {app?.application_code || app?.ApplicationCode || iv.Application?.application_code || iv.Application?.ApplicationCode || `APP-${10000 + (iv.ApplicationID || app?.ID || 0)}`}
                                                     </span>
                                                     <span className="text-[11px] text-slate-400 truncate max-w-[180px]">
                                                         {cand?.email || "-"}
@@ -942,7 +942,7 @@ export default function InterviewResultsPage() {
                                     </div>
                                 </div>
                                 <div className="text-right font-mono text-xs font-bold text-[#4169E1] bg-white px-3 py-1.5 rounded-xl border border-indigo-100 shadow-2xs">
-                                    APP-{10000 + Number(appId)}
+                                    {app?.application_code || app?.ApplicationCode || `APP-${10000 + Number(appId)}`}
                                 </div>
                             </div>
 

@@ -21,16 +21,4 @@ export const employeeMenuItems: EmployeeMenuItem[] = [
         icon: User,
         path: "/employee/profile",
     },
-    {
-        id: "documents",
-        label: "เอกสารของฉัน",
-        icon: FileText,
-        path: "/employee/documents",
-    },
-    {
-        id: "notifications",
-        label: "การแจ้งเตือน",
-        icon: BellIcon,
-        path: "/employee/notifications",
-    },
 ];

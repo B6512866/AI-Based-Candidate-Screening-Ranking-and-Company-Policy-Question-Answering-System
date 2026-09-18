@@ -85,7 +85,7 @@ export function InterviewConfirmModal({
                                         {selectedApp.Candidate?.first_name} {selectedApp.Candidate?.last_name}
                                     </p>
                                     <span className="font-mono text-[11px] font-bold text-[#4169E1] bg-white/90 px-2 py-0.5 rounded-lg border border-indigo-100 shadow-xs flex-shrink-0">
-                                        APP-{10000 + (selectedApp?.ID || 0)}
+                                        {selectedApp?.application_code || selectedApp?.ApplicationCode || `APP-${10000 + (selectedApp?.ID || 0)}`}
                                     </span>
                                 </div>
                                 <p className="text-xs text-slate-500 font-medium truncate">

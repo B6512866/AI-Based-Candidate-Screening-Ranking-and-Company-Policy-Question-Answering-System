@@ -6,6 +6,16 @@ import apiClient, { getTyphoonApiUrl, getBackendBaseUrl } from "../../services/a
 
 const TYPHOON_API = getTyphoonApiUrl();
 
+const isInvalidOrRandomName = (name: string): boolean => {
+    if (!name) return true;
+    const clean = name.trim();
+    if (clean.length < 2) return true;
+    if (/\d/.test(clean)) return true;
+    if (/^(test|dummy|sample|asdf|qwerty|null|undefined|123|abc|xxx|\.|\?|-)+$/i.test(clean)) return true;
+    if (!/[\u0E00-\u0E7Fa-zA-Z]/.test(clean)) return true;
+    return false;
+};
+
 const SYSTEM_PROMPT = `คุณคือผู้เชี่ยวชาญด้าน HR Recruiter วิเคราะห์และประเมิน Resume ผู้สมัครงานภาษาไทยเทียบกับลักษณะงานและเกณฑ์การคัดเลือก (Criteria) อย่างเที่ยงตรง
 
 กติกาการวิเคราะห์และการประเมินคะแนน:
@@ -20,6 +30,10 @@ const SYSTEM_PROMPT = `คุณคือผู้เชี่ยวชาญด
 2. ในส่วน "## 1. ข้อมูลผู้สมัคร" ให้แสดงเฉพาะ 2 บรรทัดนี้เท่านั้น (ห้ามใส่วันเกิด สถานภาพ ที่อยู่ เงินเดือน หรือวันเริ่มงาน เด็ดขาด):
 **ชื่อ-สกุล**: [ชื่อ-สกุล จาก DB หรือ Resume]
 **อีเมล**: [อีเมล จาก DB หรือ Resume]
+
+หมายเหตุสำคัญเรื่องชื่อ-สกุล:
+- ให้ใช้ชื่อ-สกุล จากฐานข้อมูลระบบ (DB) เป็นหลัก หากเป็นชื่อที่มีความถูกต้อง
+- แต่หากชื่อ-สกุล ในฐานข้อมูลเป็นตัวเลข หรือเป็นชื่อมั่ว/ข้อมูลขยะ ให้ดึงชื่อ-สกุลจริงที่ถูกต้องที่ปรากฏใน Resume มาใช้แทนเด็ดขาด
 
 ---
 
@@ -52,7 +66,7 @@ export default function ScreeningPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // ── Batch Screening states ──────────────────────────────────────
-    const [activeMode, setActiveMode] = useState<"single" | "batch">("single");
+    const [activeMode, setActiveMode] = useState<"single" | "batch">("batch");
     const [batchRoles, setBatchRoles] = useState<string[]>([]);
     const [selectedBatchRole, setSelectedBatchRole] = useState<string>("");
     const [batchResults, setBatchResults] = useState<any[]>([]);
@@ -517,16 +531,16 @@ export default function ScreeningPage() {
             console.log("[Score] calling /chat for streaming scores with criteria:", criteriaMap);
 
             const cand = app.Candidate;
-            const dbName = cand ? `${cand.first_name || ''} ${cand.last_name || ''}`.trim() : (cand?.email || "ไม่ระบุ");
-            const dbEmail = cand?.email || "ไม่ระบุ";
+            let dbName = cand ? `${cand.first_name || ''} ${cand.last_name || ''}`.trim() : "";
+            if (isInvalidOrRandomName(dbName)) {
+                dbName = "";
+            }
+            const dbEmail = cand?.email || "";
 
             let userContent = `กรุณาวิเคราะห์เฉพาะ Resume ของผู้สมัครที่ปรากฏในข้อความนี้เท่านั้น
+*** ข้อห้ามสำคัญมาก: ห้ามสร้างชื่อผู้สมัครสมมุติ หรือมโนข้อมูลเท็จขึ้นมาเองเด็ดขาด หากข้อมูลใดไม่มีใน Resume ให้เขียนว่า "ไม่ระบุ" ***
 
-ข้อมูลผู้สมัครจากฐานข้อมูลระบบ (Database):
-- ชื่อ-สกุล: ${dbName}
-- อีเมล: ${dbEmail}
-
-=== เรซูเม่ผู้สมัคร ===
+${dbName ? `ข้อมูลผู้สมัครจากฐานข้อมูลระบบ (Database):\n- ชื่อ-สกุล: ${dbName}\n- อีเมล: ${dbEmail}\n` : ''}=== เรซูเม่ผู้สมัคร ===
 ${resumeText}`;
 
             if (jdText) {
@@ -561,8 +575,8 @@ ${resumeText}`;
 
 ## 1. ข้อมูลผู้สมัคร
 
-**ชื่อ-สกุล**: ${dbName}
-**อีเมล**: ${dbEmail}
+**ชื่อ-สกุล**: ${dbName || '[ดึง ชื่อ-สกุล จริงที่พบใน Resume (หากชื่อใน DB เป็นตัวเลขหรือชื่อมั่ว ให้ใช้ชื่อจาก Resume แทน) หรือหากไม่มีให้ระบุ ไม่ระบุ]'}
+**อีเมล**: ${dbEmail || '[ดึง อีเมล จริงที่พบใน Resume หรือหากไม่มีให้ระบุ ไม่ระบุ]'}
 
 ---
 
@@ -575,6 +589,7 @@ ${tableRowsExample}
 
 ข้อห้ามสำคัญ:
 - ในหัวข้อ "## 1. ข้อมูลผู้สมัคร" ให้แสดงเฉพาะ 2 บรรทัดคือ **ชื่อ-สกุล** และ **อีเมล** เท่านั้น ห้ามแสดงวันเกิด สถานภาพ ที่อยู่ เงินเดือน หรือวันเริ่มงาน เด็ดขาด
+- หากชื่อผู้สมัครจากฐานข้อมูลระบบเป็นตัวเลข หรือเป็นชื่อมั่ว/ข้อมูลขยะ ให้ดึงชื่อจริงจาก Resume มาใช้แทนเด็ดขาด
 - ห้ามย่อหรือเปลี่ยนชื่อเกณฑ์หลักในตาราง และห้ามเพิ่มหัวข้ออื่นเด็ดขาด`;
             }
 
@@ -584,7 +599,7 @@ ${tableRowsExample}
                 body: JSON.stringify({
                     messages: [{ role: "user", content: userContent }],
                     system_prompt: SYSTEM_PROMPT,
-                    max_new_tokens: 650,
+                    max_new_tokens: 2024,
                     temperature: 0,
                 }),
             });
@@ -747,6 +762,8 @@ ${tableRowsExample}
                 if (a.ID === app.ID) {
                     return {
                         ...a,
+                        Status: "รอนัดสัมภาษณ์",
+                        status: "รอนัดสัมภาษณ์",
                         ResumeText: resumeText,
                         resume_text: resumeText,
                         AIScreening: {
@@ -1021,7 +1038,10 @@ ${tableRowsExample}
             });
 
             if (matchedApp && matchedApp.Candidate) {
-                matchedDbName = `${matchedApp.Candidate.first_name || ''} ${matchedApp.Candidate.last_name || ''}`.trim();
+                const rawDbName = `${matchedApp.Candidate.first_name || ''} ${matchedApp.Candidate.last_name || ''}`.trim();
+                if (!isInvalidOrRandomName(rawDbName)) {
+                    matchedDbName = rawDbName;
+                }
                 matchedDbEmail = matchedApp.Candidate.email || "";
             }
         }
@@ -1048,7 +1068,7 @@ ${resumeText}`;
 
 ## 1. ข้อมูลผู้สมัคร
 
-**ชื่อ-สกุล**: ${matchedDbName || '[ดึง ชื่อ-สกุล จริงที่พบใน Resume หรือหากไม่มีให้ระบุ ไม่ระบุ]'}
+**ชื่อ-สกุล**: ${matchedDbName || '[ดึง ชื่อ-สกุล จริงที่พบใน Resume (หากชื่อใน DB เป็นตัวเลขหรือชื่อมั่ว ให้ใช้ชื่อจาก Resume แทน) หรือหากไม่มีให้ระบุ ไม่ระบุ]'}
 **อีเมล**: ${matchedDbEmail || '[ดึง อีเมล จริงที่พบใน Resume หรือหากไม่มีให้ระบุ ไม่ระบุ]'}
 
 ---
@@ -1062,6 +1082,7 @@ ${tableRowsExample}
 
 ข้อห้ามสำคัญ:
 - ในหัวข้อ "## 1. ข้อมูลผู้สมัคร" ให้แสดงเฉพาะ 2 บรรทัดคือ **ชื่อ-สกุล** และ **อีเมล** เท่านั้น ห้ามแสดงวันเกิด สถานภาพ ที่อยู่ เงินเดือน หรือวันเริ่มงาน เด็ดขาด
+- หากชื่อผู้สมัครจากฐานข้อมูลระบบเป็นตัวเลข หรือเป็นชื่อมั่ว/ข้อมูลขยะ ให้ดึงชื่อจริงจาก Resume มาใช้แทนเด็ดขาด
 - ห้ามย่อหรือเปลี่ยนชื่อเกณฑ์หลักในตาราง และห้ามเพิ่มหัวข้ออื่นเด็ดขาด`;
         }
 
@@ -1074,7 +1095,7 @@ ${tableRowsExample}
                 body: JSON.stringify({
                     messages: [{ role: "user", content: userContent }],
                     system_prompt: SYSTEM_PROMPT,
-                    max_new_tokens: 650,
+                    max_new_tokens: 850,
                     temperature: 0,
                 }),
             });
@@ -1148,15 +1169,6 @@ ${tableRowsExample}
             {/* Tabs for Mode */}
             <div className="flex items-center gap-2 border-b border-slate-100 pb-px">
                 <button
-                    onClick={() => setActiveMode("single")}
-                    className={`px-6 py-3 border-b-2 font-bold text-sm transition-all font-sans ${activeMode === "single"
-                        ? "border-[#4169E1] text-[#4169E1]"
-                        : "border-transparent text-slate-400 hover:text-slate-600"
-                        }`}
-                >
-                    วิเคราะห์เดี่ยว (Single Resume)
-                </button>
-                <button
                     onClick={() => setActiveMode("batch")}
                     className={`px-6 py-3 border-b-2 font-bold text-sm transition-all font-sans ${activeMode === "batch"
                         ? "border-[#4169E1] text-[#4169E1]"
@@ -1164,6 +1176,15 @@ ${tableRowsExample}
                         }`}
                 >
                     วิเคราะห์กลุ่ม (Batch Screening)
+                </button>
+                <button
+                    onClick={() => setActiveMode("single")}
+                    className={`px-6 py-3 border-b-2 font-bold text-sm transition-all font-sans ${activeMode === "single"
+                        ? "border-[#4169E1] text-[#4169E1]"
+                        : "border-transparent text-slate-400 hover:text-slate-600"
+                        }`}
+                >
+                    วิเคราะห์เดี่ยว (Single Resume)
                 </button>
             </div>
 
@@ -1548,6 +1569,30 @@ ${tableRowsExample}
                                                                             Resume
                                                                         </a>
                                                                     )}
+                                                                    {/* Status Badge */}
+                                                                    {(() => {
+                                                                        const appStatus = app.Status || app.status || "รอพิจารณา";
+                                                                        const isShortlisted = appStatus === "รอนัดสัมภาษณ์" || appStatus === "shortlisted";
+                                                                        const isPassed = appStatus === "ผ่าน" || appStatus === "ผ่านการคัดเลือก" || appStatus === "approved";
+                                                                        const isInterviewed = appStatus === "นัดสัมภาษณ์แล้ว" || appStatus === "interview";
+                                                                        const isRejected = appStatus === "ไม่ผ่าน" || appStatus === "ปฏิเสธ" || appStatus === "rejected";
+
+                                                                        const badgeStyle = isPassed
+                                                                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                                            : isShortlisted
+                                                                                ? "bg-purple-50 text-purple-700 border-purple-200"
+                                                                                : isInterviewed
+                                                                                    ? "bg-blue-50 text-blue-700 border-blue-200"
+                                                                                    : isRejected
+                                                                                        ? "bg-rose-50 text-rose-700 border-rose-200"
+                                                                                        : "bg-amber-50 text-amber-700 border-amber-200";
+
+                                                                        return (
+                                                                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 ${badgeStyle}`}>
+                                                                                {appStatus}
+                                                                            </span>
+                                                                        );
+                                                                    })()}
                                                                 </div>
                                                                 <p className="text-xs text-slate-400 truncate mt-0.5" title={candidateName}>
                                                                     {app.Candidate?.email || "ไม่มีอีเมล"} • {app.Candidate?.phone || "ไม่มีเบอร์"}

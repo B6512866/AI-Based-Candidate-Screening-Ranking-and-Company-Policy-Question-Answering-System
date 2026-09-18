@@ -39,13 +39,29 @@ export function CandidateListColumn({
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    // คำนวณรายชื่อตำแหน่งงานทั้งหมดสำหรับตัวกรอง
+    // 1. กรองผู้สมัครเฉพาะที่มีสถานะ "รอนัดสัมภาษณ์" (หรือมีรายการสัมภาษณ์เดิมอยู่แล้ว)
+    const eligibleCandidates = candidates.filter((app) => {
+        const appStatus = app.status || app.Status || "";
+        const hasInterview = interviews.some((iv) => {
+            const ivAppId = iv.application_id || iv.ApplicationID || iv.Application?.ID;
+            return ivAppId === app.ID;
+        });
+        return (
+            appStatus === "รอนัดสัมภาษณ์" ||
+            appStatus === "interview" ||
+            appStatus === "นัดสัมภาษณ์แล้ว" ||
+            appStatus === "shortlisted" ||
+            hasInterview
+        );
+    });
+
+    // 2. คำนวณรายชื่อตำแหน่งงานทั้งหมดสำหรับตัวกรอง
     const positionList = Array.from(
-        new Set(candidates.map((app) => app.JobPosition?.title || app.position || "").filter(Boolean))
+        new Set(eligibleCandidates.map((app) => app.JobPosition?.title || app.position || "").filter(Boolean))
     );
 
-    // กรองผู้สมัครตามคำค้นหาและตำแหน่ง
-    const filteredCandidates = candidates.filter((app) => {
+    // 3. กรองผู้สมัครตามคำค้นหาและตำแหน่ง
+    const filteredCandidates = eligibleCandidates.filter((app) => {
         const name = `${app.Candidate?.first_name || ""} ${app.Candidate?.last_name || ""}`.toLowerCase();
         const pos = (app.JobPosition?.title || app.position || "").toLowerCase();
         const q = searchCandidate.toLowerCase();
@@ -58,7 +74,12 @@ export function CandidateListColumn({
 
     return (
         <div className="lg:col-span-3 bg-slate-50/80 rounded-2xl border border-slate-100 p-4 space-y-3">
-            <h3 className="text-sm font-black text-slate-700">เลือกผู้สมัคร</h3>
+            <div className="flex items-center justify-between">
+                <h3 className="text-sm font-black text-slate-700">เลือกผู้สมัคร</h3>
+                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+                    เฉพาะรอนัดสัมภาษณ์
+                </span>
+            </div>
 
             {/* Filter ตำแหน่งงาน (Custom Dropdown ไม่ล้นกรอบ) */}
             <div ref={positionDropdownRef} className="relative">
@@ -133,7 +154,7 @@ export function CandidateListColumn({
                 {loadingCandidates ? (
                     <p className="text-xs text-slate-400 text-center py-6">กำลังโหลดข้อมูล...</p>
                 ) : filteredCandidates.length === 0 ? (
-                    <p className="text-xs text-slate-400 text-center py-6">ไม่พบผู้สมัคร</p>
+                    <p className="text-xs text-slate-400 text-center py-6">ไม่พบผู้สมัครที่มีสถานะ "รอนัดสัมภาษณ์"</p>
                 ) : (
                     filteredCandidates.map((app) => {
                         const existingIv = interviews.find((iv) => {
@@ -163,9 +184,9 @@ export function CandidateListColumn({
                                         <p className="text-sm font-bold text-slate-800 truncate">
                                             {app.Candidate?.first_name} {app.Candidate?.last_name}
                                         </p>
-                                        <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-[#4169E1] border border-indigo-100/80 flex-shrink-0">
-                                            APP-{10000 + app.ID}
-                                        </span>
+                                         <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-[#4169E1] border border-indigo-100/80 flex-shrink-0">
+                                             {app.application_code || app.ApplicationCode || `APP-${10000 + app.ID}`}
+                                         </span>
                                     </div>
                                     <p className="text-[11px] text-slate-500 font-medium truncate">
                                         {app.JobPosition?.title || app.position || "-"}
