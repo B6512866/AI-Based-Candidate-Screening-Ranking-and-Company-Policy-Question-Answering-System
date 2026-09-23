@@ -29,15 +29,15 @@ func NewGeminiService(apiKey string) (*GeminiService, error) {
 		return nil, fmt.Errorf("GEMINI_API_KEY ไม่ถูกตั้งค่า")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
 	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
 	if err != nil {
 		return nil, fmt.Errorf("ไม่สามารถสร้าง Gemini Client ได้: %v", err)
 	}
 
-	// ใช้ gemini-2.5-flash สำหรับงานประมวลผลทั่วไปและ OCR Vision
-	model := client.GenerativeModel("gemini-2.5-flash")
+	// ใช้ gemini-3.5-flash — ตอบกลับเร็ว (ประมาณ 2-3 วินาที) และรองรับ Vision OCR
+	model := client.GenerativeModel("gemini-3.5-flash")
 
 	// กำหนดให้ตอบกลับเป็น JSON เสมอ
 	model.ResponseMIMEType = "application/json"

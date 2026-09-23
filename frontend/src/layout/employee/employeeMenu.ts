@@ -1,5 +1,4 @@
-import React from "react";
-import { MessageCircle, User, FileText, Bell as BellIcon } from "lucide-react";
+import { MessageCircle, User } from "lucide-react";
 
 export interface EmployeeMenuItem {
     id: string;

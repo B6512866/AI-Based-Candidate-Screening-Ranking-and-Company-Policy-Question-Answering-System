@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation, Outlet } from "react-router-dom";
 import logo from "../../assets/logo.png";
 import { useAuth } from "../../context/AuthContext";
 import { employeeMenuItems } from "./employeeMenu";
+import { getProfile, getFullImageUrl, UserProfile } from "../../services/userService";
+import { notificationService, NotificationItem } from "../../services/notificationService";
 import {
     LogOut,
     Bell,
@@ -12,6 +14,7 @@ import {
     PanelLeftOpen,
     UserCheck,
     Bot,
+    CheckCheck,
 } from "lucide-react";
 
 export default function EmployeeLayout() {
@@ -21,14 +24,29 @@ export default function EmployeeLayout() {
 
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
+    const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+    const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+    useEffect(() => {
+        getProfile().then(data => setUserProfile(data)).catch(() => {});
+        const loadNotifs = () => setNotifications(notificationService.getNotifications("EMPLOYEE"));
+        loadNotifs();
+        const unsubscribe = notificationService.subscribe(loadNotifs);
+        return () => unsubscribe();
+    }, [firstName, lastName, location.pathname]);
+
+    const unreadCount = notifications.filter(n => !n.isRead).length;
 
     const handleLogout = () => {
         logout();
         navigate("/");
     };
 
-    const fullName = [firstName, lastName].filter(Boolean).join(" ") || "Employee";
-    const initials = [firstName?.[0], lastName?.[0]].filter(Boolean).join("").toUpperCase() || "E";
+    const displayFirstName = userProfile?.first_name || firstName || "Employee";
+    const displayLastName = userProfile?.last_name || lastName || "";
+    const fullName = `${displayFirstName} ${displayLastName}`.trim() || "Employee";
+    const initials = `${displayFirstName[0] || "E"}${displayLastName[0] || ""}`.toUpperCase();
+    const avatarUrl = getFullImageUrl(userProfile?.profile_image);
 
     const currentPage = employeeMenuItems.find(item => location.pathname.startsWith(item.path));
     const pageTitle = currentPage?.label || "AI Advisor";
@@ -137,20 +155,28 @@ export default function EmployeeLayout() {
                 <div className="p-3 border-t border-slate-100 bg-slate-50/60">
                     {!isCollapsed ? (
                         <div className="space-y-2">
-                            <div className="flex items-center gap-3 p-2 rounded-xl bg-white border border-slate-200/60 shadow-2xs">
-                                <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-teal-600 to-emerald-600 flex items-center justify-center text-white text-xs font-bold shadow-xs">
-                                    {initials}
-                                </div>
+                            <Link to="/employee/profile" className="flex items-center gap-3 p-2 rounded-xl bg-white border border-slate-200/60 shadow-2xs hover:border-teal-300 hover:bg-teal-50/30 transition-all group">
+                                {avatarUrl ? (
+                                    <img
+                                        src={avatarUrl}
+                                        alt={fullName}
+                                        className="w-8 h-8 rounded-lg object-cover ring-1 ring-slate-200"
+                                    />
+                                ) : (
+                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-teal-600 to-emerald-600 flex items-center justify-center text-white text-xs font-bold shadow-xs">
+                                        {initials}
+                                    </div>
+                                )}
                                 <div className="min-w-0 flex-1">
-                                    <p className="text-xs font-bold text-slate-800 truncate">{fullName}</p>
+                                    <p className="text-xs font-bold text-slate-800 truncate group-hover:text-teal-600">{fullName}</p>
                                     <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1 truncate">
                                         <UserCheck className="w-3 h-3 text-emerald-500" /> พนักงานองค์กร
                                     </p>
                                 </div>
-                            </div>
+                            </Link>
                             <button
                                 onClick={handleLogout}
-                                className="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-rose-600 font-semibold text-xs hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all"
+                                className="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-rose-600 font-semibold text-xs hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all cursor-pointer"
                             >
                                 <LogOut className="w-3.5 h-3.5" />
                                 ออกจากระบบ
@@ -160,7 +186,7 @@ export default function EmployeeLayout() {
                         <button
                             onClick={handleLogout}
                             title="ออกจากระบบ"
-                            className="w-10 h-10 mx-auto rounded-xl text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors"
+                            className="w-10 h-10 mx-auto rounded-xl text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors cursor-pointer"
                         >
                             <LogOut className="w-5 h-5" />
                         </button>
@@ -186,39 +212,100 @@ export default function EmployeeLayout() {
                             <span>AI Assistant Powered</span>
                         </div>
 
-                        {/* Notifications */}
+                        {/* Notifications Popover */}
                         <div className="relative">
                             <button
                                 onClick={() => setShowNotifications(!showNotifications)}
-                                className="relative w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-all border border-slate-200/60 hover:text-teal-600"
+                                className="relative w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-all border border-slate-200/60 hover:text-teal-600 cursor-pointer"
+                                title="การแจ้งเตือน"
                             >
                                 <Bell className="w-4 h-4" />
+                                {unreadCount > 0 && (
+                                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-teal-500 text-white font-bold text-[10px] rounded-full flex items-center justify-center ring-2 ring-white shadow-xs animate-pulse">
+                                        {unreadCount > 9 ? "9+" : unreadCount}
+                                    </span>
+                                )}
                             </button>
 
+                            {/* Notifications Dropdown */}
                             {showNotifications && (
-                                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 p-4 z-50 animate-fadeIn">
+                                <div className="absolute right-0 mt-2 w-84 bg-white rounded-2xl shadow-2xl border border-slate-100 p-4 z-50 animate-in fade-in zoom-in-95 duration-150">
                                     <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
-                                        <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">การแจ้งเตือน</h4>
-                                    </div>
-                                    <div className="space-y-2 text-xs text-slate-600">
-                                        <div className="p-2.5 rounded-xl bg-slate-50">
-                                            <p className="font-semibold text-slate-800">ยินดีต้อนรับสู่ระบบ AI Advisor</p>
-                                            <p className="text-[11px] text-slate-400 mt-0.5">สอบถามข้อมูลนโยบายบริษัทและสวัสดิการได้ตลอด 24 ชม.</p>
+                                        <div className="flex items-center gap-1.5">
+                                            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">การแจ้งเตือน</h4>
+                                            {unreadCount > 0 && (
+                                                <span className="text-[10px] font-extrabold bg-teal-50 text-teal-700 px-2 py-0.5 rounded-full border border-teal-100">
+                                                    {unreadCount} ใหม่
+                                                </span>
+                                            )}
                                         </div>
+                                        {unreadCount > 0 && (
+                                            <button
+                                                onClick={() => notificationService.markAllAsRead("EMPLOYEE")}
+                                                className="text-[11px] font-bold text-teal-600 hover:underline cursor-pointer flex items-center gap-1"
+                                            >
+                                                <CheckCheck className="w-3.5 h-3.5" />
+                                                อ่านทั้งหมด
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2 text-xs max-h-80 overflow-y-auto">
+                                        {notifications.length === 0 ? (
+                                            <div className="py-8 text-center text-slate-400">
+                                                <p className="font-semibold text-xs">ไม่มีการแจ้งเตือน</p>
+                                            </div>
+                                        ) : (
+                                            notifications.slice(0, 5).map((n) => (
+                                                <div
+                                                    key={n.id}
+                                                    onClick={() => {
+                                                        notificationService.markAsRead(n.id, "EMPLOYEE");
+                                                        setShowNotifications(false);
+                                                        if (n.linkPath) navigate(n.linkPath);
+                                                        else navigate("/employee/notifications");
+                                                    }}
+                                                    className={`p-3 rounded-xl transition-all cursor-pointer border ${
+                                                        !n.isRead
+                                                            ? "bg-teal-50/50 border-teal-100 hover:bg-teal-50/80"
+                                                            : "bg-slate-50/70 border-slate-100 hover:bg-slate-100"
+                                                    }`}
+                                                >
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <p className={`text-xs ${!n.isRead ? "font-bold text-slate-900" : "font-medium text-slate-700"}`}>
+                                                            {n.title}
+                                                        </p>
+                                                        {!n.isRead && (
+                                                            <span className="w-2 h-2 rounded-full bg-teal-500 shrink-0 mt-1"></span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{n.message}</p>
+                                                    <div className="flex items-center justify-between mt-1.5 pt-1 border-t border-slate-100/60">
+                                                        <span className="text-[10px] text-slate-400 font-medium">{n.timestamp}</span>
+                                                        <span className="text-[10px] font-bold text-teal-600 flex items-center gap-0.5">
+                                                            {n.linkText || "ดูรายละเอียด"}
+                                                            <ChevronRight className="w-3 h-3" />
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+
+                                    <div className="mt-3 pt-3 border-t border-slate-100 text-center">
+                                        <button
+                                            onClick={() => {
+                                                setShowNotifications(false);
+                                                navigate("/employee/notifications");
+                                            }}
+                                            className="w-full py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 border border-slate-200/60"
+                                        >
+                                            <Bell className="w-3.5 h-3.5 text-teal-600" />
+                                            ดูการแจ้งเตือนทั้งหมด
+                                        </button>
                                     </div>
                                 </div>
                             )}
-                        </div>
-
-                        {/* Profile Chip */}
-                        <div className="flex items-center gap-3 pl-3 border-l border-slate-200/80">
-                            <div className="text-right hidden sm:block">
-                                <p className="text-slate-800 text-xs font-bold leading-tight">{fullName}</p>
-                                <p className="text-slate-400 text-[10px] font-medium">พนักงาน</p>
-                            </div>
-                            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-teal-500 to-emerald-600 flex items-center justify-center text-white text-xs font-bold shadow-sm ring-2 ring-teal-50">
-                                {initials}
-                            </div>
                         </div>
                     </div>
                 </header>

@@ -18,6 +18,13 @@ type User struct {
 	Role   Role `gorm:"foreignKey:RoleID"`
 
 	// Profile fields
-	Department string    `json:"department"`
-	HireDate   time.Time `json:"hire_date"`
+	ProfileImage     string    `json:"profile_image"`
+	Phone            string    `json:"phone"`
+	Address          string    `json:"address"`
+	Position         string    `json:"position"`
+	Bio              string    `json:"bio"`
+	EmergencyContact string    `json:"emergency_contact"`
+	EmergencyPhone   string    `json:"emergency_phone"`
+	Department       string    `json:"department"`
+	HireDate         time.Time `json:"hire_date"`
 }

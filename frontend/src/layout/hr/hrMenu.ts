@@ -1,14 +1,14 @@
-import React from "react";
 import {
     LayoutDashboard,
     Briefcase,
     Users,
     CalendarCheck,
-    FolderOpen,
     FileSearch,
     BookOpen,
     Upload,
     SendHorizontal,
+    User,
+    Bell
 } from "lucide-react";
 
 export interface MenuItem {
@@ -21,7 +21,7 @@ export interface MenuItem {
 export const hrMenuItems: MenuItem[] = [
     {
         id: "dashboard",
-        label: "Dashbord",
+        label: "Dashboard",
         icon: LayoutDashboard,
         path: "/hr/dashboard",
     },
@@ -66,5 +66,17 @@ export const hrMenuItems: MenuItem[] = [
         label: "แจ้งผลการสัมภาษณ์",
         icon: SendHorizontal,
         path: "/hr/interview-results",
+    },
+    {
+        id: "notifications",
+        label: "ศูนย์การแจ้งเตือน",
+        icon: Bell,
+        path: "/hr/notifications",
+    },
+    {
+        id: "profile",
+        label: "โปรไฟล์พนักงาน",
+        icon: User,
+        path: "/hr/profile",
     },
 ];

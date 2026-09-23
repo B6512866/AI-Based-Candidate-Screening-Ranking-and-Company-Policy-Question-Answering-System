@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation, Outlet } from "react-router-dom";
 import logo from "../../assets/logo.png";
 import { useAuth } from "../../context/AuthContext";
 import { hrMenuItems } from "./hrMenu";
+import { getProfile, getFullImageUrl, UserProfile } from "../../services/userService";
+import { notificationService, NotificationItem } from "../../services/notificationService";
 import {
     LogOut,
     Bell,
@@ -13,6 +15,7 @@ import {
     PanelLeftOpen,
     ShieldCheck,
     Cpu,
+    CheckCheck
 } from "lucide-react";
 
 export default function HRLayout() {
@@ -22,14 +25,29 @@ export default function HRLayout() {
 
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
+    const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+    const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+    useEffect(() => {
+        getProfile().then(data => setUserProfile(data)).catch(() => {});
+        const loadNotifs = () => setNotifications(notificationService.getNotifications("HR"));
+        loadNotifs();
+        const unsubscribe = notificationService.subscribe(loadNotifs);
+        return () => unsubscribe();
+    }, [firstName, lastName, location.pathname]);
+
+    const unreadCount = notifications.filter(n => !n.isRead).length;
 
     const handleLogout = () => {
         logout();
         navigate("/");
     };
 
-    const fullName = [firstName, lastName].filter(Boolean).join(" ") || "HR Admin";
-    const initials = [firstName?.[0], lastName?.[0]].filter(Boolean).join("").toUpperCase() || "HR";
+    const displayFirstName = userProfile?.first_name || firstName || "HR";
+    const displayLastName = userProfile?.last_name || lastName || "Admin";
+    const fullName = `${displayFirstName} ${displayLastName}`.trim() || "HR Admin";
+    const initials = `${displayFirstName[0] || "H"}${displayLastName[0] || ""}`.toUpperCase();
+    const avatarUrl = getFullImageUrl(userProfile?.profile_image);
 
     // Find current page item
     const currentPage = hrMenuItems.find(item => location.pathname.startsWith(item.path));
@@ -46,8 +64,8 @@ export default function HRLayout() {
             items: hrMenuItems.filter(item => item.id === "screening" || item.id === "documents")
         },
         {
-            title: "การจัดการองค์กร",
-            items: hrMenuItems.filter(item => item.id === "knowledge" || item.id === "positions" || item.id === "candidates" || item.id === "interviews" || item.id === "interview-results")
+            title: "การจัดการองค์กร & พนักงาน",
+            items: hrMenuItems.filter(item => item.id === "knowledge" || item.id === "positions" || item.id === "candidates" || item.id === "interviews" || item.id === "interview-results" || item.id === "notifications" || item.id === "profile")
         }
     ];
 
@@ -144,20 +162,28 @@ export default function HRLayout() {
                 <div className="p-3 border-t border-slate-100 bg-slate-50/60">
                     {!isCollapsed ? (
                         <div className="space-y-2">
-                            <div className="flex items-center gap-3 p-2 rounded-xl bg-white border border-slate-200/60 shadow-2xs">
-                                <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white text-xs font-bold shadow-xs">
-                                    {initials}
-                                </div>
+                            <Link to="/hr/profile" className="flex items-center gap-3 p-2 rounded-xl bg-white border border-slate-200/60 shadow-2xs hover:border-indigo-300 hover:bg-indigo-50/30 transition-all group">
+                                {avatarUrl ? (
+                                    <img
+                                        src={avatarUrl}
+                                        alt={fullName}
+                                        className="w-8 h-8 rounded-lg object-cover ring-1 ring-slate-200"
+                                    />
+                                ) : (
+                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white text-xs font-bold shadow-xs">
+                                        {initials}
+                                    </div>
+                                )}
                                 <div className="min-w-0 flex-1">
-                                    <p className="text-xs font-bold text-slate-800 truncate">{fullName}</p>
+                                    <p className="text-xs font-bold text-slate-800 truncate group-hover:text-indigo-600">{fullName}</p>
                                     <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1 truncate">
                                         <ShieldCheck className="w-3 h-3 text-emerald-500" /> HR Specialist
                                     </p>
                                 </div>
-                            </div>
+                            </Link>
                             <button
                                 onClick={handleLogout}
-                                className="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-rose-600 font-semibold text-xs hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all"
+                                className="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-rose-600 font-semibold text-xs hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all cursor-pointer"
                             >
                                 <LogOut className="w-3.5 h-3.5" />
                                 ออกจากระบบ
@@ -167,7 +193,7 @@ export default function HRLayout() {
                         <button
                             onClick={handleLogout}
                             title="ออกจากระบบ"
-                            className="w-10 h-10 mx-auto rounded-xl text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors"
+                            className="w-10 h-10 mx-auto rounded-xl text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors cursor-pointer"
                         >
                             <LogOut className="w-5 h-5" />
                         </button>
@@ -209,51 +235,100 @@ export default function HRLayout() {
                             <span>AI Screening Mode</span>
                         </div>
 
-                        {/* Notifications */}
+                        {/* Notifications Popover */}
                         <div className="relative">
                             <button
                                 onClick={() => setShowNotifications(!showNotifications)}
-                                className="relative w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-all border border-slate-200/60 hover:text-indigo-600"
+                                className="relative w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-all border border-slate-200/60 hover:text-indigo-600 cursor-pointer"
+                                title="การแจ้งเตือน"
                             >
                                 <Bell className="w-4 h-4" />
-                                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-indigo-600 rounded-full ring-2 ring-white"></span>
+                                {unreadCount > 0 && (
+                                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white font-bold text-[10px] rounded-full flex items-center justify-center ring-2 ring-white shadow-xs animate-pulse">
+                                        {unreadCount > 9 ? "9+" : unreadCount}
+                                    </span>
+                                )}
                             </button>
 
                             {/* Notifications Dropdown */}
                             {showNotifications && (
-                                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 p-4 z-50 animate-fadeIn">
+                                <div className="absolute right-0 mt-2 w-84 bg-white rounded-2xl shadow-2xl border border-slate-100 p-4 z-50 animate-in fade-in zoom-in-95 duration-150">
                                     <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
-                                        <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">การแจ้งเตือน</h4>
-                                        <span className="text-[10px] font-semibold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">
-                                            ล่าสุด
-                                        </span>
+                                        <div className="flex items-center gap-1.5">
+                                            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">การแจ้งเตือน</h4>
+                                            {unreadCount > 0 && (
+                                                <span className="text-[10px] font-extrabold bg-indigo-50 text-[#4169E1] px-2 py-0.5 rounded-full border border-indigo-100">
+                                                    {unreadCount} ใหม่
+                                                </span>
+                                            )}
+                                        </div>
+                                        {unreadCount > 0 && (
+                                            <button
+                                                onClick={() => notificationService.markAllAsRead("HR")}
+                                                className="text-[11px] font-bold text-[#4169E1] hover:underline cursor-pointer flex items-center gap-1"
+                                            >
+                                                <CheckCheck className="w-3.5 h-3.5" />
+                                                อ่านทั้งหมด
+                                            </button>
+                                        )}
                                     </div>
-                                    <div className="space-y-2 text-xs text-slate-600">
-                                        <div className="p-2.5 rounded-xl bg-slate-50 hover:bg-indigo-50/50 transition-colors">
-                                            <p className="font-semibold text-slate-800">ระบบ Typhoon AI ประมวลผลสำเร็จ</p>
-                                            <p className="text-[11px] text-slate-400 mt-0.5">จัดลำดับผู้สมัครเรียบร้อย 5 รายการ</p>
-                                        </div>
-                                        <div className="p-2.5 rounded-xl bg-slate-50 hover:bg-indigo-50/50 transition-colors">
-                                            <p className="font-semibold text-slate-800">อัปเดตไฟล์นโยบายบริษัท</p>
-                                            <p className="text-[11px] text-slate-400 mt-0.5">เพิ่มเอกสารคู่มือสวัสดิการในระบบ</p>
-                                        </div>
+
+                                    <div className="space-y-2 text-xs max-h-80 overflow-y-auto">
+                                        {notifications.length === 0 ? (
+                                            <div className="py-8 text-center text-slate-400">
+                                                <p className="font-semibold text-xs">ไม่มีการแจ้งเตือน</p>
+                                            </div>
+                                        ) : (
+                                            notifications.slice(0, 5).map((n) => (
+                                                <div
+                                                    key={n.id}
+                                                    onClick={() => {
+                                                        notificationService.markAsRead(n.id, "HR");
+                                                        setShowNotifications(false);
+                                                        if (n.linkPath) navigate(n.linkPath);
+                                                        else navigate("/hr/notifications");
+                                                    }}
+                                                    className={`p-3 rounded-xl transition-all cursor-pointer border ${
+                                                        !n.isRead
+                                                            ? "bg-indigo-50/50 border-indigo-100 hover:bg-indigo-50/80"
+                                                            : "bg-slate-50/70 border-slate-100 hover:bg-slate-100"
+                                                    }`}
+                                                >
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <p className={`text-xs ${!n.isRead ? "font-bold text-slate-900" : "font-medium text-slate-700"}`}>
+                                                            {n.title}
+                                                        </p>
+                                                        {!n.isRead && (
+                                                            <span className="w-2 h-2 rounded-full bg-[#4169E1] shrink-0 mt-1"></span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{n.message}</p>
+                                                    <div className="flex items-center justify-between mt-1.5 pt-1 border-t border-slate-100/60">
+                                                        <span className="text-[10px] text-slate-400 font-medium">{n.timestamp}</span>
+                                                        <span className="text-[10px] font-bold text-[#4169E1] flex items-center gap-0.5">
+                                                            {n.linkText || "ดูรายละเอียด"}
+                                                            <ChevronRight className="w-3 h-3" />
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+
+                                    <div className="mt-3 pt-3 border-t border-slate-100 text-center">
+                                        <button
+                                            onClick={() => {
+                                                setShowNotifications(false);
+                                                navigate("/hr/notifications");
+                                            }}
+                                            className="w-full py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 border border-slate-200/60"
+                                        >
+                                            <Bell className="w-3.5 h-3.5 text-[#4169E1]" />
+                                            ดูการแจ้งเตือนทั้งหมดในศูนย์ HR
+                                        </button>
                                     </div>
                                 </div>
                             )}
-                        </div>
-
-                        {/* User Profile Header Chip */}
-                        <div className="flex items-center gap-3 pl-3 border-l border-slate-200/80">
-                            <div className="text-right hidden sm:block">
-                                <p className="text-slate-800 text-xs font-bold leading-tight">{fullName}</p>
-                                <p className="text-slate-400 text-[10px] font-medium">เจ้าหน้าที่ HR</p>
-                            </div>
-                            <div className="relative">
-                                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-blue-600 to-indigo-700 flex items-center justify-center text-white text-xs font-bold shadow-sm ring-2 ring-indigo-50">
-                                    {initials}
-                                </div>
-                                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full"></span>
-                            </div>
                         </div>
                     </div>
                 </header>

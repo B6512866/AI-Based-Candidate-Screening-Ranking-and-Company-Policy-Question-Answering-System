@@ -1249,7 +1249,7 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                             SYSTEM_PROMPT,
 
                                         max_new_tokens:
-                                            2048,
+                                            8192,
                                     }
                                 ),
                         }

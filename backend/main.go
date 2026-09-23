@@ -109,6 +109,7 @@ func main() {
 		routes.JobPositionRoutes(api, config.DB)
 		routes.ChatRoutes(api, config.DB)
 		routes.InterviewRoutes(api, config.DB)
+		routes.UserRoutes(api, config.DB)
 	}
 
 	fmt.Println("🚀 Server running on port:", config.Env.BackendPort)

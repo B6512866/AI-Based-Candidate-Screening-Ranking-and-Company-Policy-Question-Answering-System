@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
     Bell,
     CheckCheck,
@@ -6,93 +6,43 @@ import {
     X,
     Sparkles,
     Megaphone,
-    CalendarDays,
-    ShieldAlert,
     ChevronRight,
-    FileText,
-    MessageCircle,
-    CheckCircle2,
     Clock,
-    Filter,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-
-interface NotificationItem {
-    id: string;
-    title: string;
-    message: string;
-    category: "announcement" | "benefit" | "hr" | "system";
-    categoryLabel: string;
-    timestamp: string;
-    isRead: boolean;
-    isPriority?: boolean;
-    linkPath?: string;
-    linkText?: string;
-}
-
-const INITIAL_NOTIFICATIONS: NotificationItem[] = [
-    {
-        id: "notif-1",
-        title: "ประกาศ: ปรับปรุงสวัสดิการค่าทำฟันและประกันสุขภาพประจำปี 2026",
-        message: "บริษัทได้ทำการเพิ่มวงเงินค่าบริการทันตกรรมและตรวจสุขภาพประจำปีเป็น 5,000 บาท/ปี สามารถยื่นเคลมสิทธิผ่านระบบหรือยื่นบัตรประชาชนกับโรงพยาบาลคู่สัญญาได้ตั้งแต่วันนี้เป็นต้นไป",
-        category: "benefit",
-        categoryLabel: "สวัสดิการ & วันหยุด",
-        timestamp: "10 นาทีที่แล้ว",
-        isRead: false,
-        isPriority: true,
-        linkPath: "/employee/documents",
-        linkText: "ดูเอกสารสวัสดิการ",
-    },
-    {
-        id: "notif-2",
-        title: "กำหนดการวันหยุดประจำปี 2569 และวันหยุดชดเชยเทศกาลสงกรานต์",
-        message: "แจ้งวันหยุดบริษัทล่วงหน้าช่วงเทศกาลสงกรานต์ ระหว่างวันที่ 13 - 16 เมษายน 2569 พนักงานสามารถลงวันลาพักร้อนเพิ่มเติมผ่านระบบก่อนวันที่ 1 เมษายน 2569",
-        category: "announcement",
-        categoryLabel: "ประกาศบริษัท",
-        timestamp: "2 ชั่วโมงที่แล้ว",
-        isRead: false,
-        linkPath: "/employee/chat",
-        linkText: "ถาม AI เกี่ยวกับวันหยุด",
-    },
-    {
-        id: "notif-3",
-        title: "ระบบ HireAI Advisor พร้อมให้บริการถาม-ตอบนโยบายบริษัท 24 ชม.",
-        message: "พนักงานสามารถสอบถามข้อสงสัยเรื่องกฎระเบียบ การเบิกค่าใช้จ่าย สวัสดิการพยาบาล และขั้นตอนการลากับ AI Advisor ได้ตลอดเวลาผ่านเมนู AI Advisor",
-        category: "system",
-        categoryLabel: "สถานะระบบ & HR",
-        timestamp: "เมื่อวานนี้",
-        isRead: true,
-        linkPath: "/employee/chat",
-        linkText: "ลองคุยกับ AI Advisor",
-    },
-    {
-        id: "notif-4",
-        title: "ขอเชิญเข้าร่วมกิจกรรม Town Hall Meeting ประจำไตรมาส 1/2026",
-        message: "ขอเรียนเชิญพนักงานทุกท่านเข้าร่วมฟังการสรุปผลการดำเนินงานไตรมาส 1 ในวันศุกร์ที่ 27 มีนาคม เวลา 14:00 น. ณ ห้องประชุมใหญ่และผ่าน Microsoft Teams",
-        category: "announcement",
-        categoryLabel: "ประกาศบริษัท",
-        timestamp: "3 วันที่แล้ว",
-        isRead: true,
-    },
-];
+import { notificationService, NotificationItem } from "../../services/notificationService";
 
 export default function NotificationsPage() {
     const navigate = useNavigate();
-    const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
+    const [notifications, setNotifications] = useState<NotificationItem[]>([]);
     const [activeTab, setActiveTab] = useState<string>("all");
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedNotif, setSelectedNotif] = useState<NotificationItem | null>(null);
 
+    const loadNotifications = () => {
+        const list = notificationService.getNotifications("EMPLOYEE");
+        setNotifications(list);
+    };
+
+    useEffect(() => {
+        loadNotifications();
+        const unsubscribe = notificationService.subscribe(loadNotifications);
+        return () => unsubscribe();
+    }, []);
+
     const unreadCount = notifications.filter((n) => !n.isRead).length;
 
     const handleMarkAllRead = () => {
-        setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+        const updated = notificationService.markAllAsRead("EMPLOYEE");
+        setNotifications(updated);
     };
 
-    const handleToggleRead = (id: string) => {
-        setNotifications((prev) =>
-            prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
-        );
+    const handleSelectNotif = (notif: NotificationItem) => {
+        setSelectedNotif(notif);
+        if (!notif.isRead) {
+            const updated = notificationService.markAsRead(notif.id, "EMPLOYEE");
+            setNotifications(updated);
+        }
     };
 
     const filteredNotifs = notifications.filter((n) => {
@@ -184,10 +134,7 @@ export default function NotificationsPage() {
                     {filteredNotifs.map((item) => (
                         <div
                             key={item.id}
-                            onClick={() => {
-                                handleToggleRead(item.id);
-                                setSelectedNotif(item);
-                            }}
+                            onClick={() => handleSelectNotif(item)}
                             className={`p-6 rounded-3xl border transition-all duration-200 cursor-pointer flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group relative ${
                                 !item.isRead
                                     ? "bg-gradient-to-r from-teal-50/80 via-white to-white border-teal-200 shadow-md shadow-teal-900/5 hover:border-teal-400"

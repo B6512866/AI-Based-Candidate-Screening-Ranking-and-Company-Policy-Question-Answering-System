@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { Upload, FileText, Briefcase, Sparkles, X, ChevronDown, ChevronUp, Wifi, WifiOff, RefreshCw, Eye, FileCheck, Copy, Check, Search } from "lucide-react";
+import { Upload, FileText, Briefcase, Sparkles, X, ChevronDown, ChevronUp, Wifi, WifiOff, RefreshCw, Copy, Check, Search, Trash2, Square } from "lucide-react";
 import { getalljobs, getapplications, updateApplicationScreening, deleteapplication, applyjob } from "../../services/jobPositionService";
 import apiClient, { getTyphoonApiUrl, getBackendBaseUrl } from "../../services/apiClient";
+import AIModelDropdown, { AVAILABLE_AI_MODELS } from "../../components/common/AIModelDropdown";
 
 const TYPHOON_API = getTyphoonApiUrl();
 
@@ -16,34 +17,40 @@ const isInvalidOrRandomName = (name: string): boolean => {
     return false;
 };
 
-const SYSTEM_PROMPT = `คุณคือผู้เชี่ยวชาญด้าน HR Recruiter วิเคราะห์และประเมิน Resume ผู้สมัครงานภาษาไทยเทียบกับลักษณะงานและเกณฑ์การคัดเลือก (Criteria) อย่างเที่ยงตรง
+const SYSTEM_PROMPT = `คุณคือผู้เชี่ยวชาญด้าน HR Recruiter วิเคราะห์และประเมิน Resume ผู้สมัครงานภาษาไทยเทียบกับลักษณะงาน (JD) และเกณฑ์การคัดเลือก (Criteria) อย่างละเอียดและเที่ยงตรง
 
-กติกาการวิเคราะห์และการประเมินคะแนน:
-1. พิจารณาเทียบคุณสมบัติใน Resume กับเกณฑ์หลัก (Main Criteria) และเกณฑ์ย่อย (Sub-criteria) ทั้ง 3 ระดับ (ระดับดี 100%, ระดับปานกลาง 50%, ระดับแย่ 0%)
-2. คำนวณคะแนนตามสัดส่วนน้ำหนัก (Weight %) ของแต่ละเกณฑ์หลักอย่างเป็นระบบ
+หลักการวิเคราะห์และการประเมินคะแนน (สไตล์ Typhoon HR Recruiter):
+1. ในช่อง "เหตุผล" ให้เขียนวิเคราะห์แบบ HR มืออาชีพอย่างละเอียด เปรียบเทียบทักษะ/ประสบการณ์ใน Resume กับความต้องการของประกาศงาน (JD)
+2. หากเกณฑ์หลักประเมินได้ระดับ "ดี (100%)" ให้เขียนเฉพาะจุดแข็ง ทักษะ และหลักฐานใน Resume ที่สนับสนุนคะแนนเต็ม 100% เท่านั้น (ห้ามใส่เกณฑ์ย่อยที่ไม่เกี่ยวข้อง หรือระบุว่าขาดทักษะย่อยอื่นที่ไม่ได้เลือกลงมาในช่องเหตุผลเด็ดขาด)
+3. สำหรับเกณฑ์หลักแต่ละข้อ (Main Criteria) AI จะต้องประเมินและเลือกระดับเพียง 1 ใน 3 ระดับนี้เท่านั้น:
+   - "ดี (100%)" : มีทักษะและประสบการณ์ตรงตามประกาศงานอย่างชัดเจน (ได้คะแนนเต็ม เช่น 35/35, 25/25, 20/20, 5/5)
+   - "ปานกลาง (50%)" : มีความรู้พื้นฐาน หรือมีประสบการณ์ใกล้เคียงแต่ยังขาดทักษะบางส่วน (ได้ครึ่งหนึ่ง เช่น 18/35, 13/25, 10/20, 3/5)
+   - "แย่ (0%)" : ไม่มีข้อมูลใน Resume หรือทักษะไม่ตรงตามประกาศงานอย่างชัดเจน (ได้ 0 คะแนน เช่น 0/35, 0/25, 0/20, 0/5)
+4. ข้อห้ามเด็ดขาด (Strict Constraint):
+   - ห้ามคิดคะแนนเป็นเศษส่วนทศนิยม หรือเฉลี่ยเกณฑ์ย่อยเป็นเปอร์เซ็นต์มั่วๆ เช่น 83.33%, 66.66% หรือคิดคะแนนก้ำกึ่งอย่าง 21/25, 23/35, 8/25 เด็ดขาด!
+   - คะแนนของเกณฑ์หลักทุกข้อต้องเลือกเพียง 100%, 50%, หรือ 0% ของคะแนนเต็มเกณฑ์นั้นเท่านั้น!
+5. คะแนนรวมในบรรทัด "**รวมทั้งหมด**" ต้องเป็นผลรวมคะแนนของทุกเกณฑ์หลักบวกกันจริงๆ เสมอ (เป็นจำนวนเต็มเท่านั้น)
 
 กติกาการตอบกลับ (Strict Output Format):
 1. ต้องตอบกลับเฉพาะ 2 หัวข้อนี้เท่านั้นเรียงตามลำดับ ห้ามเพิ่มหัวข้ออื่นเด็ดขาด:
    - "## 1. ข้อมูลผู้สมัคร"
    - "## 2. คะแนนรวม (0–100)"
 
-2. ในส่วน "## 1. ข้อมูลผู้สมัคร" ให้แสดงเฉพาะ 2 บรรทัดนี้เท่านั้น (ห้ามใส่วันเกิด สถานภาพ ที่อยู่ เงินเดือน หรือวันเริ่มงาน เด็ดขาด):
+2. ในส่วน "## 1. ข้อมูลผู้สมัคร" ให้แสดงเฉพาะ 2 บรรทัดนี้เท่านั้น:
 **ชื่อ-สกุล**: [ชื่อ-สกุล จาก DB หรือ Resume]
 **อีเมล**: [อีเมล จาก DB หรือ Resume]
-
-หมายเหตุสำคัญเรื่องชื่อ-สกุล:
-- ให้ใช้ชื่อ-สกุล จากฐานข้อมูลระบบ (DB) เป็นหลัก หากเป็นชื่อที่มีความถูกต้อง
-- แต่หากชื่อ-สกุล ในฐานข้อมูลเป็นตัวเลข หรือเป็นชื่อมั่ว/ข้อมูลขยะ ให้ดึงชื่อ-สกุลจริงที่ถูกต้องที่ปรากฏใน Resume มาใช้แทนเด็ดขาด
 
 ---
 
 3. ในส่วน "## 2. คะแนนรวม (0–100)" ให้ประเมินและแสดงผลในรูปแบบตาราง Markdown เท่านั้น:
 | เกณฑ์ | คะแนน | เหตุผล |
 |---|---|---|
-| [ชื่อเกณฑ์หลัก] | [คะแนนที่ได้]/[คะแนนเต็ม] | [เหตุผลประเมินตาม Sub-Criteria] |
-| **รวมทั้งหมด** | [คะแนนรวม]/100 | [คำสรุปโดยรวมสั้นๆ] |
+| [ชื่อเกณฑ์หลัก] | [คะแนนเต็ม 100% / คะแนนครึ่งหนึ่ง 50% / หรือ 0]/[คะแนนเต็ม] | [บทวิเคราะห์ HR อย่างละเอียด สรุปสิ่งที่พบใน Resume เทียบกับ JD พร้อมระบุระดับประเมิน ดี (100%), ปานกลาง (50%), หรือ แย่ (0%) ให้ชัดเจน] |
+| **รวมทั้งหมด** | [ผลรวมคะแนนทุกเกณฑ์]/100 | [สรุปภาพรวมผู้สมัคร 1-2 บรรทัด] |
 
-ห้ามย่อหรือเปลี่ยนชื่อเกณฑ์หลักโดยเด็ดขาด`;
+ข้อห้ามสำคัญ:
+- ห้ามย่อหรือเปลี่ยนชื่อเกณฑ์หลักในตารางเด็ดขาด
+- ให้เขียนเหตุผลให้อ่านง่าย มีความเป็นธรรมชาติของ HR วิเคราะห์ผู้สมัครจริง`;
 
 interface AnalysisResult {
     resumeName: string;
@@ -53,6 +60,7 @@ interface AnalysisResult {
 
 export default function ScreeningPage() {
     const location = useLocation();
+    const [selectedModel, setSelectedModel] = useState<string>("typhoon-v2.5-instruct");
     const [resumeText, setResumeText] = useState("");
     const [jobDesc, setJobDesc] = useState("");
     const [jobCriteria, setJobCriteria] = useState("");
@@ -74,11 +82,53 @@ export default function ScreeningPage() {
 
     // GORM integration states
     const [applicants, setApplicants] = useState<any[]>([]);
+    const [selectedAppIds, setSelectedAppIds] = useState<number[]>([]);
     const [loadingApplicants, setLoadingApplicants] = useState(false);
     const [batchAnalyzing, setBatchAnalyzing] = useState(false);
     const [analyzingStates, setAnalyzingStates] = useState<{ [key: number]: "idle" | "ocr" | "ai" | "saving" | "done" | "error" }>({});
-    const [openRawText, setOpenRawText] = useState<{ [key: number]: boolean }>({});
+
+    const toggleSelectApplicant = (appId: number) => {
+        setSelectedAppIds(prev =>
+            prev.includes(appId)
+                ? prev.filter(id => id !== appId)
+                : [...prev, appId]
+        );
+    };
+
+    const toggleSelectAllApplicants = () => {
+        if (selectedAppIds.length === applicants.length) {
+            setSelectedAppIds([]);
+        } else {
+            setSelectedAppIds(applicants.map(a => a.ID));
+        }
+    };
     const activeJobIdRef = useRef<string>("");
+    const abortControllerRef = useRef<AbortController | null>(null);
+    const isCancelledRef = useRef<boolean>(false);
+
+    const cancelAnalysis = () => {
+        isCancelledRef.current = true;
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+        setLoading(false);
+        setOcrLoading(false);
+        setBatchAnalyzing(false);
+        setAnalyzingStates({});
+        setResult(prev => prev && prev.streaming ? { ...prev, streaming: false, content: prev.content + "\n\n⚠️ [ยกเลิกการวิเคราะห์โดยผู้ใช้งาน]" } : null);
+
+        // 🔴 ถ้าใช้ local Typhoon model ให้ปล่อย VRAM ทันที
+        const isLocalModel = !selectedModel.toLowerCase().includes("claude") &&
+            !selectedModel.toLowerCase().includes("gpt") &&
+            !selectedModel.toLowerCase().includes("gemini") &&
+            !selectedModel.startsWith("ft:");
+        if (isLocalModel) {
+            fetch(`${TYPHOON_API}/model/unload?which=chat`, { method: "POST" })
+                .then(() => console.log("[VRAM] Local model unloaded after cancel"))
+                .catch(() => { /* ไม่แสดง error ถ้า unload ไม่สำเร็จ */ });
+        }
+    };
 
     // Manual Candidate Entry States
     const [showManualAddModal, setShowManualAddModal] = useState(false);
@@ -225,6 +275,15 @@ export default function ScreeningPage() {
         return info;
     };
 
+    const formatCleanMarkdownScores = (content: string) => {
+        if (!content) return "";
+        return content.replace(/(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/g, (_match, scoreStr, maxStr) => {
+            const roundedScore = Math.round(parseFloat(scoreStr));
+            const roundedMax = Math.round(parseFloat(maxStr));
+            return `${roundedScore}/${roundedMax}`;
+        });
+    };
+
     const parseScoresFromMarkdown = (content: string) => {
         const lines = (content || "").split("\n");
         const parsedRows: { name: string; score: number; max: number; reason: string }[] = [];
@@ -244,19 +303,53 @@ export default function ScreeningPage() {
                 continue;
             }
 
-            const scoreStr = cols[1].replace(/\*\*/g, "").trim();
-            const reason = cols[2] ? cols[2].replace(/\*\*/g, "").trim() : "";
-            const scoreMatch = scoreStr.match(/(\d+(?:\.\d+)?)\s*(?:[\/|\s-–—]+\s*(\d+(?:\.\d+)?))?/);
-            if (scoreMatch) {
-                const scoreVal = parseFloat(scoreMatch[1]);
-                const maxVal = scoreMatch[2] ? parseFloat(scoreMatch[2]) : 100;
+            let scoreVal = 0;
+            let maxVal = 100;
+            let foundScore = false;
+            let scoreColIdx = -1;
+            let reasonStr = "";
+
+            // First pass: look specifically for "XX/YY" fraction pattern in cols[1..]
+            for (let i = 1; i < cols.length; i++) {
+                const cleanCol = cols[i].replace(/\*\*/g, "").trim();
+                const slashMatch = cleanCol.match(/(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/);
+                if (slashMatch) {
+                    scoreVal = Math.round(parseFloat(slashMatch[1]));
+                    maxVal = Math.round(parseFloat(slashMatch[2]));
+                    foundScore = true;
+                    scoreColIdx = i;
+                    break;
+                }
+            }
+
+            // Fallback pass: look for single number pattern if no slash match
+            if (!foundScore) {
+                for (let i = 1; i < cols.length; i++) {
+                    const cleanCol = cols[i].replace(/\*\*/g, "").trim();
+                    const numMatch = cleanCol.match(/(\d+(?:\.\d+)?)/);
+                    if (numMatch) {
+                        scoreVal = Math.round(parseFloat(numMatch[1]));
+                        foundScore = true;
+                        scoreColIdx = i;
+                        break;
+                    }
+                }
+            }
+
+            if (foundScore) {
+                if (scoreColIdx !== -1 && scoreColIdx < cols.length - 1) {
+                    reasonStr = cols.slice(scoreColIdx + 1).join(" ").replace(/\*\*/g, "").trim();
+                } else if (cols.length >= 3) {
+                    reasonStr = cols[cols.length - 1].replace(/\*\*/g, "").trim();
+                }
+
                 const isTotal = name.includes("รวม") || name.includes("Total") || name.includes("สรุป");
                 if (isTotal) {
                     totalScore = scoreVal;
                     totalMax = maxVal;
                     hasTotalRow = true;
                 } else {
-                    parsedRows.push({ name, score: scoreVal, max: maxVal, reason });
+                    parsedRows.push({ name, score: scoreVal, max: maxVal, reason: reasonStr });
                 }
             }
         }
@@ -273,15 +366,23 @@ export default function ScreeningPage() {
         const scores: Record<string, number> = {};
         const criteriaKeys = Object.keys(criteriaMap);
 
+        const snapToDiscreteLevel = (scoreVal: number, maxVal: number) => {
+            if (maxVal <= 0) return 0;
+            const ratio = scoreVal / maxVal;
+            if (ratio >= 0.75) return maxVal;                       // 100% (ดี - ได้เต็ม)
+            if (ratio >= 0.25) return Math.round(maxVal * 0.5);   // 50% (ปานกลาง - ได้ครึ่งหนึ่ง)
+            return 0;                                             // 0% (แย่ - ได้ 0)
+        };
+
         if (parsedScores.length === criteriaKeys.length) {
             parsedScores.forEach((row, idx) => {
                 const key = criteriaKeys[idx];
                 const criteriaMax = criteriaMap[key].max;
-                let finalScore = row.score;
+                let rawScore = row.score;
                 if (row.max !== criteriaMax && row.max > 0) {
-                    finalScore = Math.round((row.score / row.max) * criteriaMax);
+                    rawScore = (row.score / row.max) * criteriaMax;
                 }
-                scores[key] = Math.min(finalScore, criteriaMax);
+                scores[key] = snapToDiscreteLevel(rawScore, criteriaMax);
             });
         } else {
             const nameToKey: Record<string, string> = {};
@@ -326,11 +427,11 @@ export default function ScreeningPage() {
 
                 if (matchedKey) {
                     const criteriaMax = criteriaMap[matchedKey].max;
-                    let finalScore = row.score;
+                    let rawScore = row.score;
                     if (row.max !== criteriaMax && row.max > 0) {
-                        finalScore = Math.round((row.score / row.max) * criteriaMax);
+                        rawScore = (row.score / row.max) * criteriaMax;
                     }
-                    scores[matchedKey] = Math.min(finalScore, criteriaMax);
+                    scores[matchedKey] = snapToDiscreteLevel(rawScore, criteriaMax);
                 }
             });
         }
@@ -346,7 +447,7 @@ export default function ScreeningPage() {
             pairs.forEach(p => {
                 const [k, v] = p.split("=");
                 if (k && v) {
-                    scores[k] = parseFloat(v);
+                    scores[k] = Math.round(parseFloat(v));
                 }
             });
         } else if (strengths) {
@@ -359,15 +460,28 @@ export default function ScreeningPage() {
         Object.keys(criteriaMap).forEach(key => {
             const info = criteriaMap[key];
             breakdown[info.name] = {
-                score: scores[key] !== undefined ? scores[key] : 0,
-                max: info.max
+                score: scores[key] !== undefined ? Math.round(scores[key]) : 0,
+                max: Math.round(info.max)
             };
         });
         return breakdown;
     };
 
+    const getStrengthsText = (app: any) => {
+        if (!app || !app.AIScreening) return "";
+        let txt = app.AIScreening.strengths || app.AIScreening.Strengths || "";
+        if (!txt && app.AIScreening.analysis_data) {
+            try {
+                const parsed = JSON.parse(app.AIScreening.analysis_data);
+                if (parsed.raw_markdown) txt = parsed.raw_markdown;
+            } catch {}
+        }
+        return txt;
+    };
+
     const getCleanStrengths = (strengths: string) => {
-        return strengths ? strengths.replace(/^\[SCORES:\s*.*?\]\s*/, "") : "";
+        const cleaned = strengths ? strengths.replace(/^\[SCORES:\s*.*?\]\s*/, "") : "";
+        return formatCleanMarkdownScores(cleaned);
     };
 
     // ── Check Typhoon status ─────────────────────────────────────────
@@ -435,7 +549,12 @@ export default function ScreeningPage() {
         activeJobIdRef.current = selectedJobId;
     }, [selectedJobId]);
 
-    const runSingleAnalysis = async (app: any, forceReOcr = false) => {
+    // Handle AI Model change: update model without wiping existing raw text automatically
+    const handleModelChange = (newModelId: string) => {
+        setSelectedModel(newModelId);
+    };
+
+    const runSingleAnalysis = async (app: any, forceReOcr = false, isBatch = false) => {
         let resumeText = forceReOcr ? "" : (app.ResumeText || app.resume_text || "");
         if (resumeText && (resumeText.trim().startsWith("ข้อมูลประวัติย่อ") || resumeText.includes("/api/upload/"))) {
             resumeText = "";
@@ -445,28 +564,42 @@ export default function ScreeningPage() {
             if (!resumeText && app.resume_url) {
                 setAnalyzingStates(prev => ({ ...prev, [app.ID]: "ocr" }));
 
-                // Normalizing URL path
-                let cleanPath = app.resume_url.replace(/\\/g, "/");
-                if (cleanPath.startsWith("/api")) {
-                    cleanPath = cleanPath.slice(4);
-                }
-                if (!cleanPath.startsWith("/")) {
-                    cleanPath = "/" + cleanPath;
-                }
-
+                let rawUrl = app.resume_url.replace(/\\/g, "/");
                 const baseBackendUrl = getBackendBaseUrl();
-                console.log("[OCR] Fetching resume file via apiClient:", cleanPath, "with baseURL:", baseBackendUrl);
 
-                let blob: Blob;
-                try {
-                    const fileRes = await apiClient.get(cleanPath, {
-                        responseType: "blob",
-                        baseURL: baseBackendUrl,
-                    });
-                    blob = fileRes.data;
-                } catch (fetchErr: any) {
-                    console.error("[OCR File Fetch Error]", fetchErr);
-                    throw new Error(`ไม่สามารถดาวน์โหลดไฟล์ Resume (${cleanPath}) ได้: ${fetchErr.message || "ไม่พบไฟล์บนเซิร์ฟเวอร์"}`);
+                const candidateUrls: string[] = [];
+                if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+                    candidateUrls.push(rawUrl);
+                } else {
+                    if (!rawUrl.startsWith("/")) rawUrl = "/" + rawUrl;
+                    candidateUrls.push(`${baseBackendUrl}${rawUrl}`);
+                    if (!rawUrl.startsWith("/api")) {
+                        candidateUrls.push(`${baseBackendUrl}/api${rawUrl}`);
+                    } else {
+                        candidateUrls.push(`${baseBackendUrl}${rawUrl.slice(4)}`);
+                    }
+                }
+
+                let blob: Blob | null = null;
+                let lastErr = "";
+
+                for (const targetUrl of candidateUrls) {
+                    try {
+                        console.log("[OCR] Attempting to fetch resume file from:", targetUrl);
+                        const res = await fetch(targetUrl);
+                        if (res.ok) {
+                            blob = await res.blob();
+                            break;
+                        } else {
+                            lastErr = `HTTP ${res.status}`;
+                        }
+                    } catch (e: any) {
+                        lastErr = e.message || "Network Error";
+                    }
+                }
+
+                if (!blob) {
+                    throw new Error(`ไม่สามารถดาวน์โหลดไฟล์ Resume (${app.resume_url}) ได้: ${lastErr || "ไม่พบไฟล์บนเซิร์ฟเวอร์"}`);
                 }
 
                 const filename = app.resume_url.split("/").pop() || "resume.pdf";
@@ -474,6 +607,7 @@ export default function ScreeningPage() {
 
                 const formData = new FormData();
                 formData.append("file", file);
+                formData.append("model", selectedModel);
 
                 try {
                     const ocrRes = await fetch(`${TYPHOON_API}/ocr`, {
@@ -571,7 +705,7 @@ ${resumeText}`;
 
                 userContent += `\n\n=== ข้อกำหนดการตอบกลับ (ตอบกลับเฉพาะ 2 หัวข้อนี้เท่านั้น) ===
 
-โปรดวิเคราะห์คุณสมบัติใน Resume เทียบกับเกณฑ์หลักและเกณฑ์ย่อยทั้ง 3 ระดับ (ระดับดี 100%, ระดับปานกลาง 50%, ระดับแย่ 0%) แล้วประเมินคะแนนตามสัดส่วนน้ำหนัก (Weight %) และตอบกลับในรูปแบบเทมเพลตด้านล่างนี้เป๊ะๆ:
+โปรดวิเคราะห์คุณสมบัติใน Resume เทียบกับเกณฑ์หลักทั้ง 3 ระดับ (ระดับดี 100%, ระดับปานกลาง 50%, ระดับแย่ 0%) โดยเกณฑ์หลักแต่ละข้อต้องเลือกประเมินเพียง 1 ใน 3 ระดับนี้เท่านั้น: เต็ม 100%, ครึ่งหนึ่ง 50%, หรือ 0% (ห้ามคิดตัวเลขอื่นๆ หรือเฉลี่ยทศนิยม เช่น 21/25 หรือ 83.33% เด็ดขาด) และตอบกลับในรูปแบบเทมเพลตด้านล่างนี้เป๊ะๆ:
 
 ## 1. ข้อมูลผู้สมัคร
 
@@ -585,11 +719,12 @@ ${resumeText}`;
 | เกณฑ์ | คะแนน | เหตุผล |
 |---|---|---|
 ${tableRowsExample}
-| **รวมทั้งหมด** | [คะแนนรวมทั้งหมด]/100 | [คำสรุปโดยรวมสั้นๆ] |
+| **รวมทั้งหมด** | [ผลรวมคะแนนทุกเกณฑ์หลัก]/100 | [คำสรุปโดยรวมสั้นๆ] |
 
 ข้อห้ามสำคัญ:
 - ในหัวข้อ "## 1. ข้อมูลผู้สมัคร" ให้แสดงเฉพาะ 2 บรรทัดคือ **ชื่อ-สกุล** และ **อีเมล** เท่านั้น ห้ามแสดงวันเกิด สถานภาพ ที่อยู่ เงินเดือน หรือวันเริ่มงาน เด็ดขาด
-- หากชื่อผู้สมัครจากฐานข้อมูลระบบเป็นตัวเลข หรือเป็นชื่อมั่ว/ข้อมูลขยะ ให้ดึงชื่อจริงจาก Resume มาใช้แทนเด็ดขาด
+- คะแนนของแต่ละเกณฑ์หลักต้องคำนวณตรงกับระดับ (100%, 50%, 0%) ของเกณฑ์ย่อยในช่องเหตุผลเสมอ ห้ามมโนตัวเลขเอง
+- ตัวเลขในบรรทัด "**รวมทั้งหมด**" ต้องเป็นผลรวมคะแนนของทุกเกณฑ์หลักรวมกันจริงๆ
 - ห้ามย่อหรือเปลี่ยนชื่อเกณฑ์หลักในตาราง และห้ามเพิ่มหัวข้ออื่นเด็ดขาด`;
             }
 
@@ -599,12 +734,22 @@ ${tableRowsExample}
                 body: JSON.stringify({
                     messages: [{ role: "user", content: userContent }],
                     system_prompt: SYSTEM_PROMPT,
-                    max_new_tokens: 2024,
+                    max_new_tokens: 8192,
                     temperature: 0,
+                    model: selectedModel,
                 }),
             });
 
-            if (!response.ok) throw new Error("AI ประเมินคะแนนไม่สำเร็จ กรุณาตรวจสอบบริการ Typhoon AI");
+            if (!response.ok) {
+                let errDetail = "";
+                try {
+                    const errJson = await response.json();
+                    errDetail = errJson.detail || errJson.message || "";
+                } catch {
+                    errDetail = await response.text().catch(() => "");
+                }
+                throw new Error(errDetail || `AI ประเมินคะแนนไม่สำเร็จ (HTTP ${response.status})`);
+            }
 
             const reader = response.body!.getReader();
             const decoder = new TextDecoder();
@@ -627,7 +772,7 @@ ${tableRowsExample}
                                 AIScreening: {
                                     skill_score: a.AIScreening?.skill_score || 0,
                                     strengths: fullText,
-                                    model_used: "typhoon2.5-qwen3-4b"
+                                    model_used: selectedModel
                                 }
                             };
                         }
@@ -644,7 +789,7 @@ ${tableRowsExample}
                         AIScreening: {
                             skill_score: a.AIScreening?.skill_score || 0,
                             strengths: fullText,
-                            model_used: "typhoon2.5-qwen3-4b"
+                            model_used: selectedModel
                         }
                     };
                 }
@@ -662,10 +807,10 @@ ${tableRowsExample}
                 if (finalScores[key] === undefined) {
                     finalScores[key] = 0;
                 }
-                totalScore += Math.min(finalScores[key], criteriaMap[key].max);
+                totalScore += Math.min(Math.round(finalScores[key]), criteriaMap[key].max);
             });
 
-            const scoresStr = `[SCORES: ${Object.keys(finalScores).map(k => `${k}=${finalScores[k]}`).join(",")}]`;
+            const scoresStr = `[SCORES: ${Object.keys(finalScores).map(k => `${k}=${Math.round(finalScores[k])}`).join(",")}]`;
             const strengthsText = `${scoresStr}\n\n${fullText}`;
 
             const basicCandidateInfo = parseBasicInfoFromMarkdown(fullText);
@@ -674,20 +819,16 @@ ${tableRowsExample}
                 const info = criteriaMap[key];
                 const rawScore = finalScores[key] || 0;
                 const maxScore = info.max || 100;
-                const ratio = maxScore > 0 ? rawScore / maxScore : 0;
+                const calculatedScore = Math.min(Math.round(rawScore), maxScore);
+                const ratio = maxScore > 0 ? calculatedScore / maxScore : 0;
+                const pct = Math.round(ratio * 100);
 
                 let level = "แย่ (0%)";
-                let levelRatio = 0.0;
-
-                if (ratio >= 0.75) {
+                if (pct >= 75) {
                     level = "ดี (100%)";
-                    levelRatio = 1.0;
-                } else if (ratio >= 0.25) {
+                } else if (pct >= 25) {
                     level = "ปานกลาง (50%)";
-                    levelRatio = 0.5;
                 }
-
-                const calculatedScore = Math.round(maxScore * levelRatio);
 
                 let origMainCriterion: any = null;
                 if (Array.isArray(matchedJob?.criteria)) {
@@ -716,9 +857,9 @@ ${tableRowsExample}
                 }
 
                 if (!reasonStr) {
-                    if (levelRatio === 1.0) {
+                    if (pct >= 75) {
                         reasonStr = `มีทักษะและประสบการณ์อยู่ในระดับดีเยี่ยม ตรงตามข้อกำหนดเกณฑ์ (${calculatedScore}/${maxScore} คะแนน)`;
-                    } else if (levelRatio === 0.5) {
+                    } else if (pct >= 25) {
                         reasonStr = `มีทักษะและประสบการณ์ในระดับปานกลาง ครอบคลุมพื้นฐานเกณฑ์ (${calculatedScore}/${maxScore} คะแนน)`;
                     } else {
                         reasonStr = `ยังมีทักษะหรือประสบการณ์ไม่ตรงตามข้อกำหนดหลักของเกณฑ์ (${calculatedScore}/${maxScore} คะแนน)`;
@@ -731,14 +872,16 @@ ${tableRowsExample}
                     score: calculatedScore,
                     max_score: maxScore,
                     weight: origMainCriterion?.weight || maxScore,
-                    percentage: Math.round(levelRatio * 100),
+                    percentage: pct,
                     evaluated_level: level,
                     reason: reasonStr,
                     sub_criteria: origMainCriterion?.sub_criteria || []
                 };
             });
 
-            totalScore = breakdownDetails.reduce((sum, item) => sum + item.score, 0);
+            totalScore = finalParsed.total !== null && !isNaN(finalParsed.total)
+                ? Math.round(finalParsed.total)
+                : breakdownDetails.reduce((sum, item) => sum + item.score, 0);
 
             const structuredJSON = JSON.stringify({
                 total_score: totalScore,
@@ -756,8 +899,6 @@ ${tableRowsExample}
             };
             const extractedResumeJSON = JSON.stringify(extractedResumeObj);
 
-            await updateApplicationScreening(app.ID, totalScore, strengthsText, "typhoon2.5-qwen3-4b", resumeText, structuredJSON, extractedResumeJSON);
-
             setApplicants(prev => prev.map(a => {
                 if (a.ID === app.ID) {
                     return {
@@ -770,18 +911,26 @@ ${tableRowsExample}
                             skill_score: totalScore,
                             strengths: strengthsText,
                             analysis_data: structuredJSON,
-                            model_used: "typhoon2.5-qwen3-4b"
+                            model_used: selectedModel
                         }
                     };
                 }
                 return a;
             }));
 
+            try {
+                await updateApplicationScreening(app.ID, totalScore, strengthsText, selectedModel, resumeText, structuredJSON, extractedResumeJSON);
+            } catch (dbErr) {
+                console.warn("[DB Save Warning] Failed to update application screening in DB:", dbErr);
+            }
+
             setAnalyzingStates(prev => ({ ...prev, [app.ID]: "done" }));
         } catch (err: any) {
             console.error(`Error screening application ${app.ID}:`, err);
             setAnalyzingStates(prev => ({ ...prev, [app.ID]: "error" }));
-            alert(`เกิดข้อผิดพลาดในการวิเคราะห์ Resume ของ ${app.Candidate?.first_name || 'ผู้สมัคร'}: ${err.message || 'ไม่สามารถวิเคราะห์ได้'}`);
+            if (!isBatch) {
+                alert(`เกิดข้อผิดพลาดในการวิเคราะห์ Resume ของ ${app.Candidate?.first_name || 'ผู้สมัคร'}: ${err.message || 'ไม่สามารถวิเคราะห์ได้'}`);
+            }
         } finally {
             setAnalyzingStates(prev => {
                 if (prev[app.ID] === "ai" || prev[app.ID] === "saving" || prev[app.ID] === "ocr") {
@@ -793,19 +942,30 @@ ${tableRowsExample}
     };
 
     const analyzeSequentially = async (pendingApps: any[]) => {
-        for (const app of pendingApps) {
-            if (activeJobIdRef.current !== selectedJobId) break;
-            await runSingleAnalysis(app);
+        if (batchAnalyzing) return;
+        setBatchAnalyzing(true);
+        try {
+            const currentJobId = selectedJobId;
+            for (const app of pendingApps) {
+                if (activeJobIdRef.current !== currentJobId) break;
+                await runSingleAnalysis(app, false, true);
+            }
+        } catch (err) {
+            console.error("Sequential analysis error:", err);
+        } finally {
+            setBatchAnalyzing(false);
         }
     };
 
     const analyzeAllApplicants = async () => {
-        if (applicants.length === 0) return;
+        const selectedApps = applicants.filter(app => selectedAppIds.includes(app.ID));
+        if (selectedApps.length === 0 || batchAnalyzing) return;
         setBatchAnalyzing(true);
         try {
-            for (const app of applicants) {
-                if (activeJobIdRef.current !== selectedJobId) break;
-                await runSingleAnalysis(app);
+            const currentJobId = selectedJobId;
+            for (const app of selectedApps) {
+                if (activeJobIdRef.current !== currentJobId) break;
+                await runSingleAnalysis(app, false, true);
             }
         } catch (error) {
             console.error("Batch analysis failed:", error);
@@ -819,6 +979,7 @@ ${tableRowsExample}
         try {
             await deleteapplication(appId);
             setApplicants(prev => prev.filter(a => a.ID !== appId));
+            setSelectedAppIds(prev => prev.filter(id => id !== appId));
         } catch (err) {
             console.error("ลบข้อมูลผู้สมัครล้มเหลว:", err);
             alert("เกิดข้อผิดพลาดในการลบข้อมูลผู้สมัคร");
@@ -854,6 +1015,7 @@ ${tableRowsExample}
                 const res = await getapplications(parseInt(selectedJobId));
                 if (res && res.data) {
                     setApplicants(res.data);
+                    setSelectedAppIds(res.data.map((a: any) => a.ID));
                 }
             }
 
@@ -937,6 +1099,7 @@ ${tableRowsExample}
                     const res = await getapplications(parseInt(selectedJobId));
                     if (res && res.data) {
                         setApplicants(res.data);
+                        setSelectedAppIds(res.data.map((a: any) => a.ID));
 
                         const pending = res.data.filter((a: any) => !a.AIScreening);
                         if (pending.length > 0) {
@@ -986,6 +1149,7 @@ ${tableRowsExample}
             try {
                 const formData = new FormData();
                 formData.append("file", file);
+                formData.append("model", selectedModel);
 
                 const res = await fetch(`${TYPHOON_API}/ocr`, {
                     method: "POST",
@@ -1021,6 +1185,9 @@ ${tableRowsExample}
     const analyze = async () => {
         if (!resumeText.trim()) return;
         setLoading(true);
+        isCancelledRef.current = false;
+        abortControllerRef.current = new AbortController();
+        const signal = abortControllerRef.current.signal;
 
         // Try matching candidate from database
         let matchedDbName = "";
@@ -1064,7 +1231,7 @@ ${resumeText}`;
 
             userContent += `\n\n=== ข้อกำหนดการตอบกลับ (ตอบกลับเฉพาะ 2 หัวข้อนี้เท่านั้น) ===
 
-โปรดวิเคราะห์คุณสมบัติใน Resume เทียบกับเกณฑ์หลักและเกณฑ์ย่อยทั้ง 3 ระดับ (ระดับดี 100%, ระดับปานกลาง 50%, ระดับแย่ 0%) แล้วประเมินคะแนนตามสัดส่วนน้ำหนัก (Weight %) และตอบกลับในรูปแบบเทมเพลตด้านล่างนี้เป๊ะๆ:
+โปรดวิเคราะห์คุณสมบัติใน Resume เทียบกับเกณฑ์หลักทั้ง 3 ระดับ (ระดับดี 100%, ระดับปานกลาง 50%, ระดับแย่ 0%) โดยเกณฑ์หลักแต่ละข้อต้องเลือกประเมินเพียง 1 ใน 3 ระดับนี้เท่านั้น: เต็ม 100%, ครึ่งหนึ่ง 50%, หรือ 0% (ห้ามคิดตัวเลขอื่นๆ หรือเฉลี่ยทศนิยม เช่น 21/25 หรือ 83.33% เด็ดขาด) และตอบกลับในรูปแบบเทมเพลตด้านล่างนี้เป๊ะๆ:
 
 ## 1. ข้อมูลผู้สมัคร
 
@@ -1095,9 +1262,11 @@ ${tableRowsExample}
                 body: JSON.stringify({
                     messages: [{ role: "user", content: userContent }],
                     system_prompt: SYSTEM_PROMPT,
-                    max_new_tokens: 850,
+                    max_new_tokens: 8192,
                     temperature: 0,
+                    model: selectedModel,
                 }),
+                signal,
             });
 
             if (!response.ok) throw new Error("AI ไม่ตอบสนอง");
@@ -1107,18 +1276,29 @@ ${tableRowsExample}
             let full = "";
 
             while (true) {
+                if (isCancelledRef.current) {
+                    reader.cancel();
+                    break;
+                }
                 const { done, value } = await reader.read();
-                if (done) break;
+                if (done || isCancelledRef.current) break;
                 full += decoder.decode(value, { stream: true });
                 setResult(prev => prev ? { ...prev, content: full } : null);
             }
 
-            setResult(prev => prev ? { ...prev, streaming: false } : null);
-        } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : "เชื่อมต่อ Typhoon ไม่ได้";
-            setResult({ resumeName: "Resume", content: `❌ ${msg}`, streaming: false });
+            if (!isCancelledRef.current) {
+                setResult(prev => prev ? { ...prev, streaming: false } : null);
+            }
+        } catch (err: any) {
+            if (err.name === "AbortError" || isCancelledRef.current) {
+                setResult(prev => prev ? { ...prev, content: prev.content + "\n\n⚠️ [ยกเลิกการวิเคราะห์เรียบร้อย]", streaming: false } : null);
+            } else {
+                const msg = err instanceof Error ? err.message : "เชื่อมต่อ AI ไม่ได้";
+                setResult({ resumeName: "Resume", content: `❌ ${msg}`, streaming: false });
+            }
         } finally {
             setLoading(false);
+            abortControllerRef.current = null;
         }
     };
 
@@ -1143,27 +1323,33 @@ ${tableRowsExample}
     return (
         <div className="p-8 space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-black text-slate-800">คัดกรอง Resume</h1>
-                    <p className="text-slate-400 text-sm mt-1">วิเคราะห์ Resume ด้วย Typhoon AI</p>
+                    <p className="text-slate-400 text-sm mt-1">วิเคราะห์ Resume ด้วย AI (Cloud & Fine-Tuned)</p>
                 </div>
-                {/* AI Status */}
-                <button
-                    onClick={checkOnline}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${online === true
-                        ? "bg-emerald-50 text-emerald-600 border-emerald-100"
-                        : online === false
-                            ? "bg-red-50 text-red-500 border-red-100"
-                            : "bg-slate-50 text-slate-400 border-slate-100"
-                        }`}
-                >
-                    {online === true
-                        ? <><Wifi className="w-4 h-4" /> AI พร้อมใช้</>
-                        : online === false
-                            ? <><WifiOff className="w-4 h-4" /> AI ออฟไลน์</>
-                            : <><Sparkles className="w-4 h-4" /> ตรวจสอบ...</>}
-                </button>
+                <div className="flex items-center gap-3 flex-wrap">
+                    <AIModelDropdown
+                        selectedModelId={selectedModel}
+                        onSelectModel={handleModelChange}
+                    />
+                    {/* AI Status */}
+                    <button
+                        onClick={checkOnline}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${online === true
+                            ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+                            : online === false
+                                ? "bg-red-50 text-red-500 border-red-100"
+                                : "bg-slate-50 text-slate-400 border-slate-100"
+                            }`}
+                    >
+                        {online === true
+                            ? <><Wifi className="w-4 h-4" /> AI พร้อมใช้</>
+                            : online === false
+                                ? <><WifiOff className="w-4 h-4" /> AI ออฟไลน์</>
+                                : <><Sparkles className="w-4 h-4" /> ตรวจสอบ...</>}
+                    </button>
+                </div>
             </div>
 
             {/* Tabs for Mode */}
@@ -1199,14 +1385,25 @@ ${tableRowsExample}
                                     <FileText className="w-4 h-4 text-[#4169E1]" />
                                     <h3 className="font-bold text-slate-700 text-sm">ข้อความ Resume</h3>
                                 </div>
-                                <button
-                                    onClick={() => fileInputRef.current?.click()}
-                                    disabled={ocrLoading}
-                                    className="flex items-center gap-1.5 text-xs text-[#4169E1] font-semibold hover:underline disabled:opacity-50"
-                                >
-                                    <Upload className="w-3.5 h-3.5" />
-                                    {ocrLoading ? "กำลังวิเคราะห์ OCR..." : "อัปโหลดไฟล์ (.txt, .pdf, รูปภาพ)"}
-                                </button>
+                                <div className="flex items-center gap-3">
+                                    {resumeText && (
+                                        <button
+                                            onClick={() => setResumeText("")}
+                                            className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-semibold hover:underline"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                            ลบข้อความดิบ
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => fileInputRef.current?.click()}
+                                        disabled={ocrLoading}
+                                        className="flex items-center gap-1.5 text-xs text-[#4169E1] font-semibold hover:underline disabled:opacity-50"
+                                    >
+                                        <Upload className="w-3.5 h-3.5" />
+                                        {ocrLoading ? "กำลังวิเคราะห์ OCR..." : "อัปโหลดไฟล์ (.txt, .pdf, รูปภาพ)"}
+                                    </button>
+                                </div>
                                 <input
                                     ref={fileInputRef}
                                     type="file"
@@ -1293,27 +1490,25 @@ ${tableRowsExample}
                             )}
                         </div>
 
-                        {/* Analyze button */}
-                        <button
-                            onClick={analyze}
-                            disabled={loading || ocrLoading || !resumeText.trim() || resumeText.startsWith("กำลังอ่านประมวลผลไฟล์")}
-                            className="w-full flex items-center justify-center gap-2 bg-[#4169E1] hover:bg-[#5a52e0] text-white font-bold py-4 rounded-2xl shadow-md shadow-indigo-200 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:scale-100 disabled:cursor-not-allowed"
-                        >
-                            {loading ? (
-                                <>
-                                    <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                    </svg>
-                                    AI กำลังวิเคราะห์...
-                                </>
-                            ) : (
-                                <>
-                                    <Sparkles className="w-5 h-5" />
-                                    วิเคราะห์ Resume ด้วย AI
-                                </>
-                            )}
-                        </button>
+                        {/* Analyze / Cancel button */}
+                        {loading ? (
+                            <button
+                                onClick={cancelAnalysis}
+                                className="w-full flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white font-bold py-4 rounded-2xl shadow-md transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
+                            >
+                                <Square className="w-5 h-5 fill-current" />
+                                ยกเลิกการวิเคราะห์ AI
+                            </button>
+                        ) : (
+                            <button
+                                onClick={analyze}
+                                disabled={ocrLoading || !resumeText.trim() || resumeText.startsWith("กำลังอ่านประมวลผลไฟล์")}
+                                className="w-full flex items-center justify-center gap-2 bg-[#4169E1] hover:bg-[#5a52e0] text-white font-bold py-4 rounded-2xl shadow-md shadow-indigo-200 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:scale-100 disabled:cursor-not-allowed"
+                            >
+                                <Sparkles className="w-5 h-5" />
+                                วิเคราะห์ Resume ด้วย AI
+                            </button>
+                        )}
                     </div>
 
                     {/* Right: Result panel */}
@@ -1488,14 +1683,31 @@ ${tableRowsExample}
                                     </select>
                                 </div>
                                 {selectedJobId && selectedJobId !== "custom" && applicants.length > 0 && (
-                                    <button
-                                        onClick={analyzeAllApplicants}
-                                        disabled={batchAnalyzing}
-                                        className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-[#4169E1] hover:from-indigo-600 hover:to-[#3558c7] text-white text-xs font-bold transition-all shadow-sm hover:shadow active:scale-95 disabled:opacity-50 select-none whitespace-nowrap cursor-pointer"
-                                    >
-                                        <RefreshCw className={`w-3.5 h-3.5 ${batchAnalyzing ? "animate-spin" : ""}`} />
-                                        {batchAnalyzing ? "กำลังวิเคราะห์..." : "วิเคราะห์ผู้สมัครทั้งหมด"}
-                                    </button>
+                                    batchAnalyzing ? (
+                                        <button
+                                            onClick={cancelAnalysis}
+                                            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-bold transition-all shadow-sm hover:shadow active:scale-95 select-none whitespace-nowrap cursor-pointer"
+                                        >
+                                            <Square className="w-3.5 h-3.5 fill-current" />
+                                            ยกเลิกการวิเคราะห์ AI
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={analyzeAllApplicants}
+                                            disabled={selectedAppIds.length === 0}
+                                            className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-white text-xs font-bold transition-all shadow-sm select-none whitespace-nowrap cursor-pointer ${
+                                                selectedAppIds.length === 0
+                                                    ? "bg-slate-300 cursor-not-allowed opacity-70"
+                                                    : "bg-gradient-to-r from-indigo-500 to-[#4169E1] hover:from-indigo-600 hover:to-[#3558c7] hover:shadow active:scale-95"
+                                            }`}
+                                            title={selectedAppIds.length === 0 ? "กรุณาเลือกผู้สมัครอย่างน้อย 1 รายการ" : `วิเคราะห์ ${selectedAppIds.length} รายการที่เลือก`}
+                                        >
+                                            <RefreshCw className="w-3.5 h-3.5" />
+                                            {selectedAppIds.length === applicants.length
+                                                ? `วิเคราะห์ผู้สมัครทั้งหมด (${applicants.length})`
+                                                : `วิเคราะห์ผู้สมัครที่เลือก (${selectedAppIds.length})`}
+                                        </button>
+                                    )
                                 )}
                             </div>
                         </div>
@@ -1520,6 +1732,26 @@ ${tableRowsExample}
                                 </div>
                             ) : (
                                 <div className="flex flex-col gap-3 font-sans">
+                                    {/* ── Control Bar: เลือกทั้งหมด ── */}
+                                    <div className="flex items-center justify-between bg-white border border-slate-200/80 rounded-2xl px-4 py-2.5 text-xs text-slate-700 shadow-sm mb-1">
+                                        <label className="flex items-center gap-2.5 cursor-pointer select-none font-bold text-slate-800 hover:text-[#4169E1] transition-colors">
+                                            <input
+                                                type="checkbox"
+                                                checked={applicants.length > 0 && selectedAppIds.length === applicants.length}
+                                                onChange={toggleSelectAllApplicants}
+                                                className="w-4 h-4 text-[#4169E1] rounded border-slate-300 focus:ring-[#4169E1] cursor-pointer"
+                                            />
+                                            <span>เลือก Resume ทั้งหมดในการวิเคราะห์ ({selectedAppIds.length}/{applicants.length} รายการ)</span>
+                                        </label>
+                                        <div className="text-[11px] font-semibold text-slate-400">
+                                            {selectedAppIds.length === 0 ? (
+                                                <span className="text-amber-500 font-bold">⚠️ กรุณาเลือกผู้สมัครอย่างน้อย 1 รายการเพื่อวิเคราะห์</span>
+                                            ) : (
+                                                <span>พร้อมวิเคราะห์ <strong className="text-[#4169E1] font-bold">{selectedAppIds.length}</strong> รายการ</span>
+                                            )}
+                                        </div>
+                                    </div>
+
                                     {[...applicants]
                                         .sort((a, b) => (b.AIScreening?.skill_score || 0) - (a.AIScreening?.skill_score || 0))
                                         .map((app, idx) => {
@@ -1545,12 +1777,23 @@ ${tableRowsExample}
                                             const breakdown = parseBreakdownFromStrengths(app.AIScreening?.strengths, criteriaMap);
 
                                             return (
-                                                <div key={app.ID || idx} className="bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all flex flex-col font-sans">
+                                                <div key={app.ID || idx} className={`rounded-2xl border transition-all flex flex-col font-sans ${
+                                                    selectedAppIds.includes(app.ID)
+                                                        ? "bg-white border-indigo-200 shadow-sm hover:shadow-md"
+                                                        : "bg-slate-50/50 border-slate-200/60 opacity-75"
+                                                }`}>
                                                     {/* ─── Main Compact Row Header (หน้าหลัก) ─── */}
                                                     <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
 
-                                                        {/* 1. Rank & Candidate Info */}
+                                                        {/* 1. Checkbox + Rank & Candidate Info */}
                                                         <div className="flex items-center gap-3 min-w-[220px]">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedAppIds.includes(app.ID)}
+                                                                onChange={() => toggleSelectApplicant(app.ID)}
+                                                                className="w-4 h-4 text-[#4169E1] rounded border-slate-300 focus:ring-[#4169E1] cursor-pointer shrink-0 transition-transform active:scale-90"
+                                                                title="เลือก/ยกเลิกเพื่อวิเคราะห์ AI"
+                                                            />
                                                             <div className="w-8 h-8 rounded-xl bg-indigo-50 text-[#4169E1] font-mono font-black text-xs flex items-center justify-center shrink-0">
                                                                 #{idx + 1}
                                                             </div>
@@ -1619,7 +1862,7 @@ ${tableRowsExample}
                                                             })}
                                                             {status === "ai" && (
                                                                 <span className="text-xs text-[#4169E1] font-bold flex items-center gap-1.5 animate-pulse bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
-                                                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> 🧠 Typhoon AI กำลังวิเคราะห์คะแนน...
+                                                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> {AVAILABLE_AI_MODELS.find(m => m.id === selectedModel)?.badge || "🤖 AI"} กำลังวิเคราะห์คะแนน...
                                                                 </span>
                                                             )}
                                                             {status === "ocr" && (
@@ -1694,14 +1937,19 @@ ${tableRowsExample}
 
                                                         <div className="p-4 border-t border-slate-200/60 bg-white space-y-4 rounded-b-2xl">
                                                             {/* AI Detailed Analysis Report */}
-                                                            {getCleanStrengths(app.AIScreening?.strengths).trim() ? (
+                                                            {getCleanStrengths(getStrengthsText(app)).trim() ? (
                                                                 <div className="space-y-2">
                                                                     <h5 className="font-extrabold text-[#4169E1] text-xs uppercase tracking-wider flex items-center gap-1.5">
                                                                         <Sparkles className="w-3.5 h-3.5" /> รายละเอียดผลการวิเคราะห์เดี่ยวจาก AI
                                                                     </h5>
                                                                     <div className="bg-indigo-50/30 border border-indigo-100 p-3.5 rounded-xl text-xs text-slate-700 leading-relaxed font-sans whitespace-pre-wrap">
-                                                                        {getCleanStrengths(app.AIScreening.strengths)}
+                                                                        {getCleanStrengths(getStrengthsText(app))}
                                                                     </div>
+                                                                </div>
+                                                            ) : status === "ai" || status === "ocr" || status === "saving" ? (
+                                                                <div className="text-[#4169E1] text-xs font-bold bg-blue-50/60 border border-blue-200 p-3.5 rounded-xl animate-pulse flex items-center gap-2">
+                                                                    <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
+                                                                    <span>กำลังวิเคราะห์และประมวลผลด้วย AI ({AVAILABLE_AI_MODELS.find(m => m.id === selectedModel)?.name || "Claude Sonnet 5"})...</span>
                                                                 </div>
                                                             ) : (
                                                                 <div className="text-slate-400 text-xs italic bg-slate-50 border border-slate-200/60 p-3 rounded-xl">

@@ -12,7 +12,8 @@ import {
 } from "./landing-components";
 import { getalljobs, applyjob, checkApplicationStatus } from "../../services/jobPositionService";
 import apiClient from "../../services/apiClient";
-import { Briefcase, MapPin, DollarSign, Clock, Search, X, Building2, ShieldCheck, Mail, AlertCircle, Upload, CalendarDays, Image as ImageIcon, Maximize2 } from "lucide-react";
+import rules from "../../components/rules/rule";
+import { Briefcase, MapPin, DollarSign, Clock, Search, X, Building2, ShieldCheck, Mail, AlertCircle, Upload, CalendarDays, Maximize2 } from "lucide-react";
 import { LoginModal } from "../auth/LoginPage";
 
 interface JobPosition {
@@ -136,6 +137,14 @@ function LandingPage() {
         e.preventDefault();
         if (!applyFirstName.trim() || !applyLastName.trim() || !applyEmail.trim() || !applyPhone.trim()) {
             setApplyError("กรุณากรอกข้อมูลส่วนตัวให้ครบถ้วน");
+            return;
+        }
+        if (!rules.email.validate(applyEmail)) {
+            setApplyError(rules.email.errorMessage);
+            return;
+        }
+        if (!rules.phone.validate(applyPhone)) {
+            setApplyError(rules.phone.errorMessage);
             return;
         }
         if (!resumeFile && !applyResumeUrl) {
@@ -846,18 +855,22 @@ function LandingPage() {
                                     type="email"
                                     required
                                     value={applyEmail}
-                                    onChange={e => setApplyEmail(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all"
+                                    onChange={e => setApplyEmail(rules.email.sanitize(e.target.value))}
+                                    placeholder="example@company.com"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase">เบอร์โทรศัพท์ *</label>
+                                <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase">เบอร์โทรศัพท์ (เริ่มต้นด้วย 0) *</label>
                                 <input
                                     type="tel"
                                     required
                                     value={applyPhone}
-                                    onChange={e => setApplyPhone(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all"
+                                    onKeyDown={e => rules.phone.onKeyDown(e, applyPhone)}
+                                    onChange={e => setApplyPhone(rules.phone.format(e.target.value))}
+                                    placeholder="08X-XXX-XXXX"
+                                    maxLength={12}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-mono"
                                 />
                             </div>
                             {/* Upload Resume Box */}

@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Search, Sparkles, Eye, RefreshCw, ChevronDown, ChevronUp, X, Award, FileText, BarChart3, Check, Briefcase, ExternalLink, Download, Edit3 } from "lucide-react";
+import { Search, Sparkles, Eye, RefreshCw, ChevronDown, ChevronUp, X, Award, FileText, BarChart3, Check, Briefcase, ExternalLink, Download, Edit3, GraduationCap } from "lucide-react";
 import { Link } from "react-router-dom";
 import apiClient, { getBackendBaseUrl } from "../../services/apiClient";
 import { getalljobs, updateApplicationStatus, updateApplicationScreening } from "../../services/jobPositionService";
+import rules from "../../components/rules/rule";
 
 interface SubCriterion {
     id?: string;
@@ -57,6 +58,8 @@ interface CandidateItem {
     rawApp: any;
     resumeUrl: string;
     resumeText: string;
+    transcriptUrl: string;
+    transcriptText: string;
 }
 
 const parseScoresFromStrengthsStr = (strengths: string) => {
@@ -137,10 +140,11 @@ export default function CandidatesPage() {
     const [expandedCandidateId, setExpandedCandidateId] = useState<string | null>(null);
     const [selectedCandidateModal, setSelectedCandidateModal] = useState<CandidateItem | null>(null);
     const [viewingResumeModal, setViewingResumeModal] = useState<CandidateItem | null>(null);
+    const [activeDocTab, setActiveDocTab] = useState<"resume" | "transcript">("resume");
     const [editingScoreId, setEditingScoreId] = useState<string | null>(null);
     const [editingScoreValue, setEditingScoreValue] = useState<number | string>(0);
 
-    const getCleanResumeUrl = (url: string) => {
+    const getCleanFileUrl = (url: string) => {
         if (!url) return "";
         let clean = url.replace(/\\/g, "/");
         if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
@@ -460,11 +464,26 @@ export default function CandidatesPage() {
                         rText = (aiScreening.strengths || parsedAnalysisObj?.raw_markdown || "").replace(/^\[SCORES:\s*.*?\]\s*/, "");
                     }
 
+                    let tUrl = app.transcript_url || app.TranscriptURL || app.transcriptUrl || cand.transcript_url || cand.TranscriptURL || cand.transcriptUrl || "";
+
+                    if (!tUrl && Array.isArray(app.documents) && app.documents.length > 0) {
+                        const transcriptDoc = app.documents.find((d: any) =>
+                            (d.document_type && (d.document_type.toLowerCase().includes("transcript") || d.document_type.includes("ใบแสดงผล"))) ||
+                            (d.file_name && (d.file_name.toLowerCase().includes("transcript") || d.file_name.includes("ใบแสดงผล") || d.file_name.includes("ผลการเรียน"))) ||
+                            (d.title && (d.title.toLowerCase().includes("transcript") || d.title.includes("ใบแสดงผล") || d.title.includes("ผลการเรียน")))
+                        );
+                        if (transcriptDoc && (transcriptDoc.file_url || transcriptDoc.FileURL)) {
+                            tUrl = transcriptDoc.file_url || transcriptDoc.FileURL;
+                        }
+                    }
+
+                    let tText = app.transcript_text || app.TranscriptText || app.transcriptText || cand.transcript_text || cand.TranscriptText || cand.transcriptText || "";
+
                     return {
                         id: app.ID ? app.ID.toString() : app.id?.toString() || "0",
                         name: name,
-                        email: cand.email || parsedAnalysisObj?.candidate_basic_info?.email || "-",
-                        phone: cand.phone || parsedAnalysisObj?.candidate_basic_info?.phone || "-",
+                        email: rules.email.sanitize(cand.email || parsedAnalysisObj?.candidate_basic_info?.email || "-"),
+                        phone: rules.phone.format(cand.phone || parsedAnalysisObj?.candidate_basic_info?.phone || "-") || (cand.phone || "-"),
                         position: matchedJob?.title || app.position || "ไม่ระบุตำแหน่ง",
                         aiScore: Math.round(finalPTS),
                         status: app.status || "รอพิจารณา",
@@ -475,7 +494,9 @@ export default function CandidatesPage() {
                         modelUsed: aiScreening.model_used || aiScreening.ModelUsed || "typhoon2.5-qwen3-4b",
                         rawApp: app,
                         resumeUrl: rUrl,
-                        resumeText: rText
+                        resumeText: rText,
+                        transcriptUrl: tUrl,
+                        transcriptText: tText
                     };
                 });
 
@@ -660,7 +681,7 @@ export default function CandidatesPage() {
                         <thead>
                             <tr className="bg-slate-50/80 border-b border-slate-100 text-slate-400 text-xs uppercase tracking-wider font-bold">
                                 <th className="py-3.5 px-4 w-12 text-center">#</th>
-                                <th className="py-3.5 px-6">ผู้สมัคร & คะแนน Criteria ย่อย</th>
+                                <th className="py-3.5 px-6">ผู้สมัคร</th>
                                 <th className="py-3.5 px-6">ตำแหน่งที่สมัคร</th>
                                 <th className="py-3.5 px-6">คะแนน PTS (0-100)</th>
                                 <th className="py-3.5 px-6">สถานะ</th>
@@ -697,27 +718,6 @@ export default function CandidatesPage() {
                                                     <div className="space-y-1.5">
                                                         <p className="font-bold text-slate-800 text-base">{c.name}</p>
                                                         <p className="text-slate-400 text-xs">{c.email} • {c.phone}</p>
-
-                                                        {/* 🌟 Display inline Criteria Score Badges (ดึงจากการวิเคราะห์ Resume) */}
-                                                        {c.criteriaBreakdown && c.criteriaBreakdown.length > 0 && (
-                                                            <div className="flex flex-wrap items-center gap-1.5 pt-1 max-w-xl">
-                                                                {c.criteriaBreakdown.map((crit, cIdx) => {
-                                                                    const percent = crit.max_score > 0 ? (crit.score / crit.max_score) * 100 : 0;
-                                                                    const badgeColor = percent >= 80
-                                                                        ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                                                                        : percent >= 50
-                                                                            ? "bg-amber-50 text-amber-700 border-amber-200/80"
-                                                                            : "bg-rose-50 text-rose-700 border-rose-200/80";
-
-                                                                    return (
-                                                                        <div key={cIdx} className={`px-2 py-0.5 rounded-md border text-[11px] font-semibold whitespace-nowrap flex items-center gap-1 shadow-2xs ${badgeColor}`}>
-                                                                            <span className="text-slate-600 font-normal truncate max-w-[130px]">{crit.main_criterion_title}:</span>
-                                                                            <span className="font-bold font-mono">{crit.score}/{crit.max_score}</span>
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        )}
                                                     </div>
                                                 </td>
                                                 <td className="py-4 px-6 text-slate-600 font-semibold">{c.position}</td>
@@ -848,12 +848,31 @@ export default function CandidatesPage() {
                                                 <td className="py-4 px-6 text-right">
                                                     <div className="flex items-center justify-end gap-2">
                                                         <button
-                                                            onClick={() => setViewingResumeModal(c)}
+                                                            onClick={() => {
+                                                                setActiveDocTab("resume");
+                                                                setViewingResumeModal(c);
+                                                            }}
                                                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/80 transition-all cursor-pointer shadow-2xs"
                                                             title="เปิดดูเอกสาร Resume หรือเนื้อหาประวัติผู้สมัคร"
                                                         >
                                                             <FileText className="w-3.5 h-3.5 text-amber-600" />
                                                             <span>ดู Resume</span>
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() => {
+                                                                setActiveDocTab("transcript");
+                                                                setViewingResumeModal(c);
+                                                            }}
+                                                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs border ${
+                                                                c.transcriptUrl || c.transcriptText
+                                                                    ? "bg-blue-50 hover:bg-blue-100 text-[#4169E1] border-blue-200/80"
+                                                                    : "bg-slate-50 text-slate-500 hover:bg-slate-100 border-slate-200 opacity-70"
+                                                            }`}
+                                                            title="เปิดดูเอกสาร Transcript / ใบแสดงผลการเรียน"
+                                                        >
+                                                            <GraduationCap className="w-3.5 h-3.5 text-[#4169E1]" />
+                                                            <span>ดู Transcript</span>
                                                         </button>
 
                                                         <button
@@ -1033,15 +1052,30 @@ export default function CandidatesPage() {
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
-                                {(selectedCandidateModal.resumeUrl || selectedCandidateModal.resumeText) && (
-                                    <button
-                                        onClick={() => setViewingResumeModal(selectedCandidateModal)}
-                                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/80 transition-all cursor-pointer shadow-2xs"
-                                    >
-                                        <FileText className="w-4 h-4 text-amber-600" />
-                                        <span>เปิดดู Resume</span>
-                                    </button>
-                                )}
+                                <button
+                                    onClick={() => {
+                                        setActiveDocTab("resume");
+                                        setViewingResumeModal(selectedCandidateModal);
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/80 transition-all cursor-pointer shadow-2xs"
+                                >
+                                    <FileText className="w-4 h-4 text-amber-600" />
+                                    <span>เปิดดู Resume</span>
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setActiveDocTab("transcript");
+                                        setViewingResumeModal(selectedCandidateModal);
+                                    }}
+                                    className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs border ${
+                                        selectedCandidateModal.transcriptUrl || selectedCandidateModal.transcriptText
+                                            ? "bg-blue-50 hover:bg-blue-100 text-[#4169E1] border-blue-200/80"
+                                            : "bg-slate-50 text-slate-500 hover:bg-slate-100 border-slate-200 opacity-70"
+                                    }`}
+                                >
+                                    <GraduationCap className="w-4 h-4 text-[#4169E1]" />
+                                    <span>เปิดดู Transcript</span>
+                                </button>
                                 <button
                                     onClick={() => setSelectedCandidateModal(null)}
                                     className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"
@@ -1271,29 +1305,56 @@ export default function CandidatesPage() {
                     </div>
                 </div>
             )}
-            {/* Resume Viewer Modal */}
+            {/* Document Viewer Modal (Resume & Transcript) */}
             {viewingResumeModal && (
                 <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
                     <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                         {/* Modal Header */}
-                        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                        <div className="p-6 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4 bg-slate-50/50">
                             <div className="flex items-center gap-3">
-                                <div className="p-3 bg-amber-50 rounded-2xl text-amber-600 border border-amber-100">
-                                    <FileText className="w-6 h-6" />
+                                <div className={`p-3 rounded-2xl border ${activeDocTab === "resume" ? "bg-amber-50 text-amber-600 border-amber-100" : "bg-blue-50 text-[#4169E1] border-blue-100"}`}>
+                                    {activeDocTab === "resume" ? <FileText className="w-6 h-6" /> : <GraduationCap className="w-6 h-6" />}
                                 </div>
                                 <div>
                                     <h2 className="text-lg font-black text-slate-800">
-                                        Resume - {viewingResumeModal.name}
+                                        {activeDocTab === "resume" ? "Resume (ประวัติผู้สมัคร)" : "Transcript (ใบแสดงผลการเรียน)"} - {viewingResumeModal.name}
                                     </h2>
                                     <p className="text-slate-400 text-xs mt-0.5">
                                         ตำแหน่งที่สมัคร: <span className="font-semibold text-slate-700">{viewingResumeModal.position}</span> • {viewingResumeModal.email}
                                     </p>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                                {viewingResumeModal.resumeUrl && (
+
+                            {/* Tab Switcher & Action buttons */}
+                            <div className="flex items-center gap-3">
+                                <div className="flex items-center bg-slate-200/70 p-1 rounded-xl">
+                                    <button
+                                        onClick={() => setActiveDocTab("resume")}
+                                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                            activeDocTab === "resume"
+                                                ? "bg-amber-500 text-white shadow-xs"
+                                                : "text-slate-600 hover:text-slate-900"
+                                        }`}
+                                    >
+                                        <FileText className="w-3.5 h-3.5" />
+                                        <span>Resume</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveDocTab("transcript")}
+                                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                            activeDocTab === "transcript"
+                                                ? "bg-[#4169E1] text-white shadow-xs"
+                                                : "text-slate-600 hover:text-slate-900"
+                                        }`}
+                                    >
+                                        <GraduationCap className="w-3.5 h-3.5" />
+                                        <span>Transcript</span>
+                                    </button>
+                                </div>
+
+                                {((activeDocTab === "resume" && viewingResumeModal.resumeUrl) || (activeDocTab === "transcript" && viewingResumeModal.transcriptUrl)) && (
                                     <a
-                                        href={getCleanResumeUrl(viewingResumeModal.resumeUrl)}
+                                        href={getCleanFileUrl(activeDocTab === "resume" ? viewingResumeModal.resumeUrl : viewingResumeModal.transcriptUrl)}
                                         target="_blank"
                                         rel="noreferrer"
                                         className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#4169E1] hover:bg-[#3152c4] text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-indigo-100"
@@ -1304,7 +1365,7 @@ export default function CandidatesPage() {
                                 )}
                                 <button
                                     onClick={() => setViewingResumeModal(null)}
-                                    className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"
+                                    className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all cursor-pointer"
                                 >
                                     <X className="w-5 h-5" />
                                 </button>
@@ -1313,79 +1374,160 @@ export default function CandidatesPage() {
 
                         {/* Modal Body */}
                         <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/30">
-                            {/* File Preview Section if resumeUrl exists */}
-                            {viewingResumeModal.resumeUrl ? (
-                                <div className="space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                                            <FileText className="w-4 h-4 text-amber-500" />
-                                            เอกสาร Resume ผู้สมัคร ({viewingResumeModal.resumeUrl.split("/").pop() || "เอกสารแนบ"})
-                                        </h3>
-                                        <a
-                                            href={getCleanResumeUrl(viewingResumeModal.resumeUrl)}
-                                            download
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="text-xs font-bold text-[#4169E1] hover:underline flex items-center gap-1"
-                                        >
-                                            <Download className="w-3.5 h-3.5" />
-                                            ดาวน์โหลดไฟล์
-                                        </a>
-                                    </div>
+                            {activeDocTab === "resume" ? (
+                                <>
+                                    {/* File Preview Section if resumeUrl exists */}
+                                    {viewingResumeModal.resumeUrl ? (
+                                        <div className="space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                    <FileText className="w-4 h-4 text-amber-500" />
+                                                    เอกสาร Resume ผู้สมัคร ({viewingResumeModal.resumeUrl.split("/").pop() || "เอกสารแนบ"})
+                                                </h3>
+                                                <a
+                                                    href={getCleanFileUrl(viewingResumeModal.resumeUrl)}
+                                                    download
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="text-xs font-bold text-[#4169E1] hover:underline flex items-center gap-1"
+                                                >
+                                                    <Download className="w-3.5 h-3.5" />
+                                                    ดาวน์โหลดไฟล์
+                                                </a>
+                                            </div>
 
-                                    {/* Embed viewer if PDF or Image */}
-                                    {getCleanResumeUrl(viewingResumeModal.resumeUrl).toLowerCase().endsWith(".pdf") ? (
-                                        <div className="w-full h-[550px] rounded-2xl border border-slate-200 overflow-hidden shadow-inner bg-slate-100">
-                                            <iframe
-                                                src={getCleanResumeUrl(viewingResumeModal.resumeUrl)}
-                                                className="w-full h-full border-none"
-                                                title="Resume PDF Preview"
-                                            />
+                                            {/* Embed viewer if PDF or Image */}
+                                            {getCleanFileUrl(viewingResumeModal.resumeUrl).toLowerCase().endsWith(".pdf") ? (
+                                                <div className="w-full h-[550px] rounded-2xl border border-slate-200 overflow-hidden shadow-inner bg-slate-100">
+                                                    <iframe
+                                                        src={getCleanFileUrl(viewingResumeModal.resumeUrl)}
+                                                        className="w-full h-full border-none"
+                                                        title="Resume PDF Preview"
+                                                    />
+                                                </div>
+                                            ) : getCleanFileUrl(viewingResumeModal.resumeUrl).match(/\.(png|jpg|jpeg|webp|gif)$/i) ? (
+                                                <div className="w-full flex justify-center p-4 bg-slate-100 rounded-2xl border border-slate-200">
+                                                    <img
+                                                        src={getCleanFileUrl(viewingResumeModal.resumeUrl)}
+                                                        alt="Resume Preview"
+                                                        className="max-h-[600px] object-contain rounded-xl shadow-md"
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <div className="p-6 bg-amber-50/80 rounded-2xl border border-amber-200/80 text-center space-y-3">
+                                                    <p className="text-sm font-bold text-amber-800">
+                                                        ไฟล์นี้อยู่ในรูปแบบ {viewingResumeModal.resumeUrl.split(".").pop()?.toUpperCase() || "เอกสาร"}
+                                                    </p>
+                                                    <a
+                                                        href={getCleanFileUrl(viewingResumeModal.resumeUrl)}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#4169E1] text-white rounded-xl text-xs font-bold shadow-sm"
+                                                    >
+                                                        <ExternalLink className="w-4 h-4" />
+                                                        คลิกที่นี่เพื่อเปิดไฟล์ในเบราว์เซอร์
+                                                    </a>
+                                                </div>
+                                            )}
                                         </div>
-                                    ) : getCleanResumeUrl(viewingResumeModal.resumeUrl).match(/\.(png|jpg|jpeg|webp|gif)$/i) ? (
-                                        <div className="w-full flex justify-center p-4 bg-slate-100 rounded-2xl border border-slate-200">
-                                            <img
-                                                src={getCleanResumeUrl(viewingResumeModal.resumeUrl)}
-                                                alt="Resume Preview"
-                                                className="max-h-[600px] object-contain rounded-xl shadow-md"
-                                            />
+                                    ) : null}
+
+                                    {/* Text Content Section if resumeText exists */}
+                                    {viewingResumeModal.resumeText ? (
+                                        <div className="space-y-2">
+                                            <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                <Sparkles className="w-4 h-4 text-indigo-500" />
+                                                เนื้อหาข้อความใน Resume (Resume OCR / Text)
+                                            </h3>
+                                            <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm text-slate-700 text-xs font-mono leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto">
+                                                {viewingResumeModal.resumeText}
+                                            </div>
                                         </div>
-                                    ) : (
-                                        <div className="p-6 bg-amber-50/80 rounded-2xl border border-amber-200/80 text-center space-y-3">
-                                            <p className="text-sm font-bold text-amber-800">
-                                                ไฟล์นี้อยู่ในรูปแบบ {viewingResumeModal.resumeUrl.split(".").pop()?.toUpperCase() || "เอกสาร"}
-                                            </p>
-                                            <a
-                                                href={getCleanResumeUrl(viewingResumeModal.resumeUrl)}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="inline-flex items-center gap-2 px-4 py-2 bg-[#4169E1] text-white rounded-xl text-xs font-bold shadow-sm"
-                                            >
-                                                <ExternalLink className="w-4 h-4" />
-                                                คลิกที่นี่เพื่อเปิดไฟล์ในเบราว์เซอร์
-                                            </a>
+                                    ) : !viewingResumeModal.resumeUrl && (
+                                        <div className="py-16 text-center text-slate-400 space-y-2">
+                                            <FileText className="w-12 h-12 text-slate-300 mx-auto" />
+                                            <p className="font-bold text-slate-600">ไม่พบไฟล์แนบ Resume หรือข้อความสกัดในระบบ</p>
+                                            <p className="text-xs">ผู้สมัครอาจสมัครผ่านระบบโดยไม่ได้อัปโหลดไฟล์ Resume หรือกรอกข้อความ</p>
                                         </div>
                                     )}
-                                </div>
-                            ) : null}
+                                </>
+                            ) : (
+                                <>
+                                    {/* File Preview Section if transcriptUrl exists */}
+                                    {viewingResumeModal.transcriptUrl ? (
+                                        <div className="space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                    <GraduationCap className="w-4 h-4 text-[#4169E1]" />
+                                                    เอกสาร Transcript (ใบแสดงผลการเรียน) ({viewingResumeModal.transcriptUrl.split("/").pop() || "เอกสารแนบ"})
+                                                </h3>
+                                                <a
+                                                    href={getCleanFileUrl(viewingResumeModal.transcriptUrl)}
+                                                    download
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="text-xs font-bold text-[#4169E1] hover:underline flex items-center gap-1"
+                                                >
+                                                    <Download className="w-3.5 h-3.5" />
+                                                    ดาวน์โหลดไฟล์
+                                                </a>
+                                            </div>
 
-                            {/* Text Content Section if resumeText exists */}
-                            {viewingResumeModal.resumeText ? (
-                                <div className="space-y-2">
-                                    <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                                        <Sparkles className="w-4 h-4 text-indigo-500" />
-                                        เนื้อหาข้อความใน Resume (Resume OCR / Text)
-                                    </h3>
-                                    <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm text-slate-700 text-xs font-mono leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto">
-                                        {viewingResumeModal.resumeText}
-                                    </div>
-                                </div>
-                            ) : !viewingResumeModal.resumeUrl && (
-                                <div className="py-16 text-center text-slate-400 space-y-2">
-                                    <FileText className="w-12 h-12 text-slate-300 mx-auto" />
-                                    <p className="font-bold text-slate-600">ไม่พบไฟล์แนบ Resume หรือข้อความสกัดในระบบ</p>
-                                    <p className="text-xs">ผู้สมัครอาจสมัครผ่านระบบโดยไม่ได้อัปโหลดไฟล์ Resume หรือกรอกข้อความ</p>
-                                </div>
+                                            {/* Embed viewer if PDF or Image */}
+                                            {getCleanFileUrl(viewingResumeModal.transcriptUrl).toLowerCase().endsWith(".pdf") ? (
+                                                <div className="w-full h-[550px] rounded-2xl border border-slate-200 overflow-hidden shadow-inner bg-slate-100">
+                                                    <iframe
+                                                        src={getCleanFileUrl(viewingResumeModal.transcriptUrl)}
+                                                        className="w-full h-full border-none"
+                                                        title="Transcript PDF Preview"
+                                                    />
+                                                </div>
+                                            ) : getCleanFileUrl(viewingResumeModal.transcriptUrl).match(/\.(png|jpg|jpeg|webp|gif)$/i) ? (
+                                                <div className="w-full flex justify-center p-4 bg-slate-100 rounded-2xl border border-slate-200">
+                                                    <img
+                                                        src={getCleanFileUrl(viewingResumeModal.transcriptUrl)}
+                                                        alt="Transcript Preview"
+                                                        className="max-h-[600px] object-contain rounded-xl shadow-md"
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <div className="p-6 bg-blue-50/80 rounded-2xl border border-blue-200/80 text-center space-y-3">
+                                                    <p className="text-sm font-bold text-blue-900">
+                                                        ไฟล์นี้อยู่ในรูปแบบ {viewingResumeModal.transcriptUrl.split(".").pop()?.toUpperCase() || "เอกสาร"}
+                                                    </p>
+                                                    <a
+                                                        href={getCleanFileUrl(viewingResumeModal.transcriptUrl)}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#4169E1] text-white rounded-xl text-xs font-bold shadow-sm"
+                                                    >
+                                                        <ExternalLink className="w-4 h-4" />
+                                                        คลิกที่นี่เพื่อเปิดไฟล์ในเบราว์เซอร์
+                                                    </a>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : null}
+
+                                    {/* Text Content Section if transcriptText exists */}
+                                    {viewingResumeModal.transcriptText ? (
+                                        <div className="space-y-2">
+                                            <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                <Sparkles className="w-4 h-4 text-indigo-500" />
+                                                เนื้อหาข้อความใน Transcript (Transcript OCR / Text)
+                                            </h3>
+                                            <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm text-slate-700 text-xs font-mono leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto">
+                                                {viewingResumeModal.transcriptText}
+                                            </div>
+                                        </div>
+                                    ) : !viewingResumeModal.transcriptUrl && (
+                                        <div className="py-16 text-center text-slate-400 space-y-2">
+                                            <GraduationCap className="w-12 h-12 text-slate-300 mx-auto" />
+                                            <p className="font-bold text-slate-600">ไม่พบไฟล์แนบ Transcript หรือข้อความสกัดผลการเรียนในระบบ</p>
+                                            <p className="text-xs">ผู้สมัครอาจสมัครผ่านระบบโดยไม่ได้แนบไฟล์ Transcript (ใบแสดงผลการเรียน)</p>
+                                        </div>
+                                    )}
+                                </>
                             )}
                         </div>
 
@@ -1393,7 +1535,7 @@ export default function CandidatesPage() {
                         <div className="p-4 border-t border-slate-100 flex items-center justify-end bg-white">
                             <button
                                 onClick={() => setViewingResumeModal(null)}
-                                className="px-5 py-2 rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 font-bold text-sm transition-all"
+                                className="px-5 py-2 rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 font-bold text-sm transition-all cursor-pointer"
                             >
                                 ปิด
                             </button>

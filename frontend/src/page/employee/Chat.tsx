@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
-import { Send, Bot, Wifi, WifiOff, MessageSquare, Plus, Search, Menu, ChevronLeft, ChevronRight } from "lucide-react";
+import { Send, Bot, Wifi, WifiOff, MessageSquare, Plus, Search, ChevronLeft, ChevronRight, Square } from "lucide-react";
 import { getallknowledge } from "../../services/knowledgeService";
 import { getChatHistory, saveChatMessage, getChatSessions, ChatSessionData } from "../../services/chatService";
 import { getTyphoonApiUrl } from "../../services/apiClient";
+import AIModelDropdown from "../../components/common/AIModelDropdown";
 
 const TYPHOON_API = getTyphoonApiUrl();
 
@@ -21,7 +22,7 @@ function generateSessionId() {
 
 async function checkTyphoon(): Promise<boolean> {
     try {
-        const r = await fetch(`${TYPHOON_API}/health`, { signal: AbortSignal.timeout(3000) });
+        const r = await fetch(`${TYPHOON_API}/health`, { signal: AbortSignal.timeout(5000) });
         const d = await r.json();
         return d.status === "ok" || d.chat_model === true;
     } catch {
@@ -31,6 +32,7 @@ async function checkTyphoon(): Promise<boolean> {
 
 export default function EmployeeChat() {
     const { firstName } = useAuth();
+    const [selectedModel, setSelectedModel] = useState<string>("ft:gpt-4o-mini-2024-07-18:hireai:resume-json-5k:v2");
     
     // State สำหรับแชต
     const [messages, setMessages] = useState<Message[]>([
@@ -147,6 +149,17 @@ export default function EmployeeChat() {
         inputRef.current?.focus();
     };
 
+    const abortControllerRef = useRef<AbortController | null>(null);
+
+    const handleCancelChat = () => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+        setLoading(false);
+        setMessages(prev => prev.map(m => m.streaming ? { ...m, streaming: false, text: m.text + "\n\n⚠️ [ยกเลิกการตอบโดยผู้ใช้งาน]" } : m));
+    };
+
     // 6. ส่งข้อความแชต
     const handleSend = async () => {
         const text = input.trim();
@@ -158,6 +171,8 @@ export default function EmployeeChat() {
         chatHistory.current.push({ role: "user", content: text });
 
         setLoading(true);
+        abortControllerRef.current = new AbortController();
+        const signal = abortControllerRef.current.signal;
 
         const botId = Date.now() + 1;
         setMessages(prev => [...prev, { id: botId, from: "bot", text: "", streaming: true }]);
@@ -194,8 +209,10 @@ ${knowledgeContext || "(ขณะนี้ยังไม่มีเอกส�
                 body: JSON.stringify({
                     messages: chatHistory.current,
                     system_prompt: systemPrompt,
-                    max_new_tokens: 1024,
+                    max_new_tokens: 512,
+                    model: selectedModel,
                 }),
+                signal,
             });
 
             if (!response.ok) throw new Error("AI ไม่ตอบสนอง กรุณาลองใหม่");
@@ -236,12 +253,20 @@ ${knowledgeContext || "(ขณะนี้ยังไม่มีเอกส�
             }
 
         } catch (err: unknown) {
-            const errMsg = err instanceof Error ? err.message : "เชื่อมต่อ AI ไม่ได้ กรุณาเปิด Typhoon AI ก่อน";
-            setMessages(prev =>
-                prev.map(m => m.id === botId
-                    ? { ...m, text: `⚠️ ${errMsg}`, streaming: false }
-                    : m)
-            );
+            if (err instanceof Error && (err.name === "AbortError" || err.message.toLowerCase().includes("abort"))) {
+                setMessages(prev =>
+                    prev.map(m => m.id === botId
+                        ? { ...m, text: (m.text || "") + "\n\n⚠️ [ยกเลิกการตอบโดยผู้ใช้งาน]", streaming: false }
+                        : m)
+                );
+            } else {
+                const errMsg = err instanceof Error ? err.message : "เชื่อมต่อ AI ไม่ได้ กรุณาเปิด Typhoon AI ก่อน";
+                setMessages(prev =>
+                    prev.map(m => m.id === botId
+                        ? { ...m, text: `⚠️ ไม่สามารถดึงข้อมูลได้: ${errMsg}`, streaming: false }
+                        : m)
+                );
+            }
         } finally {
             setLoading(false);
             inputRef.current?.focus();
@@ -401,7 +426,12 @@ ${knowledgeContext || "(ขณะนี้ยังไม่มีเอกส�
                             <span className="font-semibold text-slate-800 text-sm">{currentSessionTitle || "ห้องสนทนา"}</span>
                         </div>
                     </div>
-                    <div>
+                    <div className="flex items-center gap-3">
+                        <AIModelDropdown
+                            selectedModelId={selectedModel}
+                            onSelectModel={setSelectedModel}
+                            compact
+                        />
                         {online === null ? (
                             <span className="text-[11px] text-slate-400">กำลังตรวจสอบ AI...</span>
                         ) : online ? (
@@ -469,13 +499,24 @@ ${knowledgeContext || "(ขณะนี้ยังไม่มีเอกส�
                         disabled={loading}
                         className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-5 py-3.5 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/30 focus:bg-white transition-all text-xs disabled:opacity-50"
                     />
-                    <button
-                        onClick={handleSend}
-                        disabled={loading || !input.trim()}
-                        className="bg-[#4169E1] hover:bg-[#5a52e0] text-white px-5 py-3.5 rounded-xl shadow shadow-indigo-100 transition-all hover:scale-105 active:scale-95 disabled:opacity-40 disabled:scale-100"
-                    >
-                        <Send className="w-4 h-4" />
-                    </button>
+                    {loading ? (
+                        <button
+                            onClick={handleCancelChat}
+                            className="bg-red-500 hover:bg-red-600 text-white px-5 py-3.5 rounded-xl shadow transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5 text-xs font-bold cursor-pointer"
+                            title="ยกเลิกการพิมพ์คำตอบ AI"
+                        >
+                            <Square className="w-3.5 h-3.5 fill-current" />
+                            <span>ยกเลิก</span>
+                        </button>
+                    ) : (
+                        <button
+                            onClick={handleSend}
+                            disabled={!input.trim()}
+                            className="bg-[#4169E1] hover:bg-[#5a52e0] text-white px-5 py-3.5 rounded-xl shadow shadow-indigo-100 transition-all hover:scale-105 active:scale-95 disabled:opacity-40 disabled:scale-100"
+                        >
+                            <Send className="w-4 h-4" />
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

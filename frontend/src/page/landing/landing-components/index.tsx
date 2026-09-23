@@ -71,7 +71,6 @@ export function Hero({ jobBoardContent }: HeroProps) {
                 <h1 className="text-4xl sm:text-6xl md:text-7xl font-black text-slate-800 leading-[1.1] md:leading-[1.1] mb-8 font-sans tracking-tight max-w-5xl">
                     คัดกรองและประเมินผู้สมัครงาน <br />
                     <span className="bg-clip-text text-transparent bg-gradient-to-r from-[#4169E1] via-indigo-600 to-[#3a5ec7] font-black">
-                        เร็วกว่าเดิม 10 เท่า ด้วย AI
                     </span>
                 </h1>
 

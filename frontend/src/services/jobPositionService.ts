@@ -468,7 +468,7 @@ export async function extractJobInfoFromImage(
                         "multipart/form-data",
                 },
 
-                timeout: 60000,
+                timeout: 180000,
             }
         );
 
