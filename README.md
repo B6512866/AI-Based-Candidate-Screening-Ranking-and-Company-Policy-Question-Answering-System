@@ -197,15 +197,22 @@ npx cloudflared tunnel --protocol http2 --url http://localhost:8000
 
 ## 🧹 การจัดการข้อมูล (Database Maintenance & Reset)
 
-### ล้างข้อมูลทดสอบ (Reset Test Data)
-โปรเจกต์มีสคริปต์สำหรับล้างข้อมูลผู้สมัครงาน, การสัมภาษณ์ และผลคะแนนคัดกรองทดสอบ **โดยยังคงรักษาบัญชีผู้ใช้หลัก (HR/Employee) และเอกสารนโยบายบริษัทเอาไว้**:
+### 1. ล้างข้อมูลทดสอบผ่าน Supabase SQL Editor (Cloud)
+หากใช้งานบน Supabase Dashboard สามารถไปที่เมนู **SQL Editor** (`>_`) แล้วรันคำสั่ง SQL ด้านล่างนี้เพื่อล้างข้อมูลทดสอบ (ผู้สมัคร, การสัมภาษณ์, ผลคัดกรอง AI, ประวัติแชต) พร้อมรีเซ็ตเลข ID กลับไปเริ่มต้นที่ 1 โดยยังคงรักษาบัญชีผู้ใช้หลัก (HR/Employee), ตำแหน่งงาน และเอกสารนโยบายบริษัทเอาไว้ครบถ้วน:
+
+```sql
+TRUNCATE TABLE applications, candidates, interviews, ai_screenings, chat_messages, reports RESTART IDENTITY CASCADE;
+```
+
+### 2. ล้างข้อมูลทดสอบผ่านคำสั่ง Go (Terminal)
+สามารถรันสคริปต์ในเครื่องที่โฟลเดอร์ `backend/` ได้เช่นกัน:
 
 ```bash
 cd backend
 go run reset_db.go
 ```
 
-### ล้างข้อมูลทั้งหมดใน Docker (Local Reset)
+### 3. ล้างข้อมูลทั้งหมดใน Docker (Local Reset)
 ```bash
 docker compose down -v
 ```
