@@ -5,7 +5,7 @@ import { getalljobs, getapplications, updateApplicationScreening, deleteapplicat
 import apiClient, { getTyphoonApiUrl, getBackendBaseUrl } from "../../services/apiClient";
 import AIModelDropdown, { AVAILABLE_AI_MODELS } from "../../components/common/AIModelDropdown";
 
-const TYPHOON_API = { toString: () => getTyphoonApiUrl() };
+const TYPHOON_API = getTyphoonApiUrl();
 
 const isInvalidOrRandomName = (name: string): boolean => {
     if (!name) return true;
