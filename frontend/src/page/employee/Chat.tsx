@@ -63,10 +63,22 @@ export default function EmployeeChat() {
 
     // 1. ตรวจสอบสถานะโมเดล AI ออนไลน์
     useEffect(() => {
-        checkTyphoon().then(setOnline);
-        const interval = setInterval(() => checkTyphoon().then(setOnline), 30000);
+        const verifyOnlineStatus = async () => {
+            const isCloudModel = selectedModel.includes("gemini") ||
+                selectedModel.includes("gpt") ||
+                selectedModel.includes("claude") ||
+                selectedModel.startsWith("ft:");
+            if (isCloudModel) {
+                setOnline(true);
+            } else {
+                const isTyphoonUp = await checkTyphoon();
+                setOnline(isTyphoonUp);
+            }
+        };
+        verifyOnlineStatus();
+        const interval = setInterval(verifyOnlineStatus, 30000);
         return () => clearInterval(interval);
-    }, []);
+    }, [selectedModel]);
 
     // 2. โหลดรายการห้องแชตทั้งหมดจากฝั่งหลังบ้านตอนเริ่มแรก
     const loadSessions = async (selectLatest = true) => {

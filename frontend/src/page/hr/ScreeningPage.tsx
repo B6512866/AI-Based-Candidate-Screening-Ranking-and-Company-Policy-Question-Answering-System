@@ -484,8 +484,16 @@ export default function ScreeningPage() {
         return formatCleanMarkdownScores(cleaned);
     };
 
-    // ── Check Typhoon status ─────────────────────────────────────────
+    // ── Check AI status (Local Typhoon vs Cloud AI) ──────────────────
     const checkOnline = async () => {
+        const isCloudModel = selectedModel.includes("gemini") ||
+            selectedModel.includes("gpt") ||
+            selectedModel.includes("claude") ||
+            selectedModel.startsWith("ft:");
+        if (isCloudModel) {
+            setOnline(true);
+            return;
+        }
         try {
             const r = await fetch(`${TYPHOON_API}/health`, { signal: AbortSignal.timeout(3000) });
             const d = await r.json();
@@ -494,6 +502,11 @@ export default function ScreeningPage() {
             setOnline(false);
         }
     };
+
+    // Re-check AI online status when model changes
+    useEffect(() => {
+        checkOnline();
+    }, [selectedModel]);
 
     // Load jobs & check online status on mount
     useEffect(() => {
