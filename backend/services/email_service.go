@@ -1,9 +1,14 @@
 package services
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"net/smtp"
 	"strings"
+	"time"
 
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/config"
 )
@@ -22,18 +27,129 @@ func getSMTPConfig() (string, string) {
 	return fromEmail, appPassword
 }
 
-// SendApplicationEmail ส่งอีเมลแจ้งเตือนรหัสใบสมัครไปยัง Gmail ของผู้สมัครจริง
-func SendApplicationEmail(toEmail string, candidateName string, jobTitle string, appCode string) error {
+// sendViaResend ส่งอีเมลผ่าน Resend HTTP REST API (พอร์ต 443 — ใช้งานบน Render Free ได้ 100%)
+func sendViaResend(apiKey string, fromEmail string, toEmail string, subject string, htmlBody string) error {
+	from := fromEmail
+	if strings.HasSuffix(from, "@gmail.com") || !strings.Contains(from, "@") {
+		from = "HireAI <onboarding@resend.dev>"
+	}
+	payload := map[string]interface{}{
+		"from":    from,
+		"to":      []string{toEmail},
+		"subject": subject,
+		"html":    htmlBody,
+	}
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest("POST", "https://api.resend.com/emails", bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 12 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("resend request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("resend error (%d): %s", resp.StatusCode, string(b))
+	}
+	return nil
+}
+
+// sendViaBrevo ส่งอีเมลผ่าน Brevo (Sendinblue) HTTP API (พอร์ต 443 — ใช้งานบน Render Free ได้ 100%)
+func sendViaBrevo(apiKey string, fromEmail string, toEmail string, subject string, htmlBody string) error {
+	payload := map[string]interface{}{
+		"sender": map[string]string{
+			"name":  "HireAI Recruitment",
+			"email": fromEmail,
+		},
+		"to": []map[string]string{
+			{"email": toEmail},
+		},
+		"subject":     subject,
+		"htmlContent": htmlBody,
+	}
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest("POST", "https://api.brevo.com/v3/smtp/email", bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("api-key", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 12 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("brevo request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("brevo error (%d): %s", resp.StatusCode, string(b))
+	}
+	return nil
+}
+
+// sendEmailUnified ส่งอีเมลแบบ Unified (ตรวจจับ Resend API -> Brevo API -> Gmail SMTP)
+func sendEmailUnified(toEmail string, subject string, htmlBody string) error {
 	fromEmail, appPassword := getSMTPConfig()
 
+	// 1. ลอง Resend HTTP API (Port 443)
+	if config.Env.ResendAPIKey != "" {
+		fmt.Printf("[Email Service] 🚀 Sending via Resend HTTP API to %s...\n", toEmail)
+		err := sendViaResend(config.Env.ResendAPIKey, fromEmail, toEmail, subject, htmlBody)
+		if err == nil {
+			fmt.Printf("[Email Service] ✅ Resend sent successfully to %s\n", toEmail)
+			return nil
+		}
+		fmt.Printf("[Email Service] ⚠️ Resend failed: %v, falling back...\n", err)
+	}
+
+	// 2. ลอง Brevo HTTP API (Port 443)
+	if config.Env.BrevoAPIKey != "" {
+		fmt.Printf("[Email Service] 🚀 Sending via Brevo HTTP API to %s...\n", toEmail)
+		err := sendViaBrevo(config.Env.BrevoAPIKey, fromEmail, toEmail, subject, htmlBody)
+		if err == nil {
+			fmt.Printf("[Email Service] ✅ Brevo sent successfully to %s\n", toEmail)
+			return nil
+		}
+		fmt.Printf("[Email Service] ⚠️ Brevo failed: %v, falling back...\n", err)
+	}
+
+	// 3. Fallback เป็น SMTP Port 587 (สำหรับ Localhost หรือเมื่อเปิดพอร์ต SMTP)
+	fmt.Printf("[Email Service] 📧 Sending via Gmail SMTP (port 587) to %s...\n", toEmail)
 	smtpHost := "smtp.gmail.com"
 	smtpPort := "587"
-
-	subject := fmt.Sprintf("Subject: [HireAI] ยืนยันการสมัครงาน - ตำแหน่ง %s\r\n", jobTitle)
+	subjectHeader := fmt.Sprintf("Subject: %s\r\n", subject)
 	headers := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\r\n"
 	fromHeader := fmt.Sprintf("From: HireAI Recruitment <%s>\r\n", fromEmail)
 	toHeader := fmt.Sprintf("To: %s\r\n\r\n", toEmail)
+	msg := []byte(subjectHeader + headers + fromHeader + toHeader + htmlBody)
+	auth := smtp.PlainAuth("", fromEmail, appPassword, smtpHost)
+	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, fromEmail, []string{toEmail}, msg)
+	if err != nil {
+		fmt.Printf("[Email Service] ❌ SMTP send failed to %s: %v\n", toEmail, err)
+		return err
+	}
+	fmt.Printf("[Email Service] ✅ SMTP sent successfully to %s\n", toEmail)
+	return nil
+}
 
+// SendApplicationEmail ส่งอีเมลแจ้งเตือนรหัสใบสมัครไปยัง Gmail ของผู้สมัครจริง
+func SendApplicationEmail(toEmail string, candidateName string, jobTitle string, appCode string) error {
 	body := fmt.Sprintf(`
 <!DOCTYPE html>
 <html>
@@ -82,11 +198,7 @@ func SendApplicationEmail(toEmail string, candidateName string, jobTitle string,
 </html>
 `, candidateName, jobTitle, appCode, appCode)
 
-	msg := []byte(subject + headers + fromHeader + toHeader + body)
-
-	auth := smtp.PlainAuth("", fromEmail, appPassword, smtpHost)
-
-	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, fromEmail, []string{toEmail}, msg)
+	err := sendEmailUnified(toEmail, fmt.Sprintf("[HireAI] ยืนยันการสมัครงาน - ตำแหน่ง %s", jobTitle), body)
 	if err != nil {
 		fmt.Printf("ส่งอีเมลไปยัง %s ล้มเหลว: %v\n", toEmail, err)
 		return err
@@ -98,16 +210,6 @@ func SendApplicationEmail(toEmail string, candidateName string, jobTitle string,
 
 // SendInterviewEmail ส่งอีเมลแจ้งเตือนวันเวลาและรายละเอียดนัดหมายสัมภาษณ์ไปยัง Gmail ผู้สมัคร
 func SendInterviewEmail(toEmail string, candidateName string, jobTitle string, interviewDate string, location string, notes string) error {
-	fromEmail, appPassword := getSMTPConfig()
-
-	smtpHost := "smtp.gmail.com"
-	smtpPort := "587"
-
-	subject := fmt.Sprintf("Subject: [HireAI] Interview Invitation / แจ้งนัดหมายสัมภาษณ์งาน - %s\r\n", jobTitle)
-	headers := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\r\n"
-	fromHeader := fmt.Sprintf("From: HireAI Recruitment <%s>\r\n", fromEmail)
-	toHeader := fmt.Sprintf("To: %s\r\n\r\n", toEmail)
-
 	notesHtml := ""
 	if notes != "" {
 		notesHtml = fmt.Sprintf(`<div class="info-row"><div class="info-label">Notes / หมายเหตุเพิ่มเติม</div><div class="info-value">%s</div></div>`, notes)
@@ -170,10 +272,7 @@ func SendInterviewEmail(toEmail string, candidateName string, jobTitle string, i
 </html>
 `, candidateName, jobTitle, interviewDate, location, notesHtml)
 
-	msg := []byte(subject + headers + fromHeader + toHeader + body)
-	auth := smtp.PlainAuth("", fromEmail, appPassword, smtpHost)
-
-	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, fromEmail, []string{toEmail}, msg)
+	err := sendEmailUnified(toEmail, fmt.Sprintf("[HireAI] Interview Invitation / แจ้งนัดหมายสัมภาษณ์งาน - %s", jobTitle), body)
 	if err != nil {
 		fmt.Printf("ส่งอีเมลสัมภาษณ์ไปยัง %s ล้มเหลว: %v\n", toEmail, err)
 		return err
@@ -185,16 +284,6 @@ func SendInterviewEmail(toEmail string, candidateName string, jobTitle string, i
 
 // SendCustomInterviewEmail ส่งอีเมลแจ้งนัดหมายสัมภาษณ์ตามเนื้อหาที่ HR กำหนด/แก้ไขจริง
 func SendCustomInterviewEmail(toEmail string, jobTitle string, customContent string) error {
-	fromEmail, appPassword := getSMTPConfig()
-
-	smtpHost := "smtp.gmail.com"
-	smtpPort := "587"
-
-	subject := fmt.Sprintf("Subject: [HireAI] แจ้งนัดหมายสัมภาษณ์งาน - ตำแหน่ง %s\r\n", jobTitle)
-	headers := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\r\n"
-	fromHeader := fmt.Sprintf("From: HireAI Recruitment <%s>\r\n", fromEmail)
-	toHeader := fmt.Sprintf("To: %s\r\n\r\n", toEmail)
-
 	// แปลง newline ให้เป็น <br/> เพื่อให้แสดงผลขึ้นบรรทัดใหม่ในโปรแกรมเปิดเมลได้ถูกต้อง
 	formattedContent := strings.ReplaceAll(customContent, "\n", "<br/>")
 
@@ -230,10 +319,7 @@ func SendCustomInterviewEmail(toEmail string, jobTitle string, customContent str
 </html>
 `, formattedContent)
 
-	msg := []byte(subject + headers + fromHeader + toHeader + body)
-	auth := smtp.PlainAuth("", fromEmail, appPassword, smtpHost)
-
-	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, fromEmail, []string{toEmail}, msg)
+	err := sendEmailUnified(toEmail, fmt.Sprintf("[HireAI] แจ้งนัดหมายสัมภาษณ์งาน - ตำแหน่ง %s", jobTitle), body)
 	if err != nil {
 		fmt.Printf("ส่งอีเมลสัมภาษณ์ไปยัง %s ล้มเหลว: %v\n", toEmail, err)
 		return err
@@ -245,16 +331,6 @@ func SendCustomInterviewEmail(toEmail string, jobTitle string, customContent str
 
 // SendInterviewEmailWithButtons ส่งอีเมลแจ้งนัดหมายสัมภาษณ์พร้อมปุ่มตอบกลับ (ยืนยัน/เลื่อน/ปฏิเสธ)
 func SendInterviewEmailWithButtons(toEmail string, candidateName string, appCode string, jobTitle string, interviewDate string, location string, notes string, responseToken string, baseURL string, interviewID uint) error {
-	fromEmail, appPassword := getSMTPConfig()
-
-	smtpHost := "smtp.gmail.com"
-	smtpPort := "587"
-
-	subject := fmt.Sprintf("Subject: [HireAI] Interview Invitation / แจ้งนัดหมายสัมภาษณ์งาน - %s\r\n", jobTitle)
-	headers := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\r\n"
-	fromHeader := fmt.Sprintf("From: HireAI Recruitment <%s>\r\n", fromEmail)
-	toHeader := fmt.Sprintf("To: %s\r\n\r\n", toEmail)
-
 	notesHtml := ""
 	if notes != "" {
 		notesHtml = fmt.Sprintf(`<div class="info-row"><div class="info-label">Notes / หมายเหตุเพิ่มเติม</div><div class="info-value">%s</div></div>`, notes)
@@ -337,10 +413,7 @@ func SendInterviewEmailWithButtons(toEmail string, candidateName string, appCode
 </html>
 `, candidateName, jobTitle, appCode, interviewDate, location, notesHtml, confirmURL, rescheduleURL, rejectURL)
 
-	msg := []byte(subject + headers + fromHeader + toHeader + body)
-	auth := smtp.PlainAuth("", fromEmail, appPassword, smtpHost)
-
-	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, fromEmail, []string{toEmail}, msg)
+	err := sendEmailUnified(toEmail, fmt.Sprintf("[HireAI] Interview Invitation / แจ้งนัดหมายสัมภาษณ์งาน - %s", jobTitle), body)
 	if err != nil {
 		fmt.Printf("ส่งอีเมลสัมภาษณ์ไปยัง %s ล้มเหลว: %v\n", toEmail, err)
 		return err
@@ -352,16 +425,6 @@ func SendInterviewEmailWithButtons(toEmail string, candidateName string, appCode
 
 // SendCustomInterviewEmailWithButtons ส่งอีเมลแจ้งนัดหมายสัมภาษณ์ตามเนื้อหาที่ HR กำหนดพร้อมปุ่มตอบกลับ
 func SendCustomInterviewEmailWithButtons(toEmail string, jobTitle string, customContent string, responseToken string, baseURL string, interviewID uint) error {
-	fromEmail, appPassword := getSMTPConfig()
-
-	smtpHost := "smtp.gmail.com"
-	smtpPort := "587"
-
-	subject := fmt.Sprintf("Subject: [HireAI] Interview Invitation / แจ้งนัดหมายสัมภาษณ์งาน - %s\r\n", jobTitle)
-	headers := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\r\n"
-	fromHeader := fmt.Sprintf("From: HireAI Recruitment <%s>\r\n", fromEmail)
-	toHeader := fmt.Sprintf("To: %s\r\n\r\n", toEmail)
-
 	// แปลง newline ให้เป็น <br/> เพื่อให้แสดงผลขึ้นบรรทัดใหม่ในโปรแกรมเปิดเมลได้ถูกต้อง
 	formattedContent := strings.ReplaceAll(customContent, "\n", "<br/>")
 
@@ -412,10 +475,7 @@ func SendCustomInterviewEmailWithButtons(toEmail string, jobTitle string, custom
 </html>
 `, formattedContent, confirmURL, rescheduleURL, rejectURL)
 
-	msg := []byte(subject + headers + fromHeader + toHeader + body)
-	auth := smtp.PlainAuth("", fromEmail, appPassword, smtpHost)
-
-	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, fromEmail, []string{toEmail}, msg)
+	err := sendEmailUnified(toEmail, fmt.Sprintf("[HireAI] Interview Invitation / แจ้งนัดหมายสัมภาษณ์งาน - %s", jobTitle), body)
 	if err != nil {
 		fmt.Printf("ส่งอีเมลสัมภาษณ์ไปยัง %s ล้มเหลว: %v\n", toEmail, err)
 		return err
@@ -427,11 +487,6 @@ func SendCustomInterviewEmailWithButtons(toEmail string, jobTitle string, custom
 
 // SendInterviewResultEmail ส่งอีเมลแจ้งผลสัมภาษณ์ (ผ่าน/ไม่ผ่าน) พร้อมปุ่มรับทราบผล
 func SendInterviewResultEmail(toEmail string, candidateName string, appCode string, jobTitle string, result string, resultNotes string, customContent string, resultToken string, baseURL string, interviewID uint) error {
-	fromEmail, appPassword := getSMTPConfig()
-
-	smtpHost := "smtp.gmail.com"
-	smtpPort := "587"
-
 	cleanBaseURL := strings.TrimRight(baseURL, "/")
 	acknowledgeURL := fmt.Sprintf("%s/api/interviews/acknowledge-result?id=%d&token=%s", cleanBaseURL, interviewID, resultToken)
 
@@ -539,11 +594,6 @@ Email : hr@hireai-recruitment.com`, candidateName, jobTitle, candidateName, engJ
         </div>`, strings.ReplaceAll(resultNotes, "\n", "<br/>"))
 	}
 
-	subject := fmt.Sprintf("Subject: [HireAI] %s - ตำแหน่ง %s\r\n", subjectText, jobTitle)
-	headers := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\r\n"
-	fromHeader := fmt.Sprintf("From: HireAI Recruitment <%s>\r\n", fromEmail)
-	toHeader := fmt.Sprintf("To: %s\r\n\r\n", toEmail)
-
 	body := fmt.Sprintf(`
 <!DOCTYPE html>
 <html>
@@ -621,10 +671,7 @@ Email : hr@hireai-recruitment.com`, candidateName, jobTitle, candidateName, engJ
 		btnBg,
 	)
 
-	msg := []byte(subject + headers + fromHeader + toHeader + body)
-	auth := smtp.PlainAuth("", fromEmail, appPassword, smtpHost)
-
-	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, fromEmail, []string{toEmail}, msg)
+	err := sendEmailUnified(toEmail, fmt.Sprintf("[HireAI] %s - ตำแหน่ง %s", subjectText, jobTitle), body)
 	if err != nil {
 		fmt.Printf("ส่งอีเมลแจ้งผลสัมภาษณ์ไปยัง %s ล้มเหลว: %v\n", toEmail, err)
 		return err
