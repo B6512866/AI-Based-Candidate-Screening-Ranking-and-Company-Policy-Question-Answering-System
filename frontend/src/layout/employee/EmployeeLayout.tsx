@@ -311,11 +311,18 @@ export default function EmployeeLayout() {
                 </header>
 
                 {/* Main View */}
-                <main className="flex-1 overflow-y-auto bg-[#f8fafc] p-6 sm:p-8 animate-fadeIn">
-                    <div className="max-w-7xl mx-auto">
-                        <Outlet />
-                    </div>
-                </main>
+                {(() => {
+                    const isChatPage = location.pathname === "/employee" || location.pathname === "/employee/" || location.pathname.startsWith("/employee/chat");
+                    return (
+                        <main className={`flex-1 min-h-0 bg-[#f8fafc] animate-fadeIn ${
+                            isChatPage ? "overflow-hidden p-2 sm:p-3 flex flex-col" : "overflow-y-auto p-6 sm:p-8"
+                        }`}>
+                            <div className={isChatPage ? "w-full h-full flex-1 flex flex-col min-h-0" : "max-w-7xl mx-auto"}>
+                                <Outlet />
+                            </div>
+                        </main>
+                    );
+                })()}
             </div>
         </div>
     );

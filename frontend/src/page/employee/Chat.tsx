@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
-import { Send, Bot, Wifi, WifiOff, MessageSquare, Plus, Search, ChevronLeft, ChevronRight, Square } from "lucide-react";
+import { Send, Bot, Wifi, WifiOff, MessageSquare, Plus, Search, ChevronLeft, ChevronRight, Square, Maximize2, Minimize2 } from "lucide-react";
 import { getallknowledge } from "../../services/knowledgeService";
 import { getChatHistory, saveChatMessage, getChatSessions, ChatSessionData } from "../../services/chatService";
 import { getTyphoonApiUrl, getApiUrl } from "../../services/apiClient";
@@ -58,6 +58,33 @@ export default function EmployeeChat() {
     const [searchResults, setSearchResults] = useState<{ sessionId: string; text: string }[]>([]);
     const [showSearchDropdown, setShowSearchDropdown] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const chatContainerRef = useRef<HTMLDivElement>(null);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+
+    const toggleFullScreen = () => {
+        if (!document.fullscreenElement) {
+            if (chatContainerRef.current?.requestFullscreen) {
+                chatContainerRef.current.requestFullscreen().catch(() => {
+                    setIsFullscreen(prev => !prev);
+                });
+            } else {
+                setIsFullscreen(prev => !prev);
+            }
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen().catch(() => {});
+            }
+            setIsFullscreen(false);
+        }
+    };
+
+    useEffect(() => {
+        const handleFullscreenChange = () => {
+            setIsFullscreen(!!document.fullscreenElement);
+        };
+        document.addEventListener("fullscreenchange", handleFullscreenChange);
+        return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    }, []);
     
     const bottomRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -325,13 +352,18 @@ ${knowledgeContext || "(ขณะนี้ยังไม่มีเอกส�
     };
 
     return (
-        <div className={`flex h-full p-6 bg-slate-50/50 transition-all duration-300 ${isSidebarOpen ? "gap-6" : "gap-0"}`}>
+        <div 
+            ref={chatContainerRef}
+            className={`flex h-full w-full min-h-0 transition-all duration-300 ${
+                isFullscreen ? "fixed inset-0 z-50 bg-[#f8fafc] p-3 sm:p-4" : ""
+            } ${isSidebarOpen ? "gap-3 sm:gap-4" : "gap-0"}`}
+        >
             {/* 🚪 Left Sidebar - ห้องสนทนา (Threads) & ค้นหา */}
             <div className={`transition-all duration-300 overflow-hidden flex flex-col ${
                 isSidebarOpen 
-                    ? "w-80 p-4 opacity-100 border border-slate-100" 
+                    ? "w-72 sm:w-80 p-3.5 sm:p-4 opacity-100 border border-slate-200/80 shadow-xs" 
                     : "w-0 p-0 opacity-0 border-0 pointer-events-none"
-            } bg-white rounded-2xl shadow-sm gap-4`}>
+            } bg-white rounded-2xl gap-3 min-h-0 h-full shrink-0`}>
                 {/* แถวบนสุด: ปุ่มแชตใหม่ และ ปุ่มปิดแถบข้าง */}
                 <div className="flex items-center gap-2 w-full">
                     <button
@@ -365,7 +397,7 @@ ${knowledgeContext || "(ขณะนี้ยังไม่มีเอกส�
 
                     {/* ค้นหาพบ Dropdown */}
                     {showSearchDropdown && searchResults.length > 0 && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-100 shadow-lg rounded-xl z-50 overflow-hidden text-xs">
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-100 shadow-lg rounded-xl z-50 overflow-hidden text-xs max-h-52 overflow-y-auto">
                             {searchResults.map((res, index) => (
                                 <div
                                     key={index}
@@ -394,7 +426,7 @@ ${knowledgeContext || "(ขณะนี้ยังไม่มีเอกส�
                 <div className="h-px bg-slate-100" />
 
                 {/* รายการประวัติแชตเก่า */}
-                <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 min-h-0">
                     <span className="text-[14px] uppercase tracking-wider font-bold text-slate-400 block px-2">ประวัติการสนทนา</span>
                     {sessions.length === 0 ? (
                         <div className="text-center py-6 text-xs text-slate-400">ไม่มีประวัติห้องสนทนา</div>
@@ -420,14 +452,14 @@ ${knowledgeContext || "(ขณะนี้ยังไม่มีเอกส�
             </div>
 
             {/* 💬 Right Chat Interface - บอร์ดพิมพ์คุย */}
-            <div className="flex-1 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
+            <div className="flex-1 bg-white rounded-2xl border border-slate-200/80 shadow-xs flex flex-col overflow-hidden min-h-0 h-full">
                 {/* หัวเธรดแชต & สถานะ AI */}
-                <div className="px-6 py-4 border-b border-slate-50 flex items-center justify-between bg-white">
+                <div className="px-5 sm:px-6 py-3.5 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
                     <div className="flex items-center gap-3">
                         {!isSidebarOpen && (
                             <button
                                 onClick={() => setIsSidebarOpen(true)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#4169E1]/5 hover:bg-[#4169E1]/10 border border-[#4169E1]/10 rounded-xl text-[#4169E1] transition-all text-xs active:scale-95 font-medium shadow-sm"
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#4169E1]/5 hover:bg-[#4169E1]/10 border border-[#4169E1]/10 rounded-xl text-[#4169E1] transition-all text-xs active:scale-95 font-medium shadow-2xs cursor-pointer"
                                 title="แสดงประวัติแชต"
                             >
                                 <ChevronRight className="w-4 h-4" />
@@ -436,33 +468,40 @@ ${knowledgeContext || "(ขณะนี้ยังไม่มีเอกส�
                         )}
                         <div className="flex items-center gap-2">
                             <Bot className="w-5 h-5 text-[#4169E1]" />
-                            <span className="font-semibold text-slate-800 text-sm">{currentSessionTitle || "ห้องสนทนา"}</span>
+                            <span className="font-semibold text-slate-800 text-sm truncate max-w-[180px] sm:max-w-md">{currentSessionTitle || "ห้องสนทนา"}</span>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3">
                         <AIModelDropdown
                             selectedModelId={selectedModel}
                             onSelectModel={setSelectedModel}
                             compact
                         />
                         {online === null ? (
-                            <span className="text-[11px] text-slate-400">กำลังตรวจสอบ AI...</span>
+                            <span className="text-[11px] text-slate-400 hidden sm:inline">กำลังตรวจสอบ AI...</span>
                         ) : online ? (
-                            <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-semibold">
+                            <span className="hidden sm:flex items-center gap-1 text-[11px] text-emerald-600 font-semibold bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100/60">
                                 <Wifi className="w-3.5 h-3.5" />
                                 AI พร้อมตอบคำถาม
                             </span>
                         ) : (
-                            <span className="flex items-center gap-1 text-[11px] text-red-500 font-semibold">
+                            <span className="hidden sm:flex items-center gap-1 text-[11px] text-red-500 font-semibold bg-red-50 px-2 py-1 rounded-lg border border-red-100/60">
                                 <WifiOff className="w-3.5 h-3.5" />
                                 AI ออฟไลน์
                             </span>
                         )}
+                        <button
+                            onClick={toggleFullScreen}
+                            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer border border-slate-200/60"
+                            title={isFullscreen ? "ย่อหน้าจอ" : "เต็มจอ"}
+                        >
+                            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                        </button>
                     </div>
                 </div>
 
                 {/* ข้อความแชต */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/20">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-slate-50/20 min-h-0">
                     {messages.map(msg => (
                         <div
                             key={msg.id}
@@ -501,7 +540,7 @@ ${knowledgeContext || "(ขณะนี้ยังไม่มีเอกส�
                 </div>
 
                 {/* กล่องพิมพ์แชตด้านล่าง */}
-                <div className="p-4 bg-white border-t border-slate-100 flex gap-3">
+                <div className="p-3 sm:p-4 bg-white border-t border-slate-100 flex gap-2 sm:gap-3 shrink-0">
                     <input
                         ref={inputRef}
                         type="text"
