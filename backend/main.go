@@ -117,9 +117,15 @@ func main() {
 		typhoonURL, errUrl := url.Parse(typhoonTarget)
 		if errUrl == nil {
 			proxy := httputil.NewSingleHostReverseProxy(typhoonURL)
+			originalDirector := proxy.Director
+			proxy.Director = func(req *http.Request) {
+				originalDirector(req)
+				req.Host = typhoonURL.Host
+				req.URL.Scheme = typhoonURL.Scheme
+				req.URL.Host = typhoonURL.Host
+			}
 			api.Any("/typhoon/*proxyPath", func(c *gin.Context) {
 				c.Request.URL.Path = c.Param("proxyPath")
-				c.Request.Host = typhoonURL.Host
 				proxy.ServeHTTP(c.Writer, c.Request)
 			})
 		}
