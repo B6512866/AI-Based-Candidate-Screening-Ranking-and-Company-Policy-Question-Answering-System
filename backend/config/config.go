@@ -21,6 +21,8 @@ type Config struct {
 	SMTPEmail    string
 	SMTPPassword string
 	GeminiAPIKey string
+	ResendAPIKey string
+	BrevoAPIKey  string
 }
 
 var Env Config
@@ -41,6 +43,8 @@ func LoadEnv() {
 		SMTPEmail:    getEnv("SMTP_EMAIL", "guymini02479@gmail.com"),
 		SMTPPassword: getEnv("SMTP_PASSWORD", "gjsrvsyeqsixfvlk"),
 		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""), // <--- เพิ่มบรรทัดนี้ครับ!
+		ResendAPIKey: getEnv("RESEND_API_KEY", ""),
+		BrevoAPIKey:  getEnv("BREVO_API_KEY", ""),
 	}
 
 	if Env.GeminiAPIKey == "" {
