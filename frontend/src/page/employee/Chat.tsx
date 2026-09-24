@@ -33,7 +33,7 @@ async function checkTyphoon(): Promise<boolean> {
 
 export default function EmployeeChat() {
     const { firstName } = useAuth();
-    const [selectedModel, setSelectedModel] = useState<string>("ft:gpt-4o-mini-2024-07-18:hireai:resume-json-5k:v2");
+    const [selectedModel, setSelectedModel] = useState<string>("gemini-3.5-flash");
     
     // State สำหรับแชต
     const [messages, setMessages] = useState<Message[]>([

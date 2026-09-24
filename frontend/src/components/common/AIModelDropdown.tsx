@@ -28,27 +28,12 @@ export const AVAILABLE_AI_MODELS: AIModelOption[] = [
         isFineTuned: true
     },
     {
-        id: "ft:gpt-4o-mini-2024-07-18:hireai:resume-json-5k:v2",
-        name: "GPT-4o-mini (Fine-Tuned with Resume-JSON-5k)",
-        badge: "✨ Fine-Tuned GPT 🔑 ใช้ OPENAI_API_KEY",
-        provider: "fine-tuned",
-        description: "โมเดล GPT-4o-mini Fine-Tuned (ใช้ OPENAI_API_KEY ในไฟล์ .env)",
-        isFineTuned: true
-    },
-    {
         id: "claude-sonnet-5",
         name: "Claude Sonnet 5 (Cloud API)",
         badge: "🧠 Claude Sonnet 5 🔑 ใช้ ANTHROPIC_API_KEY",
         provider: "claude",
         description: "โมเดล Anthropic Claude Sonnet 5 Cloud API ประสิทธิภาพระดับท็อป (ใช้ ANTHROPIC_API_KEY ในไฟล์ .env)",
         isFineTuned: true
-    },
-    {
-        id: "gpt-4o",
-        name: "OpenAI GPT-4o (Cloud API)",
-        badge: "⚡ GPT-4o Cloud 🔑 ใช้ OPENAI_API_KEY",
-        provider: "openai",
-        description: "โมเดลคลาวด์ OpenAI GPT-4o ประสิทธิภาพสูง (ใช้ OPENAI_API_KEY ในไฟล์ .env)"
     }
 ];
 
