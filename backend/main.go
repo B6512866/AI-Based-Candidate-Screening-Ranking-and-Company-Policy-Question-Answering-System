@@ -21,6 +21,12 @@ import (
 
 func startTyphoonAI() {
 	go func() {
+		_, errPath := exec.LookPath("python")
+		if errPath != nil {
+			log.Println("ℹ️ Local Python executable not found in PATH; skipping local Python auto-start. (Using Cloud AI / Remote Typhoon API)")
+			return
+		}
+
 		client := http.Client{Timeout: 2 * time.Second}
 		resp, err := client.Get("http://127.0.0.1:8000/health")
 		if err == nil && resp != nil && resp.StatusCode == 200 {

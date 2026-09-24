@@ -60,7 +60,7 @@ interface AnalysisResult {
 
 export default function ScreeningPage() {
     const location = useLocation();
-    const [selectedModel, setSelectedModel] = useState<string>("typhoon-v2.5-instruct");
+    const [selectedModel, setSelectedModel] = useState<string>("gemini-3.5-flash");
     const [resumeText, setResumeText] = useState("");
     const [jobDesc, setJobDesc] = useState("");
     const [jobCriteria, setJobCriteria] = useState("");
