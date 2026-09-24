@@ -15,7 +15,7 @@ interface Document {
 }
 
 export default function KnowledgePage() {
-    const [selectedModel, setSelectedModel] = useState<string>("ft:gpt-4o-mini-2024-07-18:hireai:resume-json-5k:v2");
+    const [selectedModel, setSelectedModel] = useState<string>("gemini-3.5-flash");
     const [docs, setDocs] = useState<Document[]>([]);
     const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
     const [editFilename, setEditFilename] = useState("");
