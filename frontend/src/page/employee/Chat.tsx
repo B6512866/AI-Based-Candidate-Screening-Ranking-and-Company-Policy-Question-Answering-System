@@ -22,7 +22,7 @@ function generateSessionId() {
 
 async function checkTyphoon(): Promise<boolean> {
     try {
-        const r = await fetch(`${TYPHOON_API}/health`, { signal: AbortSignal.timeout(5000) });
+        const r = await fetch(`${TYPHOON_API}/health`, { signal: AbortSignal.timeout(10000) });
         const d = await r.json();
         return d.status === "ok" || d.chat_model === true;
     } catch {

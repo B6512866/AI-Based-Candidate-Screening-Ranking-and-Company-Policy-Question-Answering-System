@@ -495,7 +495,7 @@ export default function ScreeningPage() {
             return;
         }
         try {
-            const r = await fetch(`${TYPHOON_API}/health`, { signal: AbortSignal.timeout(3000) });
+            const r = await fetch(`${TYPHOON_API}/health`, { signal: AbortSignal.timeout(10000) });
             const d = await r.json();
             setOnline(d.status === "ok" || d.chat_model === true);
         } catch {
