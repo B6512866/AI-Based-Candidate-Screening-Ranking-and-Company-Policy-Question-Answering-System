@@ -125,6 +125,8 @@ func main() {
 				req.Host = typhoonURL.Host
 				req.URL.Scheme = typhoonURL.Scheme
 				req.URL.Host = typhoonURL.Host
+				// Required for LocalTunnel to bypass browser reminder page
+				req.Header.Set("Bypass-Tunnel-Reminder", "true")
 			}
 			// Strip CORS headers from upstream to prevent duplicate headers conflict in browser
 			proxy.ModifyResponse = func(resp *http.Response) error {
@@ -144,7 +146,9 @@ func main() {
 		// ── Dedicated Typhoon health check (no CORS issue) ───────────────────────────
 		api.GET("/typhoon-status", func(c *gin.Context) {
 			client := &http.Client{Timeout: 8 * time.Second}
-			resp, err := client.Get(typhoonTarget + "/health")
+			req, _ := http.NewRequest("GET", typhoonTarget+"/health", nil)
+			req.Header.Set("Bypass-Tunnel-Reminder", "true")
+			resp, err := client.Do(req)
 			if err != nil || resp == nil {
 				c.JSON(200, gin.H{"online": false, "error": "unreachable"})
 				return
