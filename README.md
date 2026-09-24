@@ -184,9 +184,9 @@ npm run dev
 
 ---
 
-## 🌐 การเชื่อมต่อโมเดล Local ออกสู่ภายนอก (Cloudflare Tunnel)
+## 🌐 การเชื่อมต่อโมเดล Local ออกสู่ภายนอก (LocalTunnel)
 
-หากรันโมเดล AI ในเครื่องและต้องการให้เว็บไซต์บน Vercel เรียกใช้งานโมเดลได้:
+หากรันโมเดล AI ในเครื่องและต้องการให้เว็บไซต์บน Vercel และ Render เรียกใช้งานโมเดลได้:
 
 **1. รัน Typhoon AI Engine (Terminal ที่ 1):**
 ```bash
@@ -194,11 +194,11 @@ cd backend/typhoon
 python main.py
 ```
 
-**2. เปิด Cloudflare Tunnel เชื่อมต่อออกสู่ภายนอก (Terminal ที่ 2):**
+**2. เปิด LocalTunnel เชื่อมต่อออกสู่ภายนอก (Terminal ที่ 2):**
 ```bash
-npx cloudflared tunnel --protocol http2 --url http://localhost:8000
+npx localtunnel --port 8000 --subdomain hireai-typhoon
 ```
-นำ URL ที่ได้จาก Cloudflare (เช่น `https://xxx.trycloudflare.com`) ไปใส่ในตัวแปร Environment `VITE_TYPHOON_API_URL` บน Vercel
+จะได้ URL คงที่: `https://hireai-typhoon.loca.lt` สำหรับเชื่อมต่อกับระบบบน Vercel และ Render
 
 ---
 
