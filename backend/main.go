@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/exec"
-
 	"path/filepath"
 	"time"
 
@@ -107,6 +108,21 @@ func main() {
 			fileURL := fmt.Sprintf("/api/upload/%s", newFilename)
 			ctx.JSON(200, gin.H{"url": fileURL})
 		})
+
+		// ── Reverse Proxy for Typhoon AI Service ────────────────────────────────────
+		typhoonTarget := os.Getenv("TYPHOON_API_URL")
+		if typhoonTarget == "" {
+			typhoonTarget = "http://127.0.0.1:8000"
+		}
+		typhoonURL, errUrl := url.Parse(typhoonTarget)
+		if errUrl == nil {
+			proxy := httputil.NewSingleHostReverseProxy(typhoonURL)
+			api.Any("/typhoon/*proxyPath", func(c *gin.Context) {
+				c.Request.URL.Path = c.Param("proxyPath")
+				c.Request.Host = typhoonURL.Host
+				proxy.ServeHTTP(c.Writer, c.Request)
+			})
+		}
 
 		routes.SetupJobRoutes(api, jobController)
 

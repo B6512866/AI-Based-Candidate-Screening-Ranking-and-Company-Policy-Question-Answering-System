@@ -32,11 +32,10 @@ export const getWsUrl = () => {
 
 export const getTyphoonApiUrl = () => {
   const envTyphoon = import.meta.env.VITE_TYPHOON_API_URL;
-  if (envTyphoon && !envTyphoon.includes("localhost") && !envTyphoon.includes("127.0.0.1")) {
+  if (envTyphoon && envTyphoon.startsWith("http")) {
     return envTyphoon;
   }
-  const host = getBackendHost();
-  return `http://${host}:8000`;
+  return `${getApiUrl()}/typhoon`;
 };
 
 const apiClient = axios.create({
