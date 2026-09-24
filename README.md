@@ -188,6 +188,13 @@ npm run dev
 
 หากรันโมเดล AI ในเครื่องและต้องการให้เว็บไซต์บน Vercel เรียกใช้งานโมเดลได้:
 
+**1. รัน Typhoon AI Engine (Terminal ที่ 1):**
+```bash
+cd backend/typhoon
+python main.py
+```
+
+**2. เปิด Cloudflare Tunnel เชื่อมต่อออกสู่ภายนอก (Terminal ที่ 2):**
 ```bash
 npx cloudflared tunnel --protocol http2 --url http://localhost:8000
 ```
