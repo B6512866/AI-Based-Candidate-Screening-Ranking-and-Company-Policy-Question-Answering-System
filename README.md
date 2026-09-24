@@ -1,9 +1,10 @@
 # AI-Based Candidate Screening, Ranking and Company Policy Question Answering System
 ### ระบบคัดกรองพร้อมจัดลำดับผู้สมัครงานและระบบตอบคำถามด้านนโยบายระเบียบองค์กรด้วยปัญญาประดิษฐ์
 
-[![Frontend](https://img.shields.io/badge/Frontend-Vercel-black?logo=vercel)](https://ai-based-candidate-screening-rankin.vercel.app)
-[![Backend](https://img.shields.io/badge/Backend-Render-46E3B7?logo=render)](https://ai-based-candidate-screening-ranking-and.onrender.com)
+[![Frontend](https://img.shields.io/badge/Frontend-Vercel-black?logo=vercel)](https://vercel.com)
+[![Backend](https://img.shields.io/badge/Backend-Render-46E3B7?logo=render)](https://render.com)
 [![Database](https://img.shields.io/badge/Database-Supabase%20PostgreSQL-3ECF8E?logo=supabase)](https://supabase.com)
+[![Email](https://img.shields.io/badge/Email-Resend-black?logo=resend)](https://resend.com)
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go)](https://golang.org)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev)
 [![Typhoon AI](https://img.shields.io/badge/AI-Typhoon%202.5%20%7C%20Gemini-orange)](#)
@@ -15,11 +16,12 @@
 
 ---
 
-## 🌐 ลิงก์ระบบใช้งานจริง (Live Production)
+## 🌐 Cloud Services & Infrastructure
 
-* **🖥️ เว็บไซต์หลัก (Frontend - Vercel):** [https://ai-based-candidate-screening-rankin.vercel.app](https://ai-based-candidate-screening-rankin.vercel.app)
-* **⚙️ เซิร์ฟเวอร์ API (Backend - Render):** [https://ai-based-candidate-screening-ranking-and.onrender.com](https://ai-based-candidate-screening-ranking-and.onrender.com)
-* **🗄️ ฐานข้อมูลคลาวด์ (Database):** Hosted on **Supabase** (PostgreSQL 15)
+* **Supabase (Database):** [https://supabase.com](https://supabase.com)
+* **Vercel (Frontend Hosting):** [https://vercel.com](https://vercel.com)
+* **Render (Backend Hosting):** [https://render.com](https://render.com)
+* **Resend (Email Service):** [https://resend.com](https://resend.com)
 
 ---
 
