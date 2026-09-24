@@ -1,8 +1,25 @@
 # AI-Based Candidate Screening, Ranking and Company Policy Question Answering System
-# ระบบคัดกรองพร้อมจัดลำดับผู้สมัครงานและระบบตอบคำถามด้านนโยบายระเบียบองค์กรด้วยปัญญาประดิษฐ์ 
+### ระบบคัดกรองพร้อมจัดลำดับผู้สมัครงานและระบบตอบคำถามด้านนโยบายระเบียบองค์กรด้วยปัญญาประดิษฐ์
 
-ระบบคัดกรองผู้สมัครงานด้วย AI ที่ช่วยลดภาระงาน HR ตั้งแต่การอ่านใบสมัครโดยการคัดกรองผู้สมัครแบบจัด Terilist ด้วย Typhoon OCR
-ระบบตอบคำถามด้านนโยบายบริษัทหรือกฎระเบียบองค์กรด้วย Typhoon 2.5 Chatbot ตลอด 24 ชั่วโมง
+[![Frontend](https://img.shields.io/badge/Frontend-Vercel-black?logo=vercel)](https://ai-based-candidate-screening-rankin.vercel.app)
+[![Backend](https://img.shields.io/badge/Backend-Render-46E3B7?logo=render)](https://ai-based-candidate-screening-ranking-and.onrender.com)
+[![Database](https://img.shields.io/badge/Database-Supabase%20PostgreSQL-3ECF8E?logo=supabase)](https://supabase.com)
+[![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go)](https://golang.org)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev)
+[![Typhoon AI](https://img.shields.io/badge/AI-Typhoon%202.5%20%7C%20Gemini-orange)](#)
+
+ระบบเว็บแอปพลิเคชันสำหรับฝ่ายทรัพยากรบุคคล (HR) และพนักงาน ที่ผสานพลังของ **AI (Typhoon 2.5, Typhoon OCR และ Google Gemini)** เพื่อ:
+1. **คัดกรองผู้สมัครงานอัตโนมัติ (Candidate Screening & Ranking):** สกัดข้อมูลเรซูเม่อัตโนมัติด้วย OCR พร้อมวิเคราะห์จับคู่ทักษะและจัดระดับ Tier-list (Tier S, A, B, C)
+2. **ระบบตอบคำถามนโยบายและสวัสดิการองค์กร (HR Policy Advisor 24/7):** ผู้ช่วย AI Chatbot อัจฉริยะแบบเต็มจอสำหรับพนักงานในการสอบถามกฎระเบียบ นโยบาย และสวัสดิการบริษัท
+3. **ระบบจัดการสัมภาษณ์และแจ้งเตือน:** ส่งอีเมลแจ้งผลการคัดกรองและนัดหมายสัมภาษณ์งานผ่านระบบ Cloud Email API
+
+---
+
+## 🌐 ลิงก์ระบบใช้งานจริง (Live Production)
+
+* **🖥️ เว็บไซต์หลัก (Frontend - Vercel):** [https://ai-based-candidate-screening-rankin.vercel.app](https://ai-based-candidate-screening-rankin.vercel.app)
+* **⚙️ เซิร์ฟเวอร์ API (Backend - Render):** [https://ai-based-candidate-screening-ranking-and.onrender.com](https://ai-based-candidate-screening-ranking-and.onrender.com)
+* **🗄️ ฐานข้อมูลคลาวด์ (Database):** Hosted on **Supabase** (PostgreSQL 15)
 
 ---
 
@@ -17,234 +34,181 @@
 
 ---
 
-## 📂 Project Resources
+## 📂 แหล่งข้อมูลโครงการ (Project Resources)
 
-### 📁 เอกสารและไฟล์โครงการ
+* 📁 **Google Drive (รวมเอกสารทั้งหมด):** [คลิกเพื่อเปิดไดรฟ์](https://drive.google.com/drive/folders/1e0hGde6mezr3--_qogKZiiOKSeqsBlQV)
+* 🎨 **Figma Design (UI/UX):** [คลิกเพื่อเปิด Figma](https://www.figma.com/design/V971pjpu3dWQurRk6iDN2J/Capstone-Project?node-id=0-1&p=f)
+* 🗂️ **System Diagram & ER Diagram (Draw.io):** [คลิกเพื่อเปิด Diagram](https://app.diagrams.net/#G1i2sgSSXXMStjnNqd5lQICJVYMljOgWD8#%7B%22pageId%22%3A%223Pbtw5pC1sATcA8mYLLV%22%7D)
+* 📊 **สไลด์นำเสนอ (Canva Presentation):** [คลิกเพื่อเปิดสไลด์](https://www.canva.com/design/DAHJzGoEurk/ozo62N15eb9iaf3uQIYT1g/edit)
 
-* Google Drive (รวมเอกสารทั้งหมด)
-  https://drive.google.com/drive/folders/1e0hGde6mezr3--_qogKZiiOKSeqsBlQV
+---
 
-### 🎨 UI/UX Design
-
-* Figma Design
-  https://www.figma.com/design/V971pjpu3dWQurRk6iDN2J/Capstone-Project?node-id=0-1&p=f
-
-### 🗂️ Database & System Diagram
-
-* Draw.io (ER Diagram / Data Flow Diagram)
-  https://app.diagrams.net/#G1i2sgSSXXMStjnNqd5lQICJVYMljOgWD8#%7B%22pageId%22%3A%223Pbtw5pC1sATcA8mYLLV%22%7D
-
-### 📊 Presentation
-
-* Canva Presentation
-  https://www.canva.com/design/DAHJzGoEurk/ozo62N15eb9iaf3uQIYT1g/edit
-  
 ## 🔑 บัญชีเข้าใช้งานสำหรับทดสอบ (Default Accounts)
 
-เมื่อสั่งรันครั้งแรก ระบบจะทำการสร้างข้อมูลเริ่มต้น (Seed Data) ให้อัตโนมัติ สามารถใช้บัญชีด้านล่างเพื่อทดสอบระบบได้ทันที:
+ระบบมีข้อมูลเริ่มต้น (Seed Data) สำหรับการทดสอบ ดังนี้:
 
-| สิทธิ์การใช้งาน (Role) | อีเมล (Email) | รหัสผ่าน (Password) | หน้าเริ่มต้น |
-| ---------------------- | ------------- | -------------------- | ------------ |
-| **HR Manager**         | `hr@gmail.com` | `password123`        | `/hr/dashboard` |
-| **Employee (พนักงาน)**  | `test@gmail.com`| `password123`        | `/employee/chat` |
-
----
-
-## สิ่งที่ต้องติดตั้งก่อนเริ่ม (Prerequisites)
-
-* **Python 3.10+** (สำหรับรัน Typhoon AI Engine)
-* **Node.js LTS** เช่น เวอร์ชัน 20.x หรือ 22.x (สำหรับรัน Frontend React)
-* **Go 1.20+** (สำหรับรัน Backend API)
-* **Docker & Docker Compose** (สำหรับรัน PostgreSQL Database - แนะนำให้ติดตั้งพร้อมกับเปิดใช้งาน WSL 2)
+| สิทธิ์การใช้งาน (Role) | อีเมล (Email) | รหัสผ่าน (Password) | สิทธิ์และหน้าที่ |
+| ---------------------- | ------------- | -------------------- | ---------------- |
+| **HR Manager**         | `hr@gmail.com` | `password123`        | จัดการตำแหน่งงาน, คัดกรองผู้สมัคร, จัดสัมภาษณ์, จัดการเอกสารนโยบาย |
+| **Employee (พนักงาน)**  | `test@gmail.com`| `password123`        | ใช้งาน AI Advisor ตอบคำถามนโยบายและสวัสดิการ, ตรวจสอบข้อมูลส่วนตัว |
 
 ---
 
-## 🖥️ ความต้องการของระบบ (Hardware Requirements)
+## 🛠️ เทคโนโลยีที่ใช้ (Tech Stack)
 
-สำหรับการรันโมเดล **Typhoon AI** (Typhoon 2.5 & Typhoon OCR):
+### Frontend
+- **Framework:** React 19, TypeScript, Vite
+- **Styling:** Tailwind CSS, Lucide React Icons
+- **Deployment:** Vercel
+
+### Backend
+- **Language:** Go (Golang) 1.22+
+- **Framework:** Gin Web Framework, GORM
+- **Email Service:** Unified Multi-Engine (Resend REST API, Brevo REST API, SMTP) ผ่าน HTTPS Port 443
+- **Deployment:** Render
+
+### Database & Storage
+- **Cloud Database:** Supabase (PostgreSQL 15 พร้อม Connection Pooler)
+- **Local Database (ตัวเลือกเสริม):** PostgreSQL 15 ผ่าน Docker Compose
+
+### AI & Machine Learning
+- **Typhoon AI Engine:** Python FastAPI, PyTorch (CUDA 12.8 / Ampere / Ada / Blackwell), Hugging Face Transformers
+  - **Typhoon 2.5 (1.5B/8B):** โมเดลสนทนาภาษาไทยสำหรับตอบคำถามนโยบายและวิเคราะห์ทักษะ
+  - **Typhoon OCR 1.5:** โมเดล Vision-Language สกัดข้อความจากเรซูเม่และเอกสาร PDF/รูปภาพ
+- **Google Gemini API:** Gemini 1.5 Flash / Gemini 2.5 Flash สำหรับการประมวลผลบนคลาวด์ 24/7
+
+---
+
+## 🖥️ ความต้องการของระบบสำหรับการรันโมเดล Local (Hardware Requirements)
+
+*(กรณีต้องการรันโมเดล Typhoon บนเครื่องตนเอง)*
 
 | อุปกรณ์ | สเปคขั้นต่ำ (Minimum) | สเปคแนะนำ (Recommended) |
 | ------- | ---------------------- | ------------------------ |
-| **CPU** | Intel Core i5 (Gen 10+) / Ryzen 5 (3000+) | Intel Core i7 (Gen 12+) / Ryzen 7 (5000+) |
+| **CPU** | Intel Core i5 (Gen 10+) / Ryzen 5 (3000+) | Intel Core i7 (Gen 12+) / Ryzen 7 (5000+) ขึ้นไป |
 | **RAM** | 16 GB | 32 GB |
-| **GPU** | NVIDIA GTX 1660 Ti / RTX 2060 (VRAM 6 GB) | NVIDIA RTX 3060 (VRAM 12 GB+) ขึ้นไป (ตระกูล RTX 40/50 รองรับสมบูรณ์) |
+| **GPU** | NVIDIA GTX 1660 Ti / RTX 2060 (VRAM 6 GB) | NVIDIA RTX 3060 / 4060 / 5060 (VRAM 12 GB+) |
 | **Storage** | SSD พื้นที่ว่าง 20 GB | NVMe M.2 SSD พื้นที่ว่าง 30 GB |
 
 ---
 
-## ขั้นตอนการเริ่มใช้งาน (Step-by-Step Installation)
+## 🚀 ขั้นตอนการติดตั้งและรันในเครื่อง (Local Setup)
 
-### ขั้นตอนที่ 1: ตั้งค่าระบบฐานข้อมูล (Database Setup)
-1. เปิดโปรแกรม Docker Desktop ให้เรียบร้อย
-2. รันคำสั่งเชื่อมต่อฐานข้อมูลโดย PostgreSQL ด้วย Docker Compose ในหน้าโฟลเดอร์หลักของโปรเจกต์:
-   ```bash
-   docker compose up -d
-   ```
-3. สร้างไฟล์ `.env` ในโฟลเดอร์ `backend/` และตั้งค่าดังนี้:
-   ```env
-   DB_HOST=127.0.0.1
-   DB_PORT=5432
-   DB_USER=postgres
-   DB_PASSWORD=postgres123
-   DB_NAME=hr_system
-   JWT_SECRET=mysecretkey123
-   ```
+### สิ่งที่ต้องติดตั้งล่วงหน้า (Prerequisites)
+1. **Node.js LTS (v20+ หรือ v22+)**
+2. **Go (v1.22+)**
+3. **Python (v3.10+)**
+4. **Docker Desktop** (หากต้องการรัน PostgreSQL ภายในเครื่อง)
 
-### ขั้นตอนที่ 2: ติดตั้งและตั้งค่า Python AI Engine
-*(หากใช้ระบบ Windows แนะนำให้เปิดสิทธิ์สคริปต์บน PowerShell ก่อนโดยรัน `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`)*
+---
 
-1. สร้าง Virtual Environment (แนะนำเพื่อไม่ให้ปะปนกับ Python หลักของเครื่อง):
-   ```bash
-   python -m venv backend/.venv
-   ```
-2. เปิดใช้งาน (Activate) Virtual Environment:
-   * **สำหรับ CMD:** `backend\.venv\Scripts\activate.bat`
-   * **สำหรับ PowerShell:** `backend\.venv\Scripts\Activate.ps1`
-3. ติดตั้งแพ็กเกจไลบรารี:
-   * **กรณีใช้งานร่วมกับการ์ดจอ GPU (NVIDIA RTX 40/50 series เช่น RTX 5060):**
-     ```bash
-     # ลบ torch ตัวเก่าออกก่อนเพื่อป้องกันการชนกันของเวอร์ชัน
-     pip uninstall torch torchvision torchaudio -y
-     
-     # ติดตั้ง PyTorch เวอร์ชัน CUDA 12.8 (cu128)
-     pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
-     
-     # ติดตั้ง bitsandbytes เวอร์ชันทดสอบล่าสุด
-     pip install --upgrade --pre bitsandbytes
-     
-     # อัปเดต transformers เพื่อให้รู้จักโครงสร้าง ocr (qwen3_vl)
-     pip install --upgrade transformers
-     
-     # ติดตั้ง dependencies อื่นๆ
-     pip install -r backend/typhoon/requirements.txt
-     ```
-   * **กรณีใช้งานบน CPU-only (ไม่แนะนำเพราะรันช้ามาก):**
-     ```bash
-     pip install -r backend/typhoon/requirements.txt
-     ```
-4. ดาวน์โหลดโมเดล AI ของ Typhoon จาก Hugging Face ล่วงหน้าก่อนเปิดระบบ:
-   ```bash
-   python backend/typhoon/download_models.py
-   ```
-5. ในไฟล์ [backend/typhoon/main.py](file:///c:/Users/เจษฎา/Desktop/Final/AI-Based-Candidate-Screening-Ranking-and-Company-Policy-Question-Answering-System/backend/typhoon/main.py) ตั้งค่าบรรทัดที่ 33 ให้เป็น `LOAD_MODELS = True` เพื่อสั่งให้โหลดโมเดล AI ตอนสตาร์ทระบบ
+### ขั้นตอนที่ 1: ตั้งค่าฐานข้อมูล (Database)
 
-### ขั้นตอนที่ 3: สตาร์ท Backend API (Go API & Python AI Engine)
-รันคำสั่งด้านล่างนี้ในโฟลเดอร์ `backend/`:
-```bash
-cd backend
-go run main.go
-```
-*💡 **หมายเหตุ:** `go run main.go` จะทำการสตาร์ททั้ง **Go Backend (Port 8080)** และ **Typhoon AI Service (Port 8000)** ควบคู่กันไปให้อัตโนมัติ*
+#### วิธีที่ A: ใช้ Cloud Database ของ Supabase (แนะนำ - ไม่ต้องลง Docker)
+นำค่า Connection จาก Supabase มาใส่ใน `backend/.env`
 
-### ขั้นตอนที่ 4: ติดตั้งและสตาร์ท Frontend (React Vite)
-1. สร้างไฟล์ `.env` ในโฟลเดอร์ `frontend/` และตั้งค่าดังนี้:
-   ```env
-   VITE_API_URL=http://localhost:8080/api
-   VITE_WS_URL=ws://localhost:8080
-   VITE_TYPHOON_API_URL=http://localhost:8000
-   ```
-2. รันคำสั่งด้านล่างนี้ในโฟลเดอร์ `frontend/`:
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
-
----ขั้นตอนการใช้งาน
-
-### 1. เริ่มเชื่อมต่อฐานข้อมูลโดย PostgreSQL ต่อเข้ากับ Docker Compose
-
+#### วิธีที่ B: ใช้ Local Docker
 ```bash
 docker compose up -d
 ```
 
-> การตั้งค่า database อยู่ใน `.env` file
-
-สร้าง `.env` ใน folder `backend/` และใส่ค่าดังนี้:
-
+สร้างไฟล์ `backend/.env`:
 ```env
+# การเชื่อมต่อ Database (เลือก Local หรือ Supabase)
 DB_HOST=127.0.0.1
 DB_PORT=5432
 DB_USER=postgres
 DB_PASSWORD=postgres123
 DB_NAME=hr_system
-JWT_SECRET=mysecretkey123
+JWT_SECRET=your_jwt_secret_key_123
+
+# Cloud AI & Email API Keys
+GEMINI_API_KEY=your_gemini_api_key
+RESEND_API_KEY=your_resend_api_key
+BREVO_API_KEY=your_brevo_api_key
+SMTP_EMAIL=your_email@gmail.com
+SMTP_PASSWORD=your_app_password
 ```
 
-### 2. การใช้งาน Backend
+---
+
+### ขั้นตอนที่ 2: ติดตั้งและเปิด Python AI Engine (Typhoon)
+
+```bash
+# 1. สร้างและเปิดใช้งาน Virtual Environment
+cd backend
+python -m venv .venv
+
+# สำหรับ Windows PowerShell:
+.\.venv\Scripts\Activate.ps1
+# สำหรับ Windows CMD:
+.\.venv\Scripts\activate.bat
+
+# 2. ติดตั้ง Dependencies
+pip install -r typhoon/requirements.txt
+
+# 3. ดาวน์โหลดโมเดล Typhoon ล่วงหน้า
+python typhoon/download_models.py
+```
+
+---
+
+### ขั้นตอนที่ 3: สตาร์ท Backend API (Go & Python)
 
 ```bash
 cd backend
-pip install -r "c:\Users\เจษฎา\Desktop\Final\AI-Based-Candidate-Screening-Ranking-and-Company-Policy-Question-Answering-System\backend\typhoon\requirements.txt"
 go run main.go
-
-วิธีเปิดปิด model
-LOAD_MODELS = False #line 33
 ```
-> 💡 **หมายเหตุเกี่ยวกับการดาวน์โหลดโมเดล AI:**
-> - ไฟล์โมเดลมีขนาดใหญ่ จึงไม่ได้ถูก commit ขึ้น GitHub 
-> - เมื่อสั่งรันครั้งแรก ระบบจะทำการ **ดาวน์โหลด Weights ของโมเดลจาก Hugging Face ให้อัตโนมัติ** ขอเพียงเครื่องเชื่อมต่ออินเทอร์เน็ต
-> - หากต้องการดาวน์โหลดโมเดลล่วงหน้า สามารถรันสคริปต์: `python typhoon/download_models.py`
-> 💡 **หมายเหตุ:** `go run main.go` จะทำการสตาร์ททั้ง **Go Backend (Port 8080)** และ **Typhoon AI Service (Port 8000)** ควบคู่กันไปให้อัตโนมัติ
+*ระบบจะเปิดทั้ง **Go API (Port 8080)** และ **Typhoon Engine (Port 8000)** โดยอัตโนมัติ*
 
-### 4. รัน Frontend Service (React Vite)
-สร้างไฟล์ .env ใน frontend
-```bash
-แบบปกติ
+---
+
+### ขั้นตอนที่ 4: ติดตั้งและสตาร์ท Frontend (React Vite)
+
+สร้างไฟล์ `frontend/.env`:
+```env
 VITE_API_URL=http://localhost:8080/api
-VITE_WS_URL=ws://localhost:8080
+VITE_WS_URL=ws://localhost:8080/ws
 VITE_TYPHOON_API_URL=http://localhost:8000
-
-แบบ Tailscale
-VITE_API_URL=http://100.123.193.113:5173/api
-VITE_WS_URL=ws://100.123.193.113:5173/ws
-VITE_TYPHOON_API_URL=http://100.123.193.113:5173
 ```
 
+ติดตั้งและเริ่มทำงาน:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-
-
----
-
-## 📂 Project Resources
-
-* **Google Drive (รวมเอกสารทั้งหมด):** [ลิงก์ไดรฟ์](https://drive.google.com/drive/folders/1e0hGde6mezr3--_qogKZiiOKSeqsBlQV)
-* **Figma Design (UI/UX):** [ลิงก์ Figma](https://www.figma.com/design/V971pjpu3dWQurRk6iDN2J/Capstone-Project?node-id=0-1&p=f)
-* **Draw.io (System Diagram):** [ลิงก์ Diagram](https://app.diagrams.net/#G1i2sgSSXXMStjnNqd5lQICJVYMljOgWD8#%7B%22pageId%22%3A%223Pbtw5pC1sATcA8mYLLV%22%7D)
-* **Canva Presentation:** [ลิงก์ Presentation](https://www.canva.com/design/DAHJzGoEurk/ozo62N15eb9iaf3uQIYT1g/edit)
+เปิดบราวเซอร์ไปที่: `http://localhost:5173`
 
 ---
 
-## 🛠️ Tech Stack
+## 🌐 การเชื่อมต่อโมเดล Local ออกสู่ภายนอก (Cloudflare Tunnel)
 
-### Backend & AI
-* **Go** (Gin Framework, GORM)
-* **Python 3.10** (FastAPI, Transformers, PyTorch)
-* **Typhoon AI** (Typhoon 2.5 & Typhoon OCR)
-
-### Frontend
-* **React 19** & **TypeScript**
-* **Vite** & **TailwindCSS**
-* **Lucide React** (Icons)
-
-### Database & Infrastructure
-* **PostgreSQL 15**
-* **Docker** & **Docker Compose**
-
----
-
-## 🧹 การจัดการข้อมูล (Database Maintenance)
-
-หากต้องการรีเซ็ตหรือลบข้อมูลในฐานข้อมูล:
+หากรันโมเดล AI ในเครื่องและต้องการให้เว็บไซต์บน Vercel เรียกใช้งานโมเดลได้:
 
 ```bash
-# หยุดการทำงาน containers
-docker compose down
+npx cloudflared tunnel --protocol http2 --url http://localhost:8000
+```
+นำ URL ที่ได้จาก Cloudflare (เช่น `https://xxx.trycloudflare.com`) ไปใส่ในตัวแปร Environment `VITE_TYPHOON_API_URL` บน Vercel
 
-# ลบข้อมูลใน volume ทั้งหมด (Reset Database)
+---
+
+## 🧹 การจัดการข้อมูล (Database Maintenance & Reset)
+
+### ล้างข้อมูลทดสอบ (Reset Test Data)
+โปรเจกต์มีสคริปต์สำหรับล้างข้อมูลผู้สมัครงาน, การสัมภาษณ์ และผลคะแนนคัดกรองทดสอบ **โดยยังคงรักษาบัญชีผู้ใช้หลัก (HR/Employee) และเอกสารนโยบายบริษัทเอาไว้**:
+
+```bash
+cd backend
+go run reset_db.go
+```
+
+### ล้างข้อมูลทั้งหมดใน Docker (Local Reset)
+```bash
 docker compose down -v
 ```
+
+---
+
+## 📄 License
+This project is licensed under the MIT License.
