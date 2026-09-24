@@ -198,7 +198,10 @@ python main.py
 ```bash
 npx localtunnel --port 8000 --subdomain hireai-typhoon
 ```
-จะได้ URL คงที่: `https://hireai-typhoon.loca.lt` สำหรับเชื่อมต่อกับระบบบน Vercel และ Render
+นำ URL ที่ได้ (เช่น `https://hireai-typhoon.loca.lt` หรือ URL สุ่มใหม่ที่ปรากฏในเทอร์มินัล) ไปอัปเดตใส่ใน Environment Variables:
+- **Vercel (Frontend):** ตั้งค่าตัวแปร `VITE_TYPHOON_API_URL` แล้วกด Redeploy
+- **Render (Backend):** ตั้งค่าตัวแปร `TYPHOON_API_URL` แล้วกด Save Changes
+*(หากรันคำสั่งแล้วได้ URL ใหม่ ให้คัดลอก URL ใหม่ไปอัปเดตที่ Vercel และ Render ทุกครั้ง)*
 
 ---
 
