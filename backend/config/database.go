@@ -19,7 +19,11 @@ func ConnectDatabase() {
 		Env.DBHost, Env.DBUser, Env.DBPass, Env.DBName, Env.DBPort,
 	)
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+	db, err := gorm.Open(postgres.New(postgres.Config{
+		DSN:                  dsn,
+		PreferSimpleProtocol: true, // 🛠️ ป้องกันข้อผิดพลาด Prepared Statement บน Supabase PgBouncer Pooler
+	}), &gorm.Config{
+		PrepareStmt:                              false,
 		DisableForeignKeyConstraintWhenMigrating: true,
 	})
 	if err != nil {

@@ -64,7 +64,7 @@ OCR_MODEL_ID  = "typhoon-ai/typhoon-ocr1.5-2b"
 
 # ─── Toggle AI Models ─────────────────────────────────────────────────────────
 # เปลี่ยน False → True เมื่อต้องการโหลด AI models
-LOAD_MODELS = False
+LOAD_MODELS = True
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ─── VRAM Auto-Unload Settings ────────────────────────────────────────────────
