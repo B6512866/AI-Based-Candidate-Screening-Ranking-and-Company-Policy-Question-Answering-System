@@ -124,11 +124,21 @@ func main() {
 				req.URL.Scheme = typhoonURL.Scheme
 				req.URL.Host = typhoonURL.Host
 			}
+			// Strip CORS headers from upstream to prevent duplicate headers conflict in browser
+			proxy.ModifyResponse = func(resp *http.Response) error {
+				resp.Header.Del("Access-Control-Allow-Origin")
+				resp.Header.Del("Access-Control-Allow-Methods")
+				resp.Header.Del("Access-Control-Allow-Headers")
+				resp.Header.Del("Access-Control-Allow-Credentials")
+				resp.Header.Del("Access-Control-Expose-Headers")
+				return nil
+			}
 			api.Any("/typhoon/*proxyPath", func(c *gin.Context) {
 				c.Request.URL.Path = c.Param("proxyPath")
 				proxy.ServeHTTP(c.Writer, c.Request)
 			})
 		}
+
 
 		routes.SetupJobRoutes(api, jobController)
 
