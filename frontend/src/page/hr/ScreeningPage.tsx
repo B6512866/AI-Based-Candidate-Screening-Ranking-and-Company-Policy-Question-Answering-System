@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { Upload, FileText, Briefcase, Sparkles, X, ChevronDown, ChevronUp, Wifi, WifiOff, RefreshCw, Copy, Check, Search, Trash2, Square } from "lucide-react";
 import { getalljobs, getapplications, updateApplicationScreening, deleteapplication, applyjob } from "../../services/jobPositionService";
-import apiClient, { getTyphoonApiUrl, getBackendBaseUrl } from "../../services/apiClient";
+import apiClient, { getTyphoonApiUrl, getApiUrl, getBackendBaseUrl } from "../../services/apiClient";
 import AIModelDropdown, { AVAILABLE_AI_MODELS } from "../../components/common/AIModelDropdown";
 
 const TYPHOON_API = getTyphoonApiUrl();
@@ -495,9 +495,10 @@ export default function ScreeningPage() {
             return;
         }
         try {
-            const r = await fetch(`${TYPHOON_API}/health`, { signal: AbortSignal.timeout(10000) });
+            // Use backend proxy endpoint to avoid browser CORS issues
+            const r = await fetch(`${getApiUrl()}/typhoon-status`, { signal: AbortSignal.timeout(12000) });
             const d = await r.json();
-            setOnline(d.status === "ok" || d.chat_model === true);
+            setOnline(d.online === true);
         } catch {
             setOnline(false);
         }

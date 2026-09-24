@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -138,6 +140,25 @@ func main() {
 				proxy.ServeHTTP(c.Writer, c.Request)
 			})
 		}
+
+		// ── Dedicated Typhoon health check (no CORS issue) ───────────────────────────
+		api.GET("/typhoon-status", func(c *gin.Context) {
+			client := &http.Client{Timeout: 8 * time.Second}
+			resp, err := client.Get(typhoonTarget + "/health")
+			if err != nil || resp == nil {
+				c.JSON(200, gin.H{"online": false, "error": "unreachable"})
+				return
+			}
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			var result map[string]interface{}
+			if err := json.Unmarshal(body, &result); err != nil {
+				c.JSON(200, gin.H{"online": false, "error": "bad response"})
+				return
+			}
+			status, _ := result["status"].(string)
+			c.JSON(200, gin.H{"online": status == "ok", "details": result})
+		})
 
 
 		routes.SetupJobRoutes(api, jobController)

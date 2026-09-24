@@ -3,7 +3,7 @@ import { useAuth } from "../../context/AuthContext";
 import { Send, Bot, Wifi, WifiOff, MessageSquare, Plus, Search, ChevronLeft, ChevronRight, Square } from "lucide-react";
 import { getallknowledge } from "../../services/knowledgeService";
 import { getChatHistory, saveChatMessage, getChatSessions, ChatSessionData } from "../../services/chatService";
-import { getTyphoonApiUrl } from "../../services/apiClient";
+import { getTyphoonApiUrl, getApiUrl } from "../../services/apiClient";
 import AIModelDropdown from "../../components/common/AIModelDropdown";
 
 const TYPHOON_API = getTyphoonApiUrl();
@@ -22,9 +22,10 @@ function generateSessionId() {
 
 async function checkTyphoon(): Promise<boolean> {
     try {
-        const r = await fetch(`${TYPHOON_API}/health`, { signal: AbortSignal.timeout(10000) });
+        // Use backend /api/typhoon-status to avoid CORS issues in browser
+        const r = await fetch(`${getApiUrl()}/typhoon-status`, { signal: AbortSignal.timeout(12000) });
         const d = await r.json();
-        return d.status === "ok" || d.chat_model === true;
+        return d.online === true;
     } catch {
         return false;
     }
