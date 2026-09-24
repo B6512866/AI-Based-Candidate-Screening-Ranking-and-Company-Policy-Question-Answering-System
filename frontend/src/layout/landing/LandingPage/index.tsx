@@ -10,7 +10,7 @@ import {
   CTASection,
   Footer,
 } from "../landing-components";
-import { LoginModal } from "../../auth/LoginPage";
+import { LoginModal } from "../../../page/auth/LoginPage";
 
 function LandingPage() {
   const location = useLocation();

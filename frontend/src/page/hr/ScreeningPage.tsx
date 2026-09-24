@@ -1,17 +1,56 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { Upload, FileText, Briefcase, Sparkles, X, ChevronDown, ChevronUp, Wifi, WifiOff, RefreshCw, Eye, FileCheck } from "lucide-react";
+import { Upload, FileText, Briefcase, Sparkles, X, ChevronDown, ChevronUp, Wifi, WifiOff, RefreshCw, Copy, Check, Search, Trash2, Square } from "lucide-react";
 import { getalljobs, getapplications, updateApplicationScreening, deleteapplication, applyjob } from "../../services/jobPositionService";
-import apiClient from "../../services/apiClient";
+import apiClient, { getTyphoonApiUrl, getApiUrl, getBackendBaseUrl } from "../../services/apiClient";
+import AIModelDropdown, { AVAILABLE_AI_MODELS } from "../../components/common/AIModelDropdown";
 
-const TYPHOON_API = import.meta.env.VITE_TYPHOON_API_URL || "http://localhost:8000";
+const TYPHOON_API = getTyphoonApiUrl();
 
-const SYSTEM_PROMPT = `คุณคือผู้เชี่ยวชาญด้าน HR วิเคราะห์ Resume ภาษาไทย กรุณาวิเคราะห์อย่างกระชับและรวดเร็ว:
+const isInvalidOrRandomName = (name: string): boolean => {
+    if (!name) return true;
+    const clean = name.trim();
+    if (clean.length < 2) return true;
+    if (/\d/.test(clean)) return true;
+    if (/^(test|dummy|sample|asdf|qwerty|null|undefined|123|abc|xxx|\.|\?|-)+$/i.test(clean)) return true;
+    if (!/[\u0E00-\u0E7Fa-zA-Z]/.test(clean)) return true;
+    return false;
+};
 
-1. **ข้อมูลผู้สมัคร** — ชื่อ-สกุล, อายุ (ปีที่จบ), สถานภาพ, ที่อยู่, เบอร์ติดต่อ, อีเมล, โซเชียลมีเดีย
-2. **คะแนนรวม (0-100)** — ให้คะแนนผู้สมัครเป็นตารางสรุปคะแนนตามเกณฑ์ประเมินที่ระบุเท่านั้น พร้อมเหตุผลสั้นๆ
+const SYSTEM_PROMPT = `คุณคือผู้เชี่ยวชาญด้าน HR Recruiter วิเคราะห์และประเมิน Resume ผู้สมัครงานภาษาไทยเทียบกับลักษณะงาน (JD) และเกณฑ์การคัดเลือก (Criteria) อย่างละเอียดและเที่ยงตรง
 
-ตอบเป็นภาษาไทย ใช้ headers และ bullet points ให้ชัดเจน ห้ามวิเคราะห์ส่วนอื่นๆ เช่น จุดเด่น จุดที่ควรพัฒนา หรือข้อแนะนำเพิ่มเติมเด็ดขาด`;
+หลักการวิเคราะห์และการประเมินคะแนน (สไตล์ Typhoon HR Recruiter):
+1. ในช่อง "เหตุผล" ให้เขียนวิเคราะห์แบบ HR มืออาชีพอย่างละเอียด เปรียบเทียบทักษะ/ประสบการณ์ใน Resume กับความต้องการของประกาศงาน (JD)
+2. หากเกณฑ์หลักประเมินได้ระดับ "ดี (100%)" ให้เขียนเฉพาะจุดแข็ง ทักษะ และหลักฐานใน Resume ที่สนับสนุนคะแนนเต็ม 100% เท่านั้น (ห้ามใส่เกณฑ์ย่อยที่ไม่เกี่ยวข้อง หรือระบุว่าขาดทักษะย่อยอื่นที่ไม่ได้เลือกลงมาในช่องเหตุผลเด็ดขาด)
+3. สำหรับเกณฑ์หลักแต่ละข้อ (Main Criteria) AI จะต้องประเมินและเลือกระดับเพียง 1 ใน 3 ระดับนี้เท่านั้น:
+   - "ดี (100%)" : มีทักษะและประสบการณ์ตรงตามประกาศงานอย่างชัดเจน (ได้คะแนนเต็ม เช่น 35/35, 25/25, 20/20, 5/5)
+   - "ปานกลาง (50%)" : มีความรู้พื้นฐาน หรือมีประสบการณ์ใกล้เคียงแต่ยังขาดทักษะบางส่วน (ได้ครึ่งหนึ่ง เช่น 18/35, 13/25, 10/20, 3/5)
+   - "แย่ (0%)" : ไม่มีข้อมูลใน Resume หรือทักษะไม่ตรงตามประกาศงานอย่างชัดเจน (ได้ 0 คะแนน เช่น 0/35, 0/25, 0/20, 0/5)
+4. ข้อห้ามเด็ดขาด (Strict Constraint):
+   - ห้ามคิดคะแนนเป็นเศษส่วนทศนิยม หรือเฉลี่ยเกณฑ์ย่อยเป็นเปอร์เซ็นต์มั่วๆ เช่น 83.33%, 66.66% หรือคิดคะแนนก้ำกึ่งอย่าง 21/25, 23/35, 8/25 เด็ดขาด!
+   - คะแนนของเกณฑ์หลักทุกข้อต้องเลือกเพียง 100%, 50%, หรือ 0% ของคะแนนเต็มเกณฑ์นั้นเท่านั้น!
+5. คะแนนรวมในบรรทัด "**รวมทั้งหมด**" ต้องเป็นผลรวมคะแนนของทุกเกณฑ์หลักบวกกันจริงๆ เสมอ (เป็นจำนวนเต็มเท่านั้น)
+
+กติกาการตอบกลับ (Strict Output Format):
+1. ต้องตอบกลับเฉพาะ 2 หัวข้อนี้เท่านั้นเรียงตามลำดับ ห้ามเพิ่มหัวข้ออื่นเด็ดขาด:
+   - "## 1. ข้อมูลผู้สมัคร"
+   - "## 2. คะแนนรวม (0–100)"
+
+2. ในส่วน "## 1. ข้อมูลผู้สมัคร" ให้แสดงเฉพาะ 2 บรรทัดนี้เท่านั้น:
+**ชื่อ-สกุล**: [ชื่อ-สกุล จาก DB หรือ Resume]
+**อีเมล**: [อีเมล จาก DB หรือ Resume]
+
+---
+
+3. ในส่วน "## 2. คะแนนรวม (0–100)" ให้ประเมินและแสดงผลในรูปแบบตาราง Markdown เท่านั้น:
+| เกณฑ์ | คะแนน | เหตุผล |
+|---|---|---|
+| [ชื่อเกณฑ์หลัก] | [คะแนนเต็ม 100% / คะแนนครึ่งหนึ่ง 50% / หรือ 0]/[คะแนนเต็ม] | [บทวิเคราะห์ HR อย่างละเอียด สรุปสิ่งที่พบใน Resume เทียบกับ JD พร้อมระบุระดับประเมิน ดี (100%), ปานกลาง (50%), หรือ แย่ (0%) ให้ชัดเจน] |
+| **รวมทั้งหมด** | [ผลรวมคะแนนทุกเกณฑ์]/100 | [สรุปภาพรวมผู้สมัคร 1-2 บรรทัด] |
+
+ข้อห้ามสำคัญ:
+- ห้ามย่อหรือเปลี่ยนชื่อเกณฑ์หลักในตารางเด็ดขาด
+- ให้เขียนเหตุผลให้อ่านง่าย มีความเป็นธรรมชาติของ HR วิเคราะห์ผู้สมัครจริง`;
 
 interface AnalysisResult {
     resumeName: string;
@@ -21,6 +60,7 @@ interface AnalysisResult {
 
 export default function ScreeningPage() {
     const location = useLocation();
+    const [selectedModel, setSelectedModel] = useState<string>("gemini-3.5-flash");
     const [resumeText, setResumeText] = useState("");
     const [jobDesc, setJobDesc] = useState("");
     const [jobCriteria, setJobCriteria] = useState("");
@@ -34,7 +74,7 @@ export default function ScreeningPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // ── Batch Screening states ──────────────────────────────────────
-    const [activeMode, setActiveMode] = useState<"single" | "batch">("single");
+    const [activeMode, setActiveMode] = useState<"single" | "batch">("batch");
     const [batchRoles, setBatchRoles] = useState<string[]>([]);
     const [selectedBatchRole, setSelectedBatchRole] = useState<string>("");
     const [batchResults, setBatchResults] = useState<any[]>([]);
@@ -42,11 +82,53 @@ export default function ScreeningPage() {
 
     // GORM integration states
     const [applicants, setApplicants] = useState<any[]>([]);
+    const [selectedAppIds, setSelectedAppIds] = useState<number[]>([]);
     const [loadingApplicants, setLoadingApplicants] = useState(false);
     const [batchAnalyzing, setBatchAnalyzing] = useState(false);
     const [analyzingStates, setAnalyzingStates] = useState<{ [key: number]: "idle" | "ocr" | "ai" | "saving" | "done" | "error" }>({});
-    const [openRawText, setOpenRawText] = useState<{ [key: number]: boolean }>({});
+
+    const toggleSelectApplicant = (appId: number) => {
+        setSelectedAppIds(prev =>
+            prev.includes(appId)
+                ? prev.filter(id => id !== appId)
+                : [...prev, appId]
+        );
+    };
+
+    const toggleSelectAllApplicants = () => {
+        if (selectedAppIds.length === applicants.length) {
+            setSelectedAppIds([]);
+        } else {
+            setSelectedAppIds(applicants.map(a => a.ID));
+        }
+    };
     const activeJobIdRef = useRef<string>("");
+    const abortControllerRef = useRef<AbortController | null>(null);
+    const isCancelledRef = useRef<boolean>(false);
+
+    const cancelAnalysis = () => {
+        isCancelledRef.current = true;
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+        setLoading(false);
+        setOcrLoading(false);
+        setBatchAnalyzing(false);
+        setAnalyzingStates({});
+        setResult(prev => prev && prev.streaming ? { ...prev, streaming: false, content: prev.content + "\n\n⚠️ [ยกเลิกการวิเคราะห์โดยผู้ใช้งาน]" } : null);
+
+        // 🔴 ถ้าใช้ local Typhoon model ให้ปล่อย VRAM ทันที
+        const isLocalModel = !selectedModel.toLowerCase().includes("claude") &&
+            !selectedModel.toLowerCase().includes("gpt") &&
+            !selectedModel.toLowerCase().includes("gemini") &&
+            !selectedModel.startsWith("ft:");
+        if (isLocalModel) {
+            fetch(`${TYPHOON_API}/model/unload?which=chat`, { method: "POST" })
+                .then(() => console.log("[VRAM] Local model unloaded after cancel"))
+                .catch(() => { /* ไม่แสดง error ถ้า unload ไม่สำเร็จ */ });
+        }
+    };
 
     // Manual Candidate Entry States
     const [showManualAddModal, setShowManualAddModal] = useState(false);
@@ -64,22 +146,62 @@ export default function ScreeningPage() {
     const [manualSubmitting, setManualSubmitting] = useState(false);
     const [manualError, setManualError] = useState("");
 
-    const parseCriteria = (text: string) => {
+    // Raw OCR Viewer Modal States
+    const [ocrModalOpen, setOcrModalOpen] = useState(false);
+    const [ocrModalCandidateName, setOcrModalCandidateName] = useState("");
+    const [ocrModalText, setOcrModalText] = useState("");
+    const [ocrModalAppObj, setOcrModalAppObj] = useState<any>(null);
+    const [ocrSearchQuery, setOcrSearchQuery] = useState("");
+    const [ocrCopied, setOcrCopied] = useState(false);
+
+    const openOcrModal = (app: any) => {
+        const candidateName = app.Candidate
+            ? `${app.Candidate.first_name} ${app.Candidate.last_name}`
+            : "ผู้สมัคร";
+        let txt = app.ResumeText || app.resume_text || "";
+        if (txt.trim().startsWith("ข้อมูลประวัติย่อ") || txt.includes("/api/upload/")) {
+            txt = "ยังไม่ได้ทำการสแกนข้อความ OCR (กรุณากด 'วิเคราะห์เดี่ยว' เพื่อเริ่มสแกนรูปภาพและถอดข้อความ)";
+        }
+        setOcrModalCandidateName(candidateName);
+        setOcrModalText(txt);
+        setOcrModalAppObj(app);
+        setOcrSearchQuery("");
+        setOcrCopied(false);
+        setOcrModalOpen(true);
+    };
+
+    const copyOcrToClipboard = (textToCopy: string) => {
+        if (!textToCopy) return;
+        navigator.clipboard.writeText(textToCopy);
+        setOcrCopied(true);
+        setTimeout(() => setOcrCopied(false), 2000);
+    };
+
+    const parseCriteria = (text: any) => {
         const criteriaMap: { [key: string]: { name: string; max: number } } = {};
         if (!text) {
             return { cat_1: { name: "ความเหมาะสมโดยรวม", max: 100 } };
         }
+        if (Array.isArray(text)) {
+            text.forEach((c: any, idx: number) => {
+                criteriaMap[`cat_${idx + 1}`] = {
+                    name: c.title || "",
+                    max: c.weight || 0
+                };
+            });
+            return criteriaMap;
+        }
         const lines = text.split("\n");
         let count = 1;
         const tempItems: string[] = [];
-        
+
         for (const line of lines) {
             const cleanLine = line.trim();
             if (!cleanLine) continue;
-            
+
             const bulletMatch = cleanLine.match(/^(?:[-*+•]|\d+[.)])\s*(.+)$/);
             const content = bulletMatch ? bulletMatch[1].trim() : cleanLine;
-            
+
             const scoreMatch = content.match(/^(.+?)\s*\((\d+)\s*(คะแนน|คะแนนเต็ม)?\)$/);
             if (scoreMatch) {
                 criteriaMap[`cat_${count}`] = { name: scoreMatch[1].trim(), max: parseInt(scoreMatch[2]) };
@@ -88,107 +210,153 @@ export default function ScreeningPage() {
                 tempItems.push(content);
             }
         }
-        
+
         if (tempItems.length > 0 && Object.keys(criteriaMap).length === 0) {
             const distributedMax = Math.floor(100 / tempItems.length);
             tempItems.forEach((item, idx) => {
                 criteriaMap[`cat_${idx + 1}`] = { name: item, max: distributedMax };
             });
         }
-        
+
         if (Object.keys(criteriaMap).length === 0) {
             return { cat_1: { name: "ความเหมาะสมโดยรวม", max: 100 } };
         }
         return criteriaMap;
     };
 
+    const parseBasicInfoFromMarkdown = (text: string) => {
+        const info = {
+            name: "",
+            email: "",
+            phone: "",
+            age: "",
+            education: "",
+            experience: ""
+        };
+        if (!text) return info;
+
+        const lines = text.split("\n");
+        let inSection1 = false;
+
+        lines.forEach(line => {
+            const trimmed = line.trim();
+            if (trimmed.includes("1. ข้อมูลผู้สมัคร") || trimmed.includes("ข้อมูลผู้สมัคร")) {
+                inSection1 = true;
+                return;
+            }
+            if (trimmed.startsWith("## 2.") || trimmed.startsWith("### 2.") || trimmed.includes("คะแนนรวม")) {
+                inSection1 = false;
+                return;
+            }
+
+            if (inSection1) {
+                if (trimmed.includes("ชื่อ") || trimmed.includes("Name")) {
+                    let rawName = trimmed.replace(/^[-*•\d.\s#]+/, "").split(":")[1]?.trim() || trimmed;
+                    rawName = rawName.replace(/\s*[\(\[\{].*?[\)\]\}]/g, "");
+                    const delims = ["|", "/", "—", "–", " - ", "ตำแหน่ง", "เป็น", "โดย", "อายุ"];
+                    for (const d of delims) {
+                        const idx = rawName.indexOf(d);
+                        if (idx !== -1) rawName = rawName.substring(0, idx);
+                    }
+                    rawName = rawName.replace(/^(คุณ|นาย|นางสาว|นาง|ดร\.|ศ\.|ผศ\.|รศ\.|Mr\.|Mrs\.|Ms\.|Dr\.|ผู้สมัครชื่อ|ผู้สมัคร|ชื่อ-นามสกุล|ชื่อนามสกุล|ชื่อ|Name|Candidate)\s*/i, "");
+                    info.name = rawName.trim();
+                } else if (trimmed.includes("อีเมล") || trimmed.includes("Email")) {
+                    info.email = trimmed.replace(/^[-*•\d.\s]+/, "").split(":")[1]?.trim() || trimmed;
+                } else if (trimmed.includes("เบอร์") || trimmed.includes("โทร") || trimmed.includes("Phone")) {
+                    info.phone = trimmed.replace(/^[-*•\d.\s]+/, "").split(":")[1]?.trim() || trimmed;
+                } else if (trimmed.includes("อายุ") || trimmed.includes("จบ")) {
+                    info.age = trimmed.replace(/^[-*•\d.\s]+/, "").split(":")[1]?.trim() || trimmed;
+                } else if (trimmed.includes("ศึกษา") || trimmed.includes("วุฒิ")) {
+                    info.education = trimmed.replace(/^[-*•\d.\s]+/, "").split(":")[1]?.trim() || trimmed;
+                }
+            }
+        });
+
+        return info;
+    };
+
+    const formatCleanMarkdownScores = (content: string) => {
+        if (!content) return "";
+        return content.replace(/(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/g, (_match, scoreStr, maxStr) => {
+            const roundedScore = Math.round(parseFloat(scoreStr));
+            const roundedMax = Math.round(parseFloat(maxStr));
+            return `${roundedScore}/${roundedMax}`;
+        });
+    };
+
     const parseScoresFromMarkdown = (content: string) => {
-        const lines = content.split("\n");
-        const parsedRows: { name: string; score: number; max: number }[] = [];
+        const lines = (content || "").split("\n");
+        const parsedRows: { name: string; score: number; max: number; reason: string }[] = [];
         let totalScore = 0;
         let totalMax = 100;
         let hasTotalRow = false;
-        let inTable = false;
-        let inScoreSection = false;
 
         for (const line of lines) {
             const trimmed = line.trim();
-            const cleanLine = trimmed.replace(/\*\*/g, "");
+            if (!trimmed.startsWith("|")) continue;
 
-            // Detect score table structure
-            if (trimmed.startsWith("|")) {
-                inScoreSection = true;
-            }
+            const cols = trimmed.split("|").map(c => c.trim()).filter(c => c !== "");
+            if (cols.length < 2) continue;
 
-            // Detect header sections to toggle scope
-            const isScoreHeader = cleanLine.includes("คะแนนรวม") || 
-                                  cleanLine.toLowerCase().includes("scores") ||
-                                  cleanLine.includes("เกณฑ์การประเมิน");
-            if (isScoreHeader) {
-                inScoreSection = true;
+            const name = cols[0].replace(/\*\*/g, "").replace(/^[-#*:]+/g, "").trim();
+            if (!name || name.startsWith("---") || name.includes("เกณฑ์") || name.toLowerCase().includes("criterion")) {
                 continue;
             }
 
-            if (inScoreSection && (cleanLine.startsWith("#") || cleanLine.startsWith("---"))) {
-                if (cleanLine.match(/^##?\s+[^2]/) || cleanLine.includes("จุดเด่น") || cleanLine.includes("ข้อมูลผู้สมัคร")) {
-                    inScoreSection = false;
+            let scoreVal = 0;
+            let maxVal = 100;
+            let foundScore = false;
+            let scoreColIdx = -1;
+            let reasonStr = "";
+
+            // First pass: look specifically for "XX/YY" fraction pattern in cols[1..]
+            for (let i = 1; i < cols.length; i++) {
+                const cleanCol = cols[i].replace(/\*\*/g, "").trim();
+                const slashMatch = cleanCol.match(/(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/);
+                if (slashMatch) {
+                    scoreVal = Math.round(parseFloat(slashMatch[1]));
+                    maxVal = Math.round(parseFloat(slashMatch[2]));
+                    foundScore = true;
+                    scoreColIdx = i;
+                    break;
                 }
             }
 
-            if (!inScoreSection) {
-                continue;
-            }
-
-            if (trimmed.startsWith("|")) {
-                inTable = true;
-                const cols = trimmed.split("|").map(c => c.trim()).filter(c => c !== "");
-                if (cols.length < 2 || cols[0].startsWith("---") || cols[0].includes("เกณฑ์")) {
-                    continue;
-                }
-                const name = cols[0].replace(/\*\*/g, "").trim();
-                const scoreStr = cols[1].replace(/\*\*/g, "").trim();
-                const scoreMatch = scoreStr.match(/^(\d+)(?:\s*[-–—/]\s*(\d+))?/);
-                if (scoreMatch) {
-                    const scoreVal = parseFloat(scoreMatch[1]);
-                    const maxVal = scoreMatch[2] ? parseFloat(scoreMatch[2]) : 100;
-                    const isTotal = name.includes("รวม") || name.includes("Total");
-                    if (isTotal) {
-                        totalScore = scoreVal;
-                        totalMax = maxVal;
-                        hasTotalRow = true;
-                    } else {
-                        parsedRows.push({ name, score: scoreVal, max: maxVal });
-                    }
-                }
-            } else {
-                const listMatch = cleanLine.match(/^(?:[-*+•]|\d+[.)])?\s*(.+?)\s*:\s*(\d+)\s*[-–—/]\s*(\d+)/);
-                if (listMatch) {
-                    const name = listMatch[1].trim();
-                    const scoreVal = parseFloat(listMatch[2]);
-                    const maxVal = parseFloat(listMatch[3]);
-                    const isTotal = name.includes("รวม") || name.includes("Total");
-                    if (isTotal) {
-                        totalScore = scoreVal;
-                        totalMax = maxVal;
-                        hasTotalRow = true;
-                    } else {
-                        parsedRows.push({ name, score: scoreVal, max: maxVal });
+            // Fallback pass: look for single number pattern if no slash match
+            if (!foundScore) {
+                for (let i = 1; i < cols.length; i++) {
+                    const cleanCol = cols[i].replace(/\*\*/g, "").trim();
+                    const numMatch = cleanCol.match(/(\d+(?:\.\d+)?)/);
+                    if (numMatch) {
+                        scoreVal = Math.round(parseFloat(numMatch[1]));
+                        foundScore = true;
+                        scoreColIdx = i;
+                        break;
                     }
                 }
             }
-        }
 
-        let average = 0;
-        if (parsedRows.length > 0) {
-            const sumPercent = parsedRows.reduce((sum, row) => sum + (row.score / row.max) * 100, 0);
-            average = Math.round(sumPercent / parsedRows.length);
-        } else if (hasTotalRow) {
-            average = Math.round((totalScore / totalMax) * 100);
+            if (foundScore) {
+                if (scoreColIdx !== -1 && scoreColIdx < cols.length - 1) {
+                    reasonStr = cols.slice(scoreColIdx + 1).join(" ").replace(/\*\*/g, "").trim();
+                } else if (cols.length >= 3) {
+                    reasonStr = cols[cols.length - 1].replace(/\*\*/g, "").trim();
+                }
+
+                const isTotal = name.includes("รวม") || name.includes("Total") || name.includes("สรุป");
+                if (isTotal) {
+                    totalScore = scoreVal;
+                    totalMax = maxVal;
+                    hasTotalRow = true;
+                } else {
+                    parsedRows.push({ name, score: scoreVal, max: maxVal, reason: reasonStr });
+                }
+            }
         }
 
         return {
             scores: parsedRows,
-            average,
+            average: parsedRows.length > 0 ? Math.round(parsedRows.reduce((s, r) => s + (r.score / r.max) * 100, 0) / parsedRows.length) : 0,
             total: hasTotalRow ? totalScore : null,
             max: hasTotalRow ? totalMax : null
         };
@@ -198,15 +366,23 @@ export default function ScreeningPage() {
         const scores: Record<string, number> = {};
         const criteriaKeys = Object.keys(criteriaMap);
 
+        const snapToDiscreteLevel = (scoreVal: number, maxVal: number) => {
+            if (maxVal <= 0) return 0;
+            const ratio = scoreVal / maxVal;
+            if (ratio >= 0.75) return maxVal;                       // 100% (ดี - ได้เต็ม)
+            if (ratio >= 0.25) return Math.round(maxVal * 0.5);   // 50% (ปานกลาง - ได้ครึ่งหนึ่ง)
+            return 0;                                             // 0% (แย่ - ได้ 0)
+        };
+
         if (parsedScores.length === criteriaKeys.length) {
             parsedScores.forEach((row, idx) => {
                 const key = criteriaKeys[idx];
                 const criteriaMax = criteriaMap[key].max;
-                let finalScore = row.score;
+                let rawScore = row.score;
                 if (row.max !== criteriaMax && row.max > 0) {
-                    finalScore = Math.round((row.score / row.max) * criteriaMax);
+                    rawScore = (row.score / row.max) * criteriaMax;
                 }
-                scores[key] = Math.min(finalScore, criteriaMax);
+                scores[key] = snapToDiscreteLevel(rawScore, criteriaMax);
             });
         } else {
             const nameToKey: Record<string, string> = {};
@@ -217,7 +393,7 @@ export default function ScreeningPage() {
             parsedScores.forEach(row => {
                 const nameLower = row.name.toLowerCase();
                 let matchedKey: string | undefined;
-                
+
                 for (const [n, k] of Object.entries(nameToKey)) {
                     if (nameLower.includes(n) || n.includes(nameLower)) {
                         matchedKey = k;
@@ -229,7 +405,7 @@ export default function ScreeningPage() {
                     const keywords = ["api", "git", "docker", "database", "sql", "experience", "เรียนรู้", "กระตือรือร้น", "1-3", "ประสบการณ์", "ความปลอดภัย", "security"];
                     let bestMatchKey: string | undefined;
                     let maxOverlap = 0;
-                    
+
                     Object.entries(criteriaMap).forEach(([key, info]: any) => {
                         const infoLower = info.name.toLowerCase();
                         let overlap = 0;
@@ -243,7 +419,7 @@ export default function ScreeningPage() {
                             bestMatchKey = key;
                         }
                     });
-                    
+
                     if (maxOverlap > 0) {
                         matchedKey = bestMatchKey;
                     }
@@ -251,11 +427,11 @@ export default function ScreeningPage() {
 
                 if (matchedKey) {
                     const criteriaMax = criteriaMap[matchedKey].max;
-                    let finalScore = row.score;
+                    let rawScore = row.score;
                     if (row.max !== criteriaMax && row.max > 0) {
-                        finalScore = Math.round((row.score / row.max) * criteriaMax);
+                        rawScore = (row.score / row.max) * criteriaMax;
                     }
-                    scores[matchedKey] = Math.min(finalScore, criteriaMax);
+                    scores[matchedKey] = snapToDiscreteLevel(rawScore, criteriaMax);
                 }
             });
         }
@@ -264,14 +440,14 @@ export default function ScreeningPage() {
 
     const parseBreakdownFromStrengths = (strengths: string, criteriaMap: any) => {
         const scores: { [key: string]: number } = {};
-        
+
         const match = strengths?.match(/^\[SCORES:\s*(.*?)\]/);
         if (match) {
             const pairs = match[1].split(",");
             pairs.forEach(p => {
                 const [k, v] = p.split("=");
                 if (k && v) {
-                    scores[k] = parseFloat(v);
+                    scores[k] = Math.round(parseFloat(v));
                 }
             });
         } else if (strengths) {
@@ -279,32 +455,59 @@ export default function ScreeningPage() {
             const matchedScores = matchParsedScoresToCriteria(parsed.scores, criteriaMap);
             Object.assign(scores, matchedScores);
         }
-        
+
         const breakdown: { [key: string]: { score: number; max: number } } = {};
         Object.keys(criteriaMap).forEach(key => {
             const info = criteriaMap[key];
             breakdown[info.name] = {
-                score: scores[key] !== undefined ? scores[key] : (strengths ? 0 : Math.round(info.max * 0.5)),
-                max: info.max
+                score: scores[key] !== undefined ? Math.round(scores[key]) : 0,
+                max: Math.round(info.max)
             };
         });
         return breakdown;
     };
 
-    const getCleanStrengths = (strengths: string) => {
-        return strengths ? strengths.replace(/^\[SCORES:\s*.*?\]\s*/, "") : "";
+    const getStrengthsText = (app: any) => {
+        if (!app || !app.AIScreening) return "";
+        let txt = app.AIScreening.strengths || app.AIScreening.Strengths || "";
+        if (!txt && app.AIScreening.analysis_data) {
+            try {
+                const parsed = JSON.parse(app.AIScreening.analysis_data);
+                if (parsed.raw_markdown) txt = parsed.raw_markdown;
+            } catch {}
+        }
+        return txt;
     };
 
-    // ── Check Typhoon status ─────────────────────────────────────────
+    const getCleanStrengths = (strengths: string) => {
+        const cleaned = strengths ? strengths.replace(/^\[SCORES:\s*.*?\]\s*/, "") : "";
+        return formatCleanMarkdownScores(cleaned);
+    };
+
+    // ── Check AI status (Local Typhoon vs Cloud AI) ──────────────────
     const checkOnline = async () => {
+        const isCloudModel = selectedModel.includes("gemini") ||
+            selectedModel.includes("gpt") ||
+            selectedModel.includes("claude") ||
+            selectedModel.startsWith("ft:");
+        if (isCloudModel) {
+            setOnline(true);
+            return;
+        }
         try {
-            const r = await fetch(`${TYPHOON_API}/health`, { signal: AbortSignal.timeout(3000) });
+            // Use backend proxy endpoint to avoid browser CORS issues
+            const r = await fetch(`${getApiUrl()}/typhoon-status`, { signal: AbortSignal.timeout(12000) });
             const d = await r.json();
-            setOnline(d.chat_model === true);
+            setOnline(d.online === true);
         } catch {
             setOnline(false);
         }
     };
+
+    // Re-check AI online status when model changes
+    useEffect(() => {
+        checkOnline();
+    }, [selectedModel]);
 
     // Load jobs & check online status on mount
     useEffect(() => {
@@ -360,42 +563,111 @@ export default function ScreeningPage() {
         activeJobIdRef.current = selectedJobId;
     }, [selectedJobId]);
 
-    const runSingleAnalysis = async (app: any, forceReOcr = false) => {
+    // Handle AI Model change: update model without wiping existing raw text automatically
+    const handleModelChange = (newModelId: string) => {
+        setSelectedModel(newModelId);
+    };
+
+    const runSingleAnalysis = async (app: any, forceReOcr = false, isBatch = false) => {
         let resumeText = forceReOcr ? "" : (app.ResumeText || app.resume_text || "");
         if (resumeText && (resumeText.trim().startsWith("ข้อมูลประวัติย่อ") || resumeText.includes("/api/upload/"))) {
             resumeText = "";
         }
-        
+
         try {
             if (!resumeText && app.resume_url) {
                 setAnalyzingStates(prev => ({ ...prev, [app.ID]: "ocr" }));
-                
-                const cleanResumeUrl = app.resume_url.startsWith("/api") 
-                    ? app.resume_url.slice(4) 
-                    : app.resume_url;
-                    
-                const response = await apiClient.get(cleanResumeUrl, {
-                    responseType: "blob"
-                });
-                const blob = response.data;
+
+                let rawUrl = app.resume_url.replace(/\\/g, "/");
+                const baseBackendUrl = getBackendBaseUrl();
+
+                const candidateUrls: string[] = [];
+                if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+                    candidateUrls.push(rawUrl);
+                } else {
+                    if (!rawUrl.startsWith("/")) rawUrl = "/" + rawUrl;
+                    candidateUrls.push(`${baseBackendUrl}${rawUrl}`);
+                    if (!rawUrl.startsWith("/api")) {
+                        candidateUrls.push(`${baseBackendUrl}/api${rawUrl}`);
+                    } else {
+                        candidateUrls.push(`${baseBackendUrl}${rawUrl.slice(4)}`);
+                    }
+                }
+
+                let blob: Blob | null = null;
+                let lastErr = "";
+
+                for (const targetUrl of candidateUrls) {
+                    try {
+                        console.log("[OCR] Attempting to fetch resume file from:", targetUrl);
+                        const res = await fetch(targetUrl);
+                        if (res.ok) {
+                            blob = await res.blob();
+                            break;
+                        } else {
+                            lastErr = `HTTP ${res.status}`;
+                        }
+                    } catch (e: any) {
+                        lastErr = e.message || "Network Error";
+                    }
+                }
+
+                if (!blob) {
+                    throw new Error(`ไม่พบไฟล์ PDF ของผู้สมัครคนนี้บนเซิร์ฟเวอร์ Cloud (${lastErr || "HTTP 404"}) เนื่องจากดิสก์ Render มีการรีสตาร์ทไฟล์\n\n💡 แนะนำ: กรุณากดลบผู้สมัครคนนี้ (ปุ่ม ❌ สีแดงด้านขวา) แล้วกดปุ่ม '📌 กรอก Resume / เพิ่มผู้สมัครด้วยตนเอง' เพื่อเพิ่มไฟล์ Resume ใหม่ครับ`);
+                }
+
                 const filename = app.resume_url.split("/").pop() || "resume.pdf";
-                const file = new File([blob], filename, { type: blob.type });
-                
+                const file = new File([blob], filename, { type: blob.type || "application/pdf" });
+
                 const formData = new FormData();
                 formData.append("file", file);
-                
-                const ocrRes = await fetch(`${TYPHOON_API}/ocr`, {
-                    method: "POST",
-                    body: formData
-                });
-                if (!ocrRes.ok) throw new Error("OCR แปลงข้อความไม่สำเร็จ");
-                const ocrData = await ocrRes.json();
-                resumeText = ocrData.text || "";
+                formData.append("model", selectedModel);
+
+                try {
+                    const ocrRes = await fetch(`${TYPHOON_API}/ocr`, {
+                        method: "POST",
+                        body: formData
+                    });
+                    if (!ocrRes.ok) throw new Error(`HTTP ${ocrRes.status}`);
+                    const ocrData = await ocrRes.json();
+                    resumeText = ocrData.text || "";
+
+                    // Optimization 1: Automatic OCR Caching & Extracted Resume JSON (Save OCR text and Extracted JSON to DB immediately)
+                    if (resumeText) {
+                        try {
+                            const extractedResumeObj = {
+                                raw_ocr_text: resumeText,
+                                filename: filename,
+                                character_count: resumeText.length,
+                                ocr_extracted_at: new Date().toISOString()
+                            };
+                            const extractedJSON = JSON.stringify(extractedResumeObj);
+
+                            await updateApplicationScreening(
+                                app.ID,
+                                app.AIScore || 0,
+                                app.AIScreening?.strengths || "",
+                                "typhoon2.5-qwen3-4b",
+                                resumeText,
+                                app.AIScreening?.analysis_data || "",
+                                extractedJSON
+                            );
+                        } catch (cacheErr) {
+                            console.warn("[OCR Cache Warning] Failed to cache OCR text in DB:", cacheErr);
+                        }
+                    }
+                } catch (ocrErr: any) {
+                    console.error("[OCR Service Error]", ocrErr);
+                    throw new Error(`ไม่สามารถเชื่อมต่อบริการ Typhoon AI OCR (${TYPHOON_API}/ocr) ได้: ${ocrErr.message || "Failed to fetch"}`);
+                }
             }
 
-            if (!resumeText) {
-                throw new Error("ไม่มีข้อความ Resume หรือไฟล์แนบ");
+            if (!resumeText || resumeText.trim().length < 15) {
+                throw new Error("ไม่สามารถอ่านข้อความจาก Resume นี้ได้ (ไฟล์อาจเป็นภาพสแกนหรือ PDF ที่ไม่มีข้อความ) กรุณาตรวจสอบไฟล์แนบของผู้สมัคร");
             }
+
+            // Normalize spaced letters from OCR e.g. "A I S S A R A P A B" -> "AISSARAPAB"
+            resumeText = resumeText.replace(/\b([A-Za-z])(?:\s+([A-Za-z]))+\b/g, (match: string) => match.replace(/\s+/g, ''));
 
             setAnalyzingStates(prev => ({ ...prev, [app.ID]: "ai" }));
 
@@ -406,37 +678,68 @@ export default function ScreeningPage() {
 
             console.log("[Score] calling /chat for streaming scores with criteria:", criteriaMap);
 
-            let userContent = `วิเคราะห์ Resume นี้อย่างละเอียด:\n\n${resumeText}`;
+            const cand = app.Candidate;
+            let dbName = cand ? `${cand.first_name || ''} ${cand.last_name || ''}`.trim() : "";
+            if (isInvalidOrRandomName(dbName)) {
+                dbName = "";
+            }
+            const dbEmail = cand?.email || "";
+
+            let userContent = `กรุณาวิเคราะห์เฉพาะ Resume ของผู้สมัครที่ปรากฏในข้อความนี้เท่านั้น
+*** ข้อห้ามสำคัญมาก: ห้ามสร้างชื่อผู้สมัครสมมุติ หรือมโนข้อมูลเท็จขึ้นมาเองเด็ดขาด หากข้อมูลใดไม่มีใน Resume ให้เขียนว่า "ไม่ระบุ" ***
+
+${dbName ? `ข้อมูลผู้สมัครจากฐานข้อมูลระบบ (Database):\n- ชื่อ-สกุล: ${dbName}\n- อีเมล: ${dbEmail}\n` : ''}=== เรซูเม่ผู้สมัคร ===
+${resumeText}`;
+
             if (jdText) {
                 userContent += `\n\n=== ตำแหน่งงาน / JD ===\n${jdText}`;
             }
             if (criteriaText) {
-                userContent += `\n\n=== เกณฑ์ในการคัดเลือก (Criteria) ===\n${criteriaText}`;
-                
-                const listStr = Object.values(criteriaMap)
-                    .map((info, idx) => `- ${info.name} (คะแนนเต็ม ${info.max} คะแนน)`)
-                    .join("\n");
-                
+                let formattedCriteria = "";
+                if (Array.isArray(criteriaText)) {
+                    formattedCriteria = criteriaText.map((c: any, cIdx: number) => {
+                        let mainStr = `📌 เกณฑ์หลัก (${cIdx + 1}): ${c.title} (น้ำหนักคะแนนเต็ม ${c.weight} คะแนน/%)`;
+                        if (c.sub_criteria && c.sub_criteria.length > 0) {
+                            const subStr = c.sub_criteria.map((sc: any, scIdx: number) =>
+                                `   ▫️ เกณฑ์ย่อย (${cIdx + 1}.${scIdx + 1}): ${sc.title} (น้ำหนักคะแนนเต็ม ${sc.weight} คะแนน/%)\n      รายละเอียดเกณฑ์ประเมิน: ${sc.description}`
+                            ).join("\n");
+                            mainStr += `\n${subStr}`;
+                        }
+                        return mainStr;
+                    }).join("\n\n");
+                } else {
+                    formattedCriteria = String(criteriaText);
+                }
+
+                userContent += `\n\n=== เกณฑ์ในการคัดเลือกและน้ำหนักคะแนน (Main & Sub-Criteria) ===\n${formattedCriteria}`;
+
                 const tableRowsExample = Object.values(criteriaMap)
-                    .map(info => `| ${info.name} | [คะแนนที่ได้]/${info.max} | [เหตุผลประเมินสั้นๆ] |`)
+                    .map(info => `| ${info.name} | [คะแนนที่ได้]/${info.max} | [เหตุผลประเมินสั้นๆ ตาม Sub-Criteria] |`)
                     .join("\n");
 
-                userContent += `\n\n=== ข้อกำหนดเกณฑ์การประเมินที่ต้องแสดงในตารางคะแนน ===
-คุณต้องประเมินและให้คะแนนผู้สมัครภายใต้หัวข้อ "## 2. คะแนนรวม (0–100)" ในรูปแบบตาราง Markdown ตามหัวข้อเกณฑ์เหล่านี้เท่านั้น:
-${listStr}
+                userContent += `\n\n=== ข้อกำหนดการตอบกลับ (ตอบกลับเฉพาะ 2 หัวข้อนี้เท่านั้น) ===
 
-แนวทางการให้คะแนน:
-- ให้ประเมินคะแนนเป็นสเกลแบบละเอียด (Granular Score) ตามระดับความสามารถหรือความเหมาะสมจริง (เช่น หากตรงเกณฑ์บางส่วน สามารถให้คะแนนระหว่างทางได้ เช่น 5, 10, 15, 20 จากคะแนนเต็ม) ไม่จำเป็นต้องประเมินแบบได้คะแนนเต็มหรือไม่ได้เลย (0 หรือ คะแนนเต็ม)
-- ให้พิจารณาและประเมินตามหลักความเป็นจริงจากข้อมูลใน Resume อย่างสมเหตุสมผล
+โปรดวิเคราะห์คุณสมบัติใน Resume เทียบกับเกณฑ์หลักทั้ง 3 ระดับ (ระดับดี 100%, ระดับปานกลาง 50%, ระดับแย่ 0%) โดยเกณฑ์หลักแต่ละข้อต้องเลือกประเมินเพียง 1 ใน 3 ระดับนี้เท่านั้น: เต็ม 100%, ครึ่งหนึ่ง 50%, หรือ 0% (ห้ามคิดตัวเลขอื่นๆ หรือเฉลี่ยทศนิยม เช่น 21/25 หรือ 83.33% เด็ดขาด) และตอบกลับในรูปแบบเทมเพลตด้านล่างนี้เป๊ะๆ:
 
-สำคัญที่สุด: ให้ตอบกลับในรูปแบบตารางตามเทมเพลตด้านล่างนี้เป๊ะๆ (แทนที่ [คะแนนที่ได้] และ [เหตุผลประเมินสั้นๆ] ด้วยข้อมูลจริง):
+## 1. ข้อมูลผู้สมัคร
+
+**ชื่อ-สกุล**: ${dbName || '[ดึง ชื่อ-สกุล จริงที่พบใน Resume (หากชื่อใน DB เป็นตัวเลขหรือชื่อมั่ว ให้ใช้ชื่อจาก Resume แทน) หรือหากไม่มีให้ระบุ ไม่ระบุ]'}
+**อีเมล**: ${dbEmail || '[ดึง อีเมล จริงที่พบใน Resume หรือหากไม่มีให้ระบุ ไม่ระบุ]'}
+
+---
+
+## 2. คะแนนรวม (0–100)
 
 | เกณฑ์ | คะแนน | เหตุผล |
 |---|---|---|
 ${tableRowsExample}
-| **รวมทั้งหมด** | [คะแนนรวมทั้งหมด]/100 | [คำสรุปโดยรวมสั้นๆ] |
+| **รวมทั้งหมด** | [ผลรวมคะแนนทุกเกณฑ์หลัก]/100 | [คำสรุปโดยรวมสั้นๆ] |
 
-ห้ามย่อหรือเปลี่ยนชื่อเกณฑ์โดยเด็ดขาด เพื่อให้ระบบดึงข้อมูลคะแนนแสดงผลบนหน้าจอได้อย่างถูกต้อง`;
+ข้อห้ามสำคัญ:
+- ในหัวข้อ "## 1. ข้อมูลผู้สมัคร" ให้แสดงเฉพาะ 2 บรรทัดคือ **ชื่อ-สกุล** และ **อีเมล** เท่านั้น ห้ามแสดงวันเกิด สถานภาพ ที่อยู่ เงินเดือน หรือวันเริ่มงาน เด็ดขาด
+- คะแนนของแต่ละเกณฑ์หลักต้องคำนวณตรงกับระดับ (100%, 50%, 0%) ของเกณฑ์ย่อยในช่องเหตุผลเสมอ ห้ามมโนตัวเลขเอง
+- ตัวเลขในบรรทัด "**รวมทั้งหมด**" ต้องเป็นผลรวมคะแนนของทุกเกณฑ์หลักรวมกันจริงๆ
+- ห้ามย่อหรือเปลี่ยนชื่อเกณฑ์หลักในตาราง และห้ามเพิ่มหัวข้ออื่นเด็ดขาด`;
             }
 
             const response = await fetch(`${TYPHOON_API}/chat`, {
@@ -445,37 +748,70 @@ ${tableRowsExample}
                 body: JSON.stringify({
                     messages: [{ role: "user", content: userContent }],
                     system_prompt: SYSTEM_PROMPT,
-                    max_new_tokens: 1024,
+                    max_new_tokens: 8192,
                     temperature: 0,
+                    model: selectedModel,
                 }),
             });
 
-            if (!response.ok) throw new Error("AI ประเมินคะแนนไม่สำเร็จ");
+            if (!response.ok) {
+                let errDetail = "";
+                try {
+                    const errJson = await response.json();
+                    errDetail = errJson.detail || errJson.message || "";
+                } catch {
+                    errDetail = await response.text().catch(() => "");
+                }
+                throw new Error(errDetail || `AI ประเมินคะแนนไม่สำเร็จ (HTTP ${response.status})`);
+            }
 
             const reader = response.body!.getReader();
             const decoder = new TextDecoder();
             let fullText = "";
+            let lastUpdate = 0;
 
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
-                
+
                 fullText += decoder.decode(value, { stream: true });
-                
-                setApplicants(prev => prev.map(a => {
-                    if (a.ID === app.ID) {
-                        return {
-                            ...a,
-                            AIScreening: {
-                                skill_score: 0,
-                                strengths: fullText,
-                                model_used: "typhoon2.5-qwen3-4b"
-                            }
-                        };
-                    }
-                    return a;
-                }));
+
+                const now = Date.now();
+                if (now - lastUpdate > 80) {
+                    lastUpdate = now;
+                    setApplicants(prev => prev.map(a => {
+                        if (a.ID === app.ID) {
+                            return {
+                                ...a,
+                                AIScreening: {
+                                    skill_score: a.AIScreening?.skill_score || 0,
+                                    strengths: fullText,
+                                    model_used: selectedModel
+                                }
+                            };
+                        }
+                        return a;
+                    }));
+                }
             }
+
+            // Instantly render final full text
+            setApplicants(prev => prev.map(a => {
+                if (a.ID === app.ID) {
+                    return {
+                        ...a,
+                        AIScreening: {
+                            skill_score: a.AIScreening?.skill_score || 0,
+                            strengths: fullText,
+                            model_used: selectedModel
+                        }
+                    };
+                }
+                return a;
+            }));
+
+            // ⚡ Instantly update status from "ai" to "saving" as AI stream is complete
+            setAnalyzingStates(prev => ({ ...prev, [app.ID]: "saving" }));
 
             const finalParsed = parseScoresFromMarkdown(fullText);
             const finalScores = matchParsedScoresToCriteria(finalParsed.scores, criteriaMap);
@@ -485,53 +821,165 @@ ${tableRowsExample}
                 if (finalScores[key] === undefined) {
                     finalScores[key] = 0;
                 }
-                totalScore += Math.min(finalScores[key], criteriaMap[key].max);
+                totalScore += Math.min(Math.round(finalScores[key]), criteriaMap[key].max);
             });
 
-            setAnalyzingStates(prev => ({ ...prev, [app.ID]: "saving" }));
-
-            const scoresStr = `[SCORES: ${Object.keys(finalScores).map(k => `${k}=${finalScores[k]}`).join(",")}]`;
+            const scoresStr = `[SCORES: ${Object.keys(finalScores).map(k => `${k}=${Math.round(finalScores[k])}`).join(",")}]`;
             const strengthsText = `${scoresStr}\n\n${fullText}`;
 
-            await updateApplicationScreening(app.ID, totalScore, strengthsText, "typhoon2.5-qwen3-4b", resumeText);
+            const basicCandidateInfo = parseBasicInfoFromMarkdown(fullText);
+
+            const breakdownDetails = Object.keys(criteriaMap).map((key, idx) => {
+                const info = criteriaMap[key];
+                const rawScore = finalScores[key] || 0;
+                const maxScore = info.max || 100;
+                const calculatedScore = Math.min(Math.round(rawScore), maxScore);
+                const ratio = maxScore > 0 ? calculatedScore / maxScore : 0;
+                const pct = Math.round(ratio * 100);
+
+                let level = "แย่ (0%)";
+                if (pct >= 75) {
+                    level = "ดี (100%)";
+                } else if (pct >= 25) {
+                    level = "ปานกลาง (50%)";
+                }
+
+                let origMainCriterion: any = null;
+                if (Array.isArray(matchedJob?.criteria)) {
+                    origMainCriterion = matchedJob.criteria[idx] || matchedJob.criteria.find((c: any) => c.title === info.name);
+                }
+
+                let row = finalParsed.scores.find((r: any) => r.name.toLowerCase().includes(info.name.toLowerCase()) || info.name.toLowerCase().includes(r.name.toLowerCase()));
+                if (!row && finalParsed.scores[idx]) {
+                    row = finalParsed.scores[idx];
+                }
+
+                let reasonStr = (row as any)?.reason || "";
+                if (!reasonStr && fullText) {
+                    const cleanText = fullText.replace(/^\[SCORES:\s*.*?\]\s*/, "");
+                    const lines = cleanText.split("\n");
+                    const keywords = info.name.split(/[\s&/]+/);
+                    for (const line of lines) {
+                        const trimmed = line.replace(/^[-*•\d.\s#]+/, "").trim();
+                        if (trimmed.length > 8 && !trimmed.startsWith("|") && !trimmed.startsWith("---")) {
+                            if (keywords.some((kw: string) => kw.length > 3 && trimmed.toLowerCase().includes(kw.toLowerCase()))) {
+                                reasonStr = trimmed;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (!reasonStr) {
+                    if (pct >= 75) {
+                        reasonStr = `มีทักษะและประสบการณ์อยู่ในระดับดีเยี่ยม ตรงตามข้อกำหนดเกณฑ์ (${calculatedScore}/${maxScore} คะแนน)`;
+                    } else if (pct >= 25) {
+                        reasonStr = `มีทักษะและประสบการณ์ในระดับปานกลาง ครอบคลุมพื้นฐานเกณฑ์ (${calculatedScore}/${maxScore} คะแนน)`;
+                    } else {
+                        reasonStr = `ยังมีทักษะหรือประสบการณ์ไม่ตรงตามข้อกำหนดหลักของเกณฑ์ (${calculatedScore}/${maxScore} คะแนน)`;
+                    }
+                }
+
+                return {
+                    criterion_id: origMainCriterion?.id || `c_${idx + 1}`,
+                    main_criterion_title: info.name,
+                    score: calculatedScore,
+                    max_score: maxScore,
+                    weight: origMainCriterion?.weight || maxScore,
+                    percentage: pct,
+                    evaluated_level: level,
+                    reason: reasonStr,
+                    sub_criteria: origMainCriterion?.sub_criteria || []
+                };
+            });
+
+            totalScore = finalParsed.total !== null && !isNaN(finalParsed.total)
+                ? Math.round(finalParsed.total)
+                : breakdownDetails.reduce((sum, item) => sum + item.score, 0);
+
+            const structuredJSON = JSON.stringify({
+                total_score: totalScore,
+                candidate_basic_info: basicCandidateInfo,
+                main_criteria_breakdown: breakdownDetails,
+                raw_markdown: fullText,
+                analyzed_at: new Date().toISOString()
+            });
+
+            const extractedResumeObj = {
+                raw_ocr_text: resumeText,
+                candidate_profile: basicCandidateInfo,
+                character_count: resumeText.length,
+                extracted_at: new Date().toISOString()
+            };
+            const extractedResumeJSON = JSON.stringify(extractedResumeObj);
 
             setApplicants(prev => prev.map(a => {
                 if (a.ID === app.ID) {
                     return {
                         ...a,
+                        Status: "รอนัดสัมภาษณ์",
+                        status: "รอนัดสัมภาษณ์",
                         ResumeText: resumeText,
                         resume_text: resumeText,
                         AIScreening: {
                             skill_score: totalScore,
                             strengths: strengthsText,
-                            model_used: "typhoon2.5-qwen3-4b"
+                            analysis_data: structuredJSON,
+                            model_used: selectedModel
                         }
                     };
                 }
                 return a;
             }));
 
+            try {
+                await updateApplicationScreening(app.ID, totalScore, strengthsText, selectedModel, resumeText, structuredJSON, extractedResumeJSON);
+            } catch (dbErr) {
+                console.warn("[DB Save Warning] Failed to update application screening in DB:", dbErr);
+            }
+
             setAnalyzingStates(prev => ({ ...prev, [app.ID]: "done" }));
         } catch (err: any) {
             console.error(`Error screening application ${app.ID}:`, err);
             setAnalyzingStates(prev => ({ ...prev, [app.ID]: "error" }));
+            if (!isBatch) {
+                alert(`เกิดข้อผิดพลาดในการวิเคราะห์ Resume ของ ${app.Candidate?.first_name || 'ผู้สมัคร'}: ${err.message || 'ไม่สามารถวิเคราะห์ได้'}`);
+            }
+        } finally {
+            setAnalyzingStates(prev => {
+                if (prev[app.ID] === "ai" || prev[app.ID] === "saving" || prev[app.ID] === "ocr") {
+                    return { ...prev, [app.ID]: "done" };
+                }
+                return prev;
+            });
         }
     };
 
     const analyzeSequentially = async (pendingApps: any[]) => {
-        for (const app of pendingApps) {
-            if (activeJobIdRef.current !== selectedJobId) break;
-            await runSingleAnalysis(app);
+        if (batchAnalyzing) return;
+        setBatchAnalyzing(true);
+        try {
+            const currentJobId = selectedJobId;
+            for (const app of pendingApps) {
+                if (activeJobIdRef.current !== currentJobId) break;
+                await runSingleAnalysis(app, false, true);
+            }
+        } catch (err) {
+            console.error("Sequential analysis error:", err);
+        } finally {
+            setBatchAnalyzing(false);
         }
     };
 
     const analyzeAllApplicants = async () => {
-        if (applicants.length === 0) return;
+        const selectedApps = applicants.filter(app => selectedAppIds.includes(app.ID));
+        if (selectedApps.length === 0 || batchAnalyzing) return;
         setBatchAnalyzing(true);
         try {
-            for (const app of applicants) {
-                if (activeJobIdRef.current !== selectedJobId) break;
-                await runSingleAnalysis(app);
+            const currentJobId = selectedJobId;
+            for (const app of selectedApps) {
+                if (activeJobIdRef.current !== currentJobId) break;
+                await runSingleAnalysis(app, false, true);
             }
         } catch (error) {
             console.error("Batch analysis failed:", error);
@@ -545,6 +993,7 @@ ${tableRowsExample}
         try {
             await deleteapplication(appId);
             setApplicants(prev => prev.filter(a => a.ID !== appId));
+            setSelectedAppIds(prev => prev.filter(id => id !== appId));
         } catch (err) {
             console.error("ลบข้อมูลผู้สมัครล้มเหลว:", err);
             alert("เกิดข้อผิดพลาดในการลบข้อมูลผู้สมัคร");
@@ -580,6 +1029,7 @@ ${tableRowsExample}
                 const res = await getapplications(parseInt(selectedJobId));
                 if (res && res.data) {
                     setApplicants(res.data);
+                    setSelectedAppIds(res.data.map((a: any) => a.ID));
                 }
             }
 
@@ -663,7 +1113,8 @@ ${tableRowsExample}
                     const res = await getapplications(parseInt(selectedJobId));
                     if (res && res.data) {
                         setApplicants(res.data);
-                        
+                        setSelectedAppIds(res.data.map((a: any) => a.ID));
+
                         const pending = res.data.filter((a: any) => !a.AIScreening);
                         if (pending.length > 0) {
                             analyzeSequentially(pending);
@@ -698,13 +1149,13 @@ ${tableRowsExample}
     const handleFile = async (file: File) => {
         if (!file) return;
         const fileExt = file.name.toLowerCase();
-        
+
         // 1. ถ้าเป็นไฟล์ .txt ดึงข้อความได้ทันที
         if (fileExt.endsWith(".txt")) {
             const reader = new FileReader();
             reader.onload = e => setResumeText(e.target?.result as string || "");
             reader.readAsText(file, "utf-8");
-        } 
+        }
         // 2. ถ้าเป็นไฟล์ PDF หรือรูปภาพ ส่งไปประมวลผลด้วย OCR ของ AI
         else if (fileExt.endsWith(".pdf") || file.type.startsWith("image/")) {
             setOcrLoading(true);
@@ -712,14 +1163,15 @@ ${tableRowsExample}
             try {
                 const formData = new FormData();
                 formData.append("file", file);
-                
+                formData.append("model", selectedModel);
+
                 const res = await fetch(`${TYPHOON_API}/ocr`, {
                     method: "POST",
                     body: formData
                 });
-                
+
                 if (!res.ok) throw new Error("ไม่สามารถประมวลผลไฟล์นี้ได้");
-                
+
                 const data = await res.json();
                 if (data && data.text) {
                     setResumeText(data.text);
@@ -747,39 +1199,72 @@ ${tableRowsExample}
     const analyze = async () => {
         if (!resumeText.trim()) return;
         setLoading(true);
+        isCancelledRef.current = false;
+        abortControllerRef.current = new AbortController();
+        const signal = abortControllerRef.current.signal;
 
-        let userContent = `วิเคราะห์ Resume นี้อย่างละเอียด:\n\n${resumeText}`;
+        // Try matching candidate from database
+        let matchedDbName = "";
+        let matchedDbEmail = "";
+
+        if (applicants && applicants.length > 0) {
+            const matchedApp = applicants.find((a: any) => {
+                const email = a.Candidate?.email?.toLowerCase();
+                const firstName = a.Candidate?.first_name?.toLowerCase();
+                const textLower = resumeText.toLowerCase();
+
+                if (email && textLower.includes(email)) return true;
+                if (firstName && firstName.length > 2 && textLower.includes(firstName)) return true;
+                return false;
+            });
+
+            if (matchedApp && matchedApp.Candidate) {
+                const rawDbName = `${matchedApp.Candidate.first_name || ''} ${matchedApp.Candidate.last_name || ''}`.trim();
+                if (!isInvalidOrRandomName(rawDbName)) {
+                    matchedDbName = rawDbName;
+                }
+                matchedDbEmail = matchedApp.Candidate.email || "";
+            }
+        }
+
+        let userContent = `กรุณาวิเคราะห์เฉพาะ Resume ของผู้สมัครที่ปรากฏในข้อความนี้เท่านั้น
+*** ข้อห้ามสำคัญมาก: ห้ามสร้างชื่อผู้สมัครสมมุติ หรือมโนข้อมูลเท็จขึ้นมาเองเด็ดขาด หากข้อมูลใดไม่มีใน Resume ให้เขียนว่า "ไม่ระบุ" ***
+
+${matchedDbName ? `ข้อมูลผู้สมัครจากฐานข้อมูลระบบ (Database):\n- ชื่อ-สกุล: ${matchedDbName}\n- อีเมล: ${matchedDbEmail}\n` : ''}=== เรซูเม่ผู้สมัคร ===
+${resumeText}`;
         if (jobDesc.trim()) {
             userContent += `\n\n=== ตำแหน่งงาน / JD ===\n${jobDesc}`;
         }
         if (jobCriteria.trim()) {
             userContent += `\n\n=== เกณฑ์ในการคัดเลือก (Criteria) ===\n${jobCriteria}`;
-            
+
             const parsedMap = parseCriteria(jobCriteria);
-            const listStr = Object.values(parsedMap)
-                .map((info, idx) => `- ${info.name} (คะแนนเต็ม ${info.max} คะแนน)`)
-                .join("\n");
-            
             const tableRowsExample = Object.values(parsedMap)
-                .map(info => `| ${info.name} | [คะแนนที่ได้]/${info.max} | [เหตุผลประเมินสั้นๆ] |`)
+                .map(info => `| ${info.name} | [คะแนนที่ได้]/${info.max} | [เหตุผลประเมินสั้นๆ ตาม Sub-Criteria] |`)
                 .join("\n");
 
-            userContent += `\n\n=== ข้อกำหนดเกณฑ์การประเมินที่ต้องแสดงในตารางคะแนน ===
-คุณต้องประเมินและให้คะแนนผู้สมัครภายใต้หัวข้อ "## 2. คะแนนรวม (0–100)" ในรูปแบบตาราง Markdown ตามหัวข้อเกณฑ์เหล่านี้เท่านั้น:
-${listStr}
+            userContent += `\n\n=== ข้อกำหนดการตอบกลับ (ตอบกลับเฉพาะ 2 หัวข้อนี้เท่านั้น) ===
 
-แนวทางการให้คะแนน:
-- ให้ประเมินคะแนนเป็นสเกลแบบละเอียด (Granular Score) ตามระดับความสามารถหรือความเหมาะสมจริง (เช่น หากตรงเกณฑ์บางส่วน สามารถให้คะแนนระหว่างทางได้ เช่น 5, 10, 15, 20 จากคะแนนเต็ม) ไม่จำเป็นต้องประเมินแบบได้คะแนนเต็มหรือไม่ได้เลย (0 หรือ คะแนนเต็ม)
-- ให้พิจารณาและประเมินตามหลักความเป็นจริงจากข้อมูลใน Resume อย่างสมเหตุสมผล
+โปรดวิเคราะห์คุณสมบัติใน Resume เทียบกับเกณฑ์หลักทั้ง 3 ระดับ (ระดับดี 100%, ระดับปานกลาง 50%, ระดับแย่ 0%) โดยเกณฑ์หลักแต่ละข้อต้องเลือกประเมินเพียง 1 ใน 3 ระดับนี้เท่านั้น: เต็ม 100%, ครึ่งหนึ่ง 50%, หรือ 0% (ห้ามคิดตัวเลขอื่นๆ หรือเฉลี่ยทศนิยม เช่น 21/25 หรือ 83.33% เด็ดขาด) และตอบกลับในรูปแบบเทมเพลตด้านล่างนี้เป๊ะๆ:
 
-สำคัญที่สุด: ให้ตอบกลับในรูปแบบตารางตามเทมเพลตด้านล่างนี้เป๊ะๆ (แทนที่ [คะแนนที่ได้] และ [เหตุผลประเมินสั้นๆ] ด้วยข้อมูลจริง):
+## 1. ข้อมูลผู้สมัคร
+
+**ชื่อ-สกุล**: ${matchedDbName || '[ดึง ชื่อ-สกุล จริงที่พบใน Resume (หากชื่อใน DB เป็นตัวเลขหรือชื่อมั่ว ให้ใช้ชื่อจาก Resume แทน) หรือหากไม่มีให้ระบุ ไม่ระบุ]'}
+**อีเมล**: ${matchedDbEmail || '[ดึง อีเมล จริงที่พบใน Resume หรือหากไม่มีให้ระบุ ไม่ระบุ]'}
+
+---
+
+## 2. คะแนนรวม (0–100)
 
 | เกณฑ์ | คะแนน | เหตุผล |
 |---|---|---|
 ${tableRowsExample}
 | **รวมทั้งหมด** | [คะแนนรวมทั้งหมด]/100 | [คำสรุปโดยรวมสั้นๆ] |
 
-ห้ามย่อหรือเปลี่ยนชื่อเกณฑ์โดยเด็ดขาด เพื่อให้ระบบดึงข้อมูลคะแนนแสดงผลบนหน้าจอได้อย่างถูกต้อง`;
+ข้อห้ามสำคัญ:
+- ในหัวข้อ "## 1. ข้อมูลผู้สมัคร" ให้แสดงเฉพาะ 2 บรรทัดคือ **ชื่อ-สกุล** และ **อีเมล** เท่านั้น ห้ามแสดงวันเกิด สถานภาพ ที่อยู่ เงินเดือน หรือวันเริ่มงาน เด็ดขาด
+- หากชื่อผู้สมัครจากฐานข้อมูลระบบเป็นตัวเลข หรือเป็นชื่อมั่ว/ข้อมูลขยะ ให้ดึงชื่อจริงจาก Resume มาใช้แทนเด็ดขาด
+- ห้ามย่อหรือเปลี่ยนชื่อเกณฑ์หลักในตาราง และห้ามเพิ่มหัวข้ออื่นเด็ดขาด`;
         }
 
         setResult({ resumeName: "Resume", content: "", streaming: true });
@@ -791,9 +1276,11 @@ ${tableRowsExample}
                 body: JSON.stringify({
                     messages: [{ role: "user", content: userContent }],
                     system_prompt: SYSTEM_PROMPT,
-                    max_new_tokens: 2048,
+                    max_new_tokens: 8192,
                     temperature: 0,
+                    model: selectedModel,
                 }),
+                signal,
             });
 
             if (!response.ok) throw new Error("AI ไม่ตอบสนอง");
@@ -803,18 +1290,29 @@ ${tableRowsExample}
             let full = "";
 
             while (true) {
+                if (isCancelledRef.current) {
+                    reader.cancel();
+                    break;
+                }
                 const { done, value } = await reader.read();
-                if (done) break;
+                if (done || isCancelledRef.current) break;
                 full += decoder.decode(value, { stream: true });
                 setResult(prev => prev ? { ...prev, content: full } : null);
             }
 
-            setResult(prev => prev ? { ...prev, streaming: false } : null);
-        } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : "เชื่อมต่อ Typhoon ไม่ได้";
-            setResult({ resumeName: "Resume", content: `❌ ${msg}`, streaming: false });
+            if (!isCancelledRef.current) {
+                setResult(prev => prev ? { ...prev, streaming: false } : null);
+            }
+        } catch (err: any) {
+            if (err.name === "AbortError" || isCancelledRef.current) {
+                setResult(prev => prev ? { ...prev, content: prev.content + "\n\n⚠️ [ยกเลิกการวิเคราะห์เรียบร้อย]", streaming: false } : null);
+            } else {
+                const msg = err instanceof Error ? err.message : "เชื่อมต่อ AI ไม่ได้";
+                setResult({ resumeName: "Resume", content: `❌ ${msg}`, streaming: false });
+            }
         } finally {
             setLoading(false);
+            abortControllerRef.current = null;
         }
     };
 
@@ -839,40 +1337,37 @@ ${tableRowsExample}
     return (
         <div className="p-8 space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-black text-slate-800">คัดกรอง Resume</h1>
-                    <p className="text-slate-400 text-sm mt-1">วิเคราะห์ Resume ด้วย Typhoon AI</p>
+                    <p className="text-slate-400 text-sm mt-1">วิเคราะห์ Resume ด้วย AI (Cloud & Fine-Tuned)</p>
                 </div>
-                {/* AI Status */}
-                <button
-                    onClick={checkOnline}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${online === true
-                        ? "bg-emerald-50 text-emerald-600 border-emerald-100"
-                        : online === false
-                            ? "bg-red-50 text-red-500 border-red-100"
-                            : "bg-slate-50 text-slate-400 border-slate-100"
-                        }`}
-                >
-                    {online === true
-                        ? <><Wifi className="w-4 h-4" /> AI พร้อมใช้</>
-                        : online === false
-                            ? <><WifiOff className="w-4 h-4" /> AI ออฟไลน์</>
-                            : <><Sparkles className="w-4 h-4" /> ตรวจสอบ...</>}
-                </button>
+                <div className="flex items-center gap-3 flex-wrap">
+                    <AIModelDropdown
+                        selectedModelId={selectedModel}
+                        onSelectModel={handleModelChange}
+                    />
+                    {/* AI Status */}
+                    <button
+                        onClick={checkOnline}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${online === true
+                            ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+                            : online === false
+                                ? "bg-red-50 text-red-500 border-red-100"
+                                : "bg-slate-50 text-slate-400 border-slate-100"
+                            }`}
+                    >
+                        {online === true
+                            ? <><Wifi className="w-4 h-4" /> AI พร้อมใช้</>
+                            : online === false
+                                ? <><WifiOff className="w-4 h-4" /> AI ออฟไลน์</>
+                                : <><Sparkles className="w-4 h-4" /> ตรวจสอบ...</>}
+                    </button>
+                </div>
             </div>
 
             {/* Tabs for Mode */}
             <div className="flex items-center gap-2 border-b border-slate-100 pb-px">
-                <button
-                    onClick={() => setActiveMode("single")}
-                    className={`px-6 py-3 border-b-2 font-bold text-sm transition-all font-sans ${activeMode === "single"
-                        ? "border-[#4169E1] text-[#4169E1]"
-                        : "border-transparent text-slate-400 hover:text-slate-600"
-                        }`}
-                >
-                    วิเคราะห์เดี่ยว (Single Resume)
-                </button>
                 <button
                     onClick={() => setActiveMode("batch")}
                     className={`px-6 py-3 border-b-2 font-bold text-sm transition-all font-sans ${activeMode === "batch"
@@ -881,6 +1376,15 @@ ${tableRowsExample}
                         }`}
                 >
                     วิเคราะห์กลุ่ม (Batch Screening)
+                </button>
+                <button
+                    onClick={() => setActiveMode("single")}
+                    className={`px-6 py-3 border-b-2 font-bold text-sm transition-all font-sans ${activeMode === "single"
+                        ? "border-[#4169E1] text-[#4169E1]"
+                        : "border-transparent text-slate-400 hover:text-slate-600"
+                        }`}
+                >
+                    วิเคราะห์เดี่ยว (Single Resume)
                 </button>
             </div>
 
@@ -895,14 +1399,25 @@ ${tableRowsExample}
                                     <FileText className="w-4 h-4 text-[#4169E1]" />
                                     <h3 className="font-bold text-slate-700 text-sm">ข้อความ Resume</h3>
                                 </div>
-                                <button
-                                    onClick={() => fileInputRef.current?.click()}
-                                    disabled={ocrLoading}
-                                    className="flex items-center gap-1.5 text-xs text-[#4169E1] font-semibold hover:underline disabled:opacity-50"
-                                >
-                                    <Upload className="w-3.5 h-3.5" />
-                                    {ocrLoading ? "กำลังวิเคราะห์ OCR..." : "อัปโหลดไฟล์ (.txt, .pdf, รูปภาพ)"}
-                                </button>
+                                <div className="flex items-center gap-3">
+                                    {resumeText && (
+                                        <button
+                                            onClick={() => setResumeText("")}
+                                            className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-semibold hover:underline"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                            ลบข้อความดิบ
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => fileInputRef.current?.click()}
+                                        disabled={ocrLoading}
+                                        className="flex items-center gap-1.5 text-xs text-[#4169E1] font-semibold hover:underline disabled:opacity-50"
+                                    >
+                                        <Upload className="w-3.5 h-3.5" />
+                                        {ocrLoading ? "กำลังวิเคราะห์ OCR..." : "อัปโหลดไฟล์ (.txt, .pdf, รูปภาพ)"}
+                                    </button>
+                                </div>
                                 <input
                                     ref={fileInputRef}
                                     type="file"
@@ -989,27 +1504,25 @@ ${tableRowsExample}
                             )}
                         </div>
 
-                        {/* Analyze button */}
-                        <button
-                            onClick={analyze}
-                            disabled={loading || ocrLoading || !resumeText.trim() || resumeText.startsWith("กำลังอ่านประมวลผลไฟล์")}
-                            className="w-full flex items-center justify-center gap-2 bg-[#4169E1] hover:bg-[#5a52e0] text-white font-bold py-4 rounded-2xl shadow-md shadow-indigo-200 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:scale-100 disabled:cursor-not-allowed"
-                        >
-                            {loading ? (
-                                <>
-                                    <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                    </svg>
-                                    AI กำลังวิเคราะห์...
-                                </>
-                            ) : (
-                                <>
-                                    <Sparkles className="w-5 h-5" />
-                                    วิเคราะห์ Resume ด้วย AI
-                                </>
-                            )}
-                        </button>
+                        {/* Analyze / Cancel button */}
+                        {loading ? (
+                            <button
+                                onClick={cancelAnalysis}
+                                className="w-full flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white font-bold py-4 rounded-2xl shadow-md transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
+                            >
+                                <Square className="w-5 h-5 fill-current" />
+                                ยกเลิกการวิเคราะห์ AI
+                            </button>
+                        ) : (
+                            <button
+                                onClick={analyze}
+                                disabled={ocrLoading || !resumeText.trim() || resumeText.startsWith("กำลังอ่านประมวลผลไฟล์")}
+                                className="w-full flex items-center justify-center gap-2 bg-[#4169E1] hover:bg-[#5a52e0] text-white font-bold py-4 rounded-2xl shadow-md shadow-indigo-200 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:scale-100 disabled:cursor-not-allowed"
+                            >
+                                <Sparkles className="w-5 h-5" />
+                                วิเคราะห์ Resume ด้วย AI
+                            </button>
+                        )}
                     </div>
 
                     {/* Right: Result panel */}
@@ -1060,11 +1573,16 @@ ${tableRowsExample}
                                         const criteriaMap = parseCriteria(jobCriteria);
                                         const scores = matchParsedScoresToCriteria(parsed.scores, criteriaMap);
 
-                                        const breakdown: Record<string, { score: number; max: number }> = {};
+                                        const breakdown: Record<string, { score: number; max: number; reason: string }> = {};
                                         Object.entries(criteriaMap).forEach(([key, info]: any) => {
+                                            const matchedRow = parsed.scores.find((r: any) =>
+                                                r.name.toLowerCase().includes(info.name.toLowerCase()) ||
+                                                info.name.toLowerCase().includes(r.name.toLowerCase())
+                                            );
                                             breakdown[info.name] = {
                                                 score: scores[key] !== undefined ? scores[key] : 0,
-                                                max: info.max
+                                                max: info.max,
+                                                reason: matchedRow?.reason || ""
                                             };
                                         });
 
@@ -1087,30 +1605,35 @@ ${tableRowsExample}
                                                                     <span>{info.score}/{info.max} PTS</span>
                                                                 </div>
                                                                 <div className={`w-full ${styles.bg} border ${styles.border} h-3.5 rounded-full overflow-hidden p-0.5`}>
-                                                                    <div 
+                                                                    <div
                                                                         className={`h-full rounded-full transition-all duration-500 ${styles.bar}`}
                                                                         style={{ width: `${pct}%` }}
                                                                     />
                                                                 </div>
+                                                                {info.reason && (
+                                                                    <p className="text-[11px] text-indigo-700 bg-indigo-50/50 p-2 rounded-lg border border-indigo-100 mt-1 flex items-start gap-1.5">
+                                                                        <Sparkles className="w-3.5 h-3.5 text-[#4169E1] shrink-0 mt-0.5" />
+                                                                        <span><strong className="font-bold">เหตุผล AI:</strong> {info.reason}</span>
+                                                                    </p>
+                                                                )}
                                                             </div>
                                                         );
                                                     })}
                                                 </div>
-
                                                 {/* Total Average Bar */}
                                                 {(() => {
                                                     const entries = Object.values(breakdown) as { score: number; max: number }[];
                                                     const totalScore = entries.reduce((s, e) => s + e.score, 0);
                                                     const totalMax = entries.reduce((s, e) => s + e.max, 0);
                                                     const avgPercent = totalMax > 0 ? (totalScore / totalMax) * 100 : 0;
-                                                    
+
                                                     const avgColor = avgPercent >= 80 ? "emerald" : avgPercent >= 50 ? "amber" : "rose";
                                                     const avgBarStyles = {
                                                         emerald: { bar: "from-emerald-400 to-emerald-600", text: "text-emerald-600" },
                                                         amber: { bar: "from-amber-400 to-amber-500", text: "text-amber-600" },
                                                         rose: { bar: "from-rose-400 to-rose-600", text: "text-rose-600" },
                                                     }[avgColor];
-                                                    
+
                                                     return (
                                                         <div className="mt-3 pt-3 border-t border-slate-200/60 space-y-1">
                                                             <div className="flex justify-between text-[12px] font-black text-slate-700">
@@ -1118,7 +1641,7 @@ ${tableRowsExample}
                                                                 <span className={avgBarStyles.text}>{totalScore}/{totalMax} PTS ({Math.round(avgPercent)}%)</span>
                                                             </div>
                                                             <div className="w-full bg-slate-100 h-4 rounded-full overflow-hidden p-0.5">
-                                                                <div 
+                                                                <div
                                                                     className={`h-full rounded-full bg-gradient-to-r ${avgBarStyles.bar} transition-all duration-500`}
                                                                     style={{ width: `${avgPercent}%` }}
                                                                 />
@@ -1174,14 +1697,31 @@ ${tableRowsExample}
                                     </select>
                                 </div>
                                 {selectedJobId && selectedJobId !== "custom" && applicants.length > 0 && (
-                                    <button
-                                        onClick={analyzeAllApplicants}
-                                        disabled={batchAnalyzing}
-                                        className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-[#4169E1] hover:from-indigo-600 hover:to-[#3558c7] text-white text-xs font-bold transition-all shadow-sm hover:shadow active:scale-95 disabled:opacity-50 select-none whitespace-nowrap cursor-pointer"
-                                    >
-                                        <RefreshCw className={`w-3.5 h-3.5 ${batchAnalyzing ? "animate-spin" : ""}`} />
-                                        {batchAnalyzing ? "กำลังวิเคราะห์..." : "วิเคราะห์ผู้สมัครทั้งหมด"}
-                                    </button>
+                                    batchAnalyzing ? (
+                                        <button
+                                            onClick={cancelAnalysis}
+                                            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-bold transition-all shadow-sm hover:shadow active:scale-95 select-none whitespace-nowrap cursor-pointer"
+                                        >
+                                            <Square className="w-3.5 h-3.5 fill-current" />
+                                            ยกเลิกการวิเคราะห์ AI
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={analyzeAllApplicants}
+                                            disabled={selectedAppIds.length === 0}
+                                            className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-white text-xs font-bold transition-all shadow-sm select-none whitespace-nowrap cursor-pointer ${
+                                                selectedAppIds.length === 0
+                                                    ? "bg-slate-300 cursor-not-allowed opacity-70"
+                                                    : "bg-gradient-to-r from-indigo-500 to-[#4169E1] hover:from-indigo-600 hover:to-[#3558c7] hover:shadow active:scale-95"
+                                            }`}
+                                            title={selectedAppIds.length === 0 ? "กรุณาเลือกผู้สมัครอย่างน้อย 1 รายการ" : `วิเคราะห์ ${selectedAppIds.length} รายการที่เลือก`}
+                                        >
+                                            <RefreshCw className="w-3.5 h-3.5" />
+                                            {selectedAppIds.length === applicants.length
+                                                ? `วิเคราะห์ผู้สมัครทั้งหมด (${applicants.length})`
+                                                : `วิเคราะห์ผู้สมัครที่เลือก (${selectedAppIds.length})`}
+                                        </button>
+                                    )
                                 )}
                             </div>
                         </div>
@@ -1197,7 +1737,7 @@ ${tableRowsExample}
                         </div>
                     )}
 
-                    {/* Results cards rendering */}
+                    {/* Results list rendering - Sleek Horizontal Rows (High to Low PTS) */}
                     {!loadingApplicants && selectedJobId && selectedJobId !== "custom" && (
                         <>
                             {applicants.length === 0 ? (
@@ -1205,250 +1745,255 @@ ${tableRowsExample}
                                     ยังไม่มีผู้สมัครส่งใบสมัครเข้ามาในตำแหน่งงานนี้
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    {applicants.map((app, idx) => {
-                                        const candidateName = app.Candidate 
-                                            ? `${app.Candidate.first_name} ${app.Candidate.last_name}` 
-                                            : "ไม่ระบุชื่อผู้สมัคร";
-                                        
-                                        const resumeName = app.resume_url 
-                                            ? app.resume_url.split("/").pop() 
-                                            : "Resume.pdf";
+                                <div className="flex flex-col gap-3 font-sans">
+                                    {/* ── Control Bar: เลือกทั้งหมด ── */}
+                                    <div className="flex items-center justify-between bg-white border border-slate-200/80 rounded-2xl px-4 py-2.5 text-xs text-slate-700 shadow-sm mb-1">
+                                        <label className="flex items-center gap-2.5 cursor-pointer select-none font-bold text-slate-800 hover:text-[#4169E1] transition-colors">
+                                            <input
+                                                type="checkbox"
+                                                checked={applicants.length > 0 && selectedAppIds.length === applicants.length}
+                                                onChange={toggleSelectAllApplicants}
+                                                className="w-4 h-4 text-[#4169E1] rounded border-slate-300 focus:ring-[#4169E1] cursor-pointer"
+                                            />
+                                            <span>เลือก Resume ทั้งหมดในการวิเคราะห์ ({selectedAppIds.length}/{applicants.length} รายการ)</span>
+                                        </label>
+                                        <div className="text-[11px] font-semibold text-slate-400">
+                                            {selectedAppIds.length === 0 ? (
+                                                <span className="text-amber-500 font-bold">⚠️ กรุณาเลือกผู้สมัครอย่างน้อย 1 รายการเพื่อวิเคราะห์</span>
+                                            ) : (
+                                                <span>พร้อมวิเคราะห์ <strong className="text-[#4169E1] font-bold">{selectedAppIds.length}</strong> รายการ</span>
+                                            )}
+                                        </div>
+                                    </div>
 
-                                        const hasScore = !!app.AIScreening;
-                                        const score = app.AIScreening?.skill_score || 0;
-                                        const status = analyzingStates[app.ID] || (hasScore ? "done" : "idle");
+                                    {[...applicants]
+                                        .sort((a, b) => (b.AIScreening?.skill_score || 0) - (a.AIScreening?.skill_score || 0))
+                                        .map((app, idx) => {
+                                            const candidateName = app.Candidate
+                                                ? `${app.Candidate.first_name} ${app.Candidate.last_name}`
+                                                : "ไม่ระบุชื่อผู้สมัคร";
 
-                                        const scoreColor = score >= 80 
-                                            ? "text-emerald-500" 
-                                            : score >= 50 
-                                                ? "text-amber-500" 
-                                                : "text-rose-500";
+                                            const hasScore = !!app.AIScreening;
+                                            const score = app.AIScreening?.skill_score || 0;
+                                            const status = analyzingStates[app.ID] || (hasScore ? "done" : "idle");
 
-                                        // Parse criteria
-                                        const matchedJob = jobs.find(j => j.ID.toString() === selectedJobId);
-                                        const criteriaMap = parseCriteria(matchedJob?.criteria || "");
-                                        const breakdown = parseBreakdownFromStrengths(app.AIScreening?.strengths, criteriaMap);
-                                        const cleanStrengths = getCleanStrengths(app.AIScreening?.strengths);
-                                        
-                                        return (
-                                            <div key={idx} className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 hover:shadow-md transition-all font-sans flex flex-col space-y-4 relative">
-                                                
-                                                {/* Header */}
-                                                <div className="flex items-start justify-between">
-                                                    <div className="flex items-center gap-3 col-span-2">
-                                                        <div className="w-12 h-12 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-center text-[#4169E1] shrink-0">
-                                                            <FileText className="w-6 h-6" />
-                                                        </div>
-                                                        <div className="min-w-0">
-                                                            <h4 className="font-bold text-slate-800 text-sm truncate max-w-[200px]" title={candidateName}>
-                                                                {candidateName}
-                                                            </h4>
-                                                            <p className="text-xs text-slate-400 truncate max-w-[200px]" title={resumeName}>
-                                                                {resumeName}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-right shrink-0">
-                                                        {status === "ocr" && (
-                                                            <span className="text-xs text-amber-500 font-bold flex items-center gap-1">
-                                                                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> OCR สแกนไฟล์...
-                                                            </span>
-                                                        )}
-                                                        {status === "ai" && (
-                                                            <span className="text-xs text-blue-500 font-bold flex items-center gap-1">
-                                                                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> AI คัดกรอง...
-                                                            </span>
-                                                        )}
-                                                        {status === "saving" && (
-                                                            <span className="text-xs text-emerald-500 font-bold flex items-center gap-1">
-                                                                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> กำลังบันทึก...
-                                                            </span>
-                                                        )}
-                                                        {status === "error" && (
-                                                            <span className="text-xs text-red-500 font-bold">
-                                                                เกิดข้อผิดพลาด
-                                                            </span>
-                                                        )}
-                                                        {status === "idle" && (
-                                                            <span className="text-xs text-slate-400 font-medium">
-                                                                รอการวิเคราะห์...
-                                                            </span>
-                                                        )}
-                                                        {status === "done" && (
-                                                            <span className={`text-lg font-black ${scoreColor}`}>
-                                                                {Math.round(score)} <span className="text-xs font-semibold">PTS</span>
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
+                                            const scoreColor = score >= 80
+                                                ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+                                                : score >= 50
+                                                    ? "bg-amber-50 text-amber-600 border-amber-200"
+                                                    : score > 0
+                                                        ? "bg-rose-50 text-rose-600 border-rose-200"
+                                                        : "bg-slate-100 text-slate-500 border-slate-200";
 
-                                                {/* Action Panel for individual candidate */}
-                                                <div className="flex items-center gap-2 pt-1">
-                                                    {app.resume_url && (
-                                                        <a
-                                                            href={(apiClient.defaults.baseURL || "").replace("/api", "") + app.resume_url}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="inline-flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-600 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all"
-                                                        >
-                                                            เปิดไฟล์ Resume
-                                                        </a>
-                                                    )}
-                                                    <button
-                                                        onClick={() => runSingleAnalysis(app)}
-                                                        disabled={status === "ocr" || status === "ai" || status === "saving"}
-                                                        className="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all"
-                                                    >
-                                                        <RefreshCw className={`w-3 h-3 ${status === "ocr" || status === "ai" ? "animate-spin" : ""}`} /> วิเคราะห์ใหม่
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDeleteApplicant(app.ID)}
-                                                        className="inline-flex items-center gap-1 bg-rose-50 hover:bg-rose-100 text-rose-600 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ml-auto cursor-pointer"
-                                                        title="ลบข้อมูลผู้สมัคร"
-                                                    >
-                                                        <X className="w-3 h-3" /> ลบผู้สมัคร
-                                                    </button>
-                                                </div>
+                                            // Parse criteria
+                                            const matchedJob = jobs.find(j => j.ID.toString() === selectedJobId);
+                                            const criteriaMap = parseCriteria(matchedJob?.criteria || "");
+                                            const breakdown = parseBreakdownFromStrengths(app.AIScreening?.strengths, criteriaMap);
 
-                                                {status === "idle" || status === "ocr" || status === "error" ? (
-                                                    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 text-center text-slate-400 text-xs font-sans mt-2">
-                                                        {status === "ocr" && "⏳ กำลังสแกนไฟล์ด้วย OCR..."}
-                                                        {status === "error" && "⚠️ เกิดข้อผิดพลาดในการประเมินผลลัพธ์"}
-                                                        {status === "idle" && "⏳ รอการวิเคราะห์ (กำลังจัดเตรียมคิวประมวลผล...)"}
-                                                    </div>
-                                                ) : (
-                                                    <>
-                                                        {/* Streaming indicator while AI is running */}
-                                                        {(status === "ai" || status === "saving") && (
-                                                            <div className="flex items-center gap-2 mb-3 text-xs text-[#4169E1] font-bold animate-pulse font-sans bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100">
-                                                                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> 
-                                                                <span>{status === "ai" ? "🧠 AI กำลังสตรีมวิเคราะห์และให้คะแนน..." : "💾 กำลังบันทึกผลลัพธ์..."}</span>
+                                            return (
+                                                <div key={app.ID || idx} className={`rounded-2xl border transition-all flex flex-col font-sans ${
+                                                    selectedAppIds.includes(app.ID)
+                                                        ? "bg-white border-indigo-200 shadow-sm hover:shadow-md"
+                                                        : "bg-slate-50/50 border-slate-200/60 opacity-75"
+                                                }`}>
+                                                    {/* ─── Main Compact Row Header (หน้าหลัก) ─── */}
+                                                    <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+
+                                                        {/* 1. Checkbox + Rank & Candidate Info */}
+                                                        <div className="flex items-center gap-3 min-w-[220px]">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedAppIds.includes(app.ID)}
+                                                                onChange={() => toggleSelectApplicant(app.ID)}
+                                                                className="w-4 h-4 text-[#4169E1] rounded border-slate-300 focus:ring-[#4169E1] cursor-pointer shrink-0 transition-transform active:scale-90"
+                                                                title="เลือก/ยกเลิกเพื่อวิเคราะห์ AI"
+                                                            />
+                                                            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-[#4169E1] font-mono font-black text-xs flex items-center justify-center shrink-0">
+                                                                #{idx + 1}
                                                             </div>
-                                                        )}
+                                                            <div className="min-w-0">
+                                                                <div className="flex items-center gap-2">
+                                                                    <h4 className="font-bold text-slate-800 text-sm truncate max-w-[180px]" title={candidateName}>
+                                                                        {candidateName}
+                                                                    </h4>
+                                                                    {app.resume_url && (
+                                                                        <a
+                                                                            href={(apiClient.defaults.baseURL || "").replace("/api", "") + app.resume_url}
+                                                                            target="_blank"
+                                                                            rel="noreferrer"
+                                                                            className="text-[10px] text-[#4169E1] bg-blue-50 hover:bg-blue-100 font-bold px-2 py-0.5 rounded transition-all shrink-0"
+                                                                        >
+                                                                            Resume
+                                                                        </a>
+                                                                    )}
+                                                                    {/* Status Badge */}
+                                                                    {(() => {
+                                                                        const appStatus = app.Status || app.status || "รอพิจารณา";
+                                                                        const isShortlisted = appStatus === "รอนัดสัมภาษณ์" || appStatus === "shortlisted";
+                                                                        const isPassed = appStatus === "ผ่าน" || appStatus === "ผ่านการคัดเลือก" || appStatus === "approved";
+                                                                        const isInterviewed = appStatus === "นัดสัมภาษณ์แล้ว" || appStatus === "interview";
+                                                                        const isRejected = appStatus === "ไม่ผ่าน" || appStatus === "ปฏิเสธ" || appStatus === "rejected";
 
-                                                        {/* Criteria progress bars */}
-                                                        <div className="space-y-3 pt-3 border-t border-slate-50">
-                                                            {Object.entries(breakdown).map(([cName, info]: any, cIdx) => {
+                                                                        const badgeStyle = isPassed
+                                                                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                                            : isShortlisted
+                                                                                ? "bg-purple-50 text-purple-700 border-purple-200"
+                                                                                : isInterviewed
+                                                                                    ? "bg-blue-50 text-blue-700 border-blue-200"
+                                                                                    : isRejected
+                                                                                        ? "bg-rose-50 text-rose-700 border-rose-200"
+                                                                                        : "bg-amber-50 text-amber-700 border-amber-200";
+
+                                                                        return (
+                                                                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 ${badgeStyle}`}>
+                                                                                {appStatus}
+                                                                            </span>
+                                                                        );
+                                                                    })()}
+                                                                </div>
+                                                                <p className="text-xs text-slate-400 truncate mt-0.5" title={candidateName}>
+                                                                    {app.Candidate?.email || "ไม่มีอีเมล"} • {app.Candidate?.phone || "ไม่มีเบอร์"}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* 2. Criteria Breakdown Badges (แสดงแค่ Criteria และคะแนนเกณฑ์) */}
+                                                        <div className="flex-1 overflow-x-auto flex items-center gap-2 py-1">
+                                                            {status === "done" && Object.entries(breakdown).map(([cName, info]: any, cIdx) => {
                                                                 const percent = info.max > 0 ? (info.score / info.max) * 100 : 0;
-                                                                const colorClass = percent >= 80 
-                                                                    ? "emerald" 
-                                                                    : percent >= 50 
-                                                                        ? "amber" 
-                                                                        : "rose";
+                                                                const badgeColor = percent >= 80
+                                                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                                    : percent >= 50
+                                                                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                                                                        : "bg-rose-50 text-rose-700 border-rose-200";
 
-                                                                const barStyles = {
-                                                                    emerald: {
-                                                                        bar: "bg-emerald-500",
-                                                                        border: "border-emerald-500/30",
-                                                                        bg: "bg-emerald-50/20"
-                                                                    },
-                                                                    amber: {
-                                                                        bar: "bg-amber-500",
-                                                                        border: "border-amber-500/30",
-                                                                        bg: "bg-amber-50/20"
-                                                                    },
-                                                                    rose: {
-                                                                        bar: "bg-rose-500",
-                                                                        border: "border-rose-500/30",
-                                                                        bg: "bg-rose-50/20"
-                                                                    }
-                                                                }[colorClass];
-                                                                
                                                                 return (
-                                                                    <div key={cIdx} className="space-y-1">
-                                                                        <div className="flex justify-between text-[11px] font-bold text-slate-600">
-                                                                            <span>{cIdx + 1}. {cName}</span>
-                                                                            <span>{info.score}/{info.max} PTS</span>
-                                                                        </div>
-                                                                        <div className={`w-full ${barStyles.bg} border ${barStyles.border} h-3.5 rounded-full overflow-hidden p-0.5`}>
-                                                                            <div 
-                                                                                className={`h-full rounded-full transition-all duration-500 ${barStyles.bar}`}
-                                                                                style={{ width: `${percent}%` }}
-                                                                            ></div>
-                                                                        </div>
+                                                                    <div key={cIdx} className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold whitespace-nowrap flex items-center gap-1.5 ${badgeColor}`}>
+                                                                        <span className="text-slate-500 font-normal truncate max-w-[130px]">{cName}:</span>
+                                                                        <span className="font-bold font-mono">{info.score}/{info.max}</span>
                                                                     </div>
                                                                 );
                                                             })}
+                                                            {status === "ai" && (
+                                                                <span className="text-xs text-[#4169E1] font-bold flex items-center gap-1.5 animate-pulse bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
+                                                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> {AVAILABLE_AI_MODELS.find(m => m.id === selectedModel)?.badge || "🤖 AI"} กำลังวิเคราะห์คะแนน...
+                                                                </span>
+                                                            )}
+                                                            {status === "ocr" && (
+                                                                <span className="text-xs text-amber-600 font-bold flex items-center gap-1.5 animate-pulse bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+                                                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> 📄 กำลังสแกนอ่านไฟล์เอกสาร (OCR)...
+                                                                </span>
+                                                            )}
+                                                            {status === "saving" && (
+                                                                <span className="text-xs text-emerald-600 font-bold flex items-center gap-1.5 animate-pulse bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                                                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> 💾 กำลังบันทึกผลลง Database...
+                                                                </span>
+                                                            )}
+                                                            {status === "idle" && (
+                                                                <span className="text-xs text-slate-400 font-medium">
+                                                                    รอคัดกรองคะแนน...
+                                                                </span>
+                                                            )}
                                                         </div>
 
-                                                        {/* Summary Total Bar */}
-                                                        {(() => {
-                                                            const entries = Object.values(breakdown) as { score: number; max: number }[];
-                                                            const totalScore = entries.reduce((s, e) => s + e.score, 0);
-                                                            const totalMax = entries.reduce((s, e) => s + e.max, 0);
-                                                            const avgPercent = totalMax > 0 ? (totalScore / totalMax) * 100 : 0;
-                                                            const avgColor = avgPercent >= 80 ? "emerald" : avgPercent >= 50 ? "amber" : "rose";
-                                                            const avgBarStyles = {
-                                                                emerald: { bar: "from-emerald-400 to-emerald-600", text: "text-emerald-600" },
-                                                                amber: { bar: "from-amber-400 to-amber-500", text: "text-amber-600" },
-                                                                rose: { bar: "from-rose-400 to-rose-600", text: "text-rose-600" },
-                                                            }[avgColor];
-                                                            return (
-                                                                <div className="mt-3 pt-3 border-t border-slate-100 space-y-1">
-                                                                    <div className="flex justify-between text-[12px] font-black text-slate-700">
-                                                                        <span>คะแนนรวม</span>
-                                                                        <span className={avgBarStyles.text}>{totalScore}/{totalMax} PTS ({Math.round(avgPercent)}%)</span>
-                                                                    </div>
-                                                                    <div className="w-full bg-slate-100 h-4 rounded-full overflow-hidden p-0.5">
-                                                                        <div 
-                                                                            className={`h-full rounded-full bg-gradient-to-r ${avgBarStyles.bar} transition-all duration-700`}
-                                                                            style={{ width: `${avgPercent}%` }}
-                                                                        ></div>
+                                                        {/* 3. PTS Score & Action Buttons (ปุ่มวิเคราะห์เดี่ยว + PTS) */}
+                                                        <div className="flex items-center gap-3 shrink-0 justify-between md:justify-end border-t md:border-t-0 pt-2 md:pt-0 border-slate-100">
+                                                            {/* PTS Score Badge (ขยายขนาด PTS ให้ใหญ่ขึ้นเด่นชัด) */}
+                                                            <div className={`px-4 py-2 rounded-2xl border-2 text-center font-mono font-black flex items-center gap-1.5 shadow-sm transition-all ${scoreColor}`}>
+                                                                <span className="text-xl font-extrabold leading-none">{Math.round(score)}</span>
+                                                                <span className="text-xs font-black tracking-wider uppercase opacity-90">PTS</span>
+                                                            </div>
+
+                                                            {/* Action Buttons */}
+                                                            <div className="flex items-center gap-2">
+                                                                {/* ปุ่มดูข้อความ OCR ดิบแบบ Real-Time */}
+                                                                <button
+                                                                    onClick={() => openOcrModal(app)}
+                                                                    className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200/80 text-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border border-slate-200/80 cursor-pointer"
+                                                                    title="เปิดดูข้อความดิบจากการสแกน OCR แบบ Real-Time"
+                                                                >
+                                                                    <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                                                                    <span>ข้อความ OCR ดิบ</span>
+                                                                </button>
+
+                                                                {/* ปุ่มวิเคราะห์เดี่ยว */}
+                                                                <button
+                                                                    onClick={() => runSingleAnalysis(app)}
+                                                                    disabled={status === "ocr" || status === "ai" || status === "saving"}
+                                                                    className="flex items-center gap-1.5 bg-[#4169E1] hover:bg-[#3152c4] text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+                                                                    title="วิเคราะห์ผู้สมัครรายนี้คนเดียว"
+                                                                >
+                                                                    <Sparkles className={`w-3.5 h-3.5 ${status === "ocr" || status === "ai" ? "animate-spin" : ""}`} />
+                                                                    <span>วิเคราะห์เดี่ยว</span>
+                                                                </button>
+
+                                                                {/* ปุ่มลบผู้สมัคร */}
+                                                                <button
+                                                                    onClick={() => handleDeleteApplicant(app.ID)}
+                                                                    className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                                                                    title="ลบผู้สมัคร"
+                                                                >
+                                                                    <X className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* ─── 4. Expandable Details Section (ส่วนขยาย: รายละเอียดวิเคราะห์เดี่ยว & ข้อความดิบ) ─── */}
+                                                    <details className="group border-t border-slate-100 text-xs bg-slate-50/50 rounded-b-2xl cursor-pointer">
+                                                        <summary className="font-bold text-[#4169E1] select-none px-4 py-2 hover:bg-indigo-50/40 transition-all flex items-center justify-between">
+                                                            <span className="flex items-center gap-1.5">
+                                                                <ChevronDown className="w-4 h-4 group-open:rotate-180 transition-transform" />
+                                                                ดูรายละเอียดผลวิเคราะห์และข้อความ OCR ฉบับเต็ม
+                                                            </span>
+                                                            <span className="text-[10px] font-semibold text-slate-400">คลิกเพื่อขยาย/ซ่อน</span>
+                                                        </summary>
+
+                                                        <div className="p-4 border-t border-slate-200/60 bg-white space-y-4 rounded-b-2xl">
+                                                            {/* AI Detailed Analysis Report */}
+                                                            {getCleanStrengths(getStrengthsText(app)).trim() ? (
+                                                                <div className="space-y-2">
+                                                                    <h5 className="font-extrabold text-[#4169E1] text-xs uppercase tracking-wider flex items-center gap-1.5">
+                                                                        <Sparkles className="w-3.5 h-3.5" /> รายละเอียดผลการวิเคราะห์เดี่ยวจาก AI
+                                                                    </h5>
+                                                                    <div className="bg-indigo-50/30 border border-indigo-100 p-3.5 rounded-xl text-xs text-slate-700 leading-relaxed font-sans whitespace-pre-wrap">
+                                                                        {getCleanStrengths(getStrengthsText(app))}
                                                                     </div>
                                                                 </div>
-                                                            );
-                                                        })()}
+                                                            ) : status === "ai" || status === "ocr" || status === "saving" ? (
+                                                                <div className="text-[#4169E1] text-xs font-bold bg-blue-50/60 border border-blue-200 p-3.5 rounded-xl animate-pulse flex items-center gap-2">
+                                                                    <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
+                                                                    <span>กำลังวิเคราะห์และประมวลผลด้วย AI ({AVAILABLE_AI_MODELS.find(m => m.id === selectedModel)?.name || "Claude Sonnet 5"})...</span>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-slate-400 text-xs italic bg-slate-50 border border-slate-200/60 p-3 rounded-xl">
+                                                                    ยังไม่มีผลการวิเคราะห์เดี่ยวจาก AI (กรุณากดปุ่ม "วิเคราะห์เดี่ยว" ด้านบนเพื่อเริ่มประมวลผล)
+                                                                </div>
+                                                            )}
 
-                                                        {/* Text OCR raw display collapsible */}
-                                                        <div className="pt-1">
-                                                            <details className="text-[11px] border border-slate-100 rounded-xl p-2 bg-slate-50/50 cursor-pointer">
-                                                                <summary className="font-bold text-slate-500 select-none">ดูข้อความดิบจากการสแกน (OCR Raw Text)</summary>
+                                                            {/* Raw Text OCR display */}
+                                                            <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                                                                <h5 className="font-bold text-slate-500 text-[11px] uppercase tracking-wider">
+                                                                    📄 ข้อความดิบจากการสแกนเอกสาร (OCR Raw Text)
+                                                                </h5>
                                                                 <textarea
                                                                     readOnly
                                                                     value={(() => {
                                                                         const txt = app.ResumeText || app.resume_text || "";
                                                                         if (txt.trim().startsWith("ข้อมูลประวัติย่อ") || txt.includes("/api/upload/")) {
-                                                                            return "ยังไม่ได้ทำการสแกนข้อความ OCR (กรุณากด 'วิเคราะห์ใหม่' หรือ 'วิเคราะห์ผู้สมัครทั้งหมด' เพื่อเริ่มสแกนรูปภาพและถอดข้อความ)";
+                                                                            return "ยังไม่ได้ทำการสแกนข้อความ OCR (กรุณากด 'วิเคราะห์เดี่ยว' เพื่อเริ่มสแกนรูปภาพและถอดข้อความ)";
                                                                         }
                                                                         return txt;
                                                                     })()}
                                                                     rows={4}
-                                                                    className="w-full bg-white border border-slate-100 rounded-lg p-2 mt-2 font-mono text-[9px] resize-none outline-none leading-normal text-slate-600"
+                                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono text-[10px] resize-none outline-none leading-normal text-slate-600"
                                                                 />
-                                                            </details>
+                                                            </div>
                                                         </div>
-
-                                                        {/* ─── AI Detailed Analysis Panel ─── */}
-                                                        {app.AIScreening?.strengths && (() => {
-                                                            const rawStr = app.AIScreening.strengths as string;
-                                                            const cleanText = getCleanStrengths(rawStr);
-
-                                                            return (
-                                                                <details className="group text-[11px] border border-indigo-100 rounded-xl bg-indigo-50/20 cursor-pointer overflow-hidden font-sans">
-                                                                    <summary className="font-bold text-indigo-600 select-none px-3 py-2.5 flex items-center gap-1.5 list-none hover:bg-indigo-50/40 transition-all">
-                                                                        <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
-                                                                        รายละเอียดผลการวิเคราะห์อย่างละเอียด (AI Detailed Analysis)
-                                                                    </summary>
-
-                                                                    <div className="px-4 pb-4 pt-2 border-t border-indigo-100 bg-white">
-                                                                        <pre className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap font-sans">
-                                                                            {cleanText}
-                                                                        </pre>
-                                                                        {app.AIScreening.model_used && (
-                                                                            <p className="text-[9px] text-slate-400 pt-2 mt-2 border-t border-slate-100">
-                                                                                🔧 Model: <span className="font-mono font-bold">{app.AIScreening.model_used}</span>
-                                                                            </p>
-                                                                        )}
-                                                                    </div>
-                                                                </details>
-                                                            );
-                                                        })()}
-                                                    </>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
+                                                    </details>
+                                                </div>
+                                            );
+                                        })}
                                 </div>
                             )}
                         </>
@@ -1566,63 +2111,67 @@ ${tableRowsExample}
                             <hr className="border-slate-100" />
 
                             {/* Section 3: Resume */}
-                            <div className="space-y-3">
-                                <div className="flex justify-between items-center">
-                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">3. ข้อมูล Resume (ประวัติย่อการทำงาน) *</h4>
-                                    <label className="text-[10px] text-[#4169E1] font-bold cursor-pointer hover:underline">
-                                        อัปโหลดไฟล์ดึงข้อความ
-                                        <input
-                                            type="file"
-                                            accept=".txt,.pdf,image/*"
-                                            className="hidden"
-                                            onChange={e => e.target.files?.[0] && handleManualResumeUpload(e.target.files[0])}
-                                        />
+                            <div className="space-y-2">
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">3. อัปโหลด Resume (.pdf, .txt, รูปภาพ) *</label>
+                                <div className="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center hover:border-[#4169E1] transition-all bg-slate-50/50">
+                                    <input
+                                        type="file"
+                                        accept=".txt,.pdf,image/*"
+                                        required
+                                        id="manual-resume-uploader"
+                                        className="hidden"
+                                        onChange={e => e.target.files?.[0] && handleManualResumeUpload(e.target.files[0])}
+                                    />
+                                    <label htmlFor="manual-resume-uploader" className="cursor-pointer block space-y-2">
+                                        <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center mx-auto text-[#4169E1]">
+                                            <Upload className="w-5 h-5" />
+                                        </div>
+                                        {manualResumeFileName ? (
+                                            <div>
+                                                <p className="text-xs font-bold text-[#4169E1]">{manualResumeFileName}</p>
+                                                <p className="text-[10px] text-slate-400 mt-1">คลิกเพื่อเปลี่ยนไฟล์</p>
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <p className="text-xs font-bold text-slate-600">คลิกที่นี่เพื่อเลือกไฟล์ Resume</p>
+                                                <p className="text-[10px] text-slate-400 mt-1">รองรับไฟล์ PDF, TXT หรือรูปภาพ</p>
+                                            </div>
+                                        )}
                                     </label>
                                 </div>
-                                {manualResumeFileName && (
-                                    <div className="text-[10px] bg-blue-50 text-[#4169E1] font-semibold px-3 py-1.5 rounded-lg">
-                                        ไฟล์ประวัติย่อ: {manualResumeFileName}
-                                    </div>
-                                )}
-                                <textarea
-                                    required
-                                    value={manualResumeText}
-                                    onChange={e => setManualResumeText(e.target.value)}
-                                    placeholder="พิมพ์ประวัติย่อ หรือ วางข้อมูล Resume ที่นี่..."
-                                    rows={8}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-700 placeholder:text-slate-300 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans leading-relaxed"
-                                />
                             </div>
 
                             <hr className="border-slate-100" />
 
                             {/* Section 4: Transcript */}
-                            <div className="space-y-3">
-                                <div className="flex justify-between items-center">
-                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">4. ข้อมูล Transcript (ผลการศึกษา) *</h4>
-                                    <label className="text-[10px] text-[#4169E1] font-bold cursor-pointer hover:underline">
-                                        อัปโหลดไฟล์ดึงข้อความ
-                                        <input
-                                            type="file"
-                                            accept=".txt,.pdf,image/*"
-                                            className="hidden"
-                                            onChange={e => e.target.files?.[0] && handleManualTranscriptUpload(e.target.files[0])}
-                                        />
+                            <div className="space-y-2">
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">4. อัปโหลด Transcript / ใบแสดงผลการศึกษา *</label>
+                                <div className="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center hover:border-[#4169E1] transition-all bg-slate-50/50">
+                                    <input
+                                        type="file"
+                                        accept=".txt,.pdf,image/*"
+                                        required
+                                        id="manual-transcript-uploader"
+                                        className="hidden"
+                                        onChange={e => e.target.files?.[0] && handleManualTranscriptUpload(e.target.files[0])}
+                                    />
+                                    <label htmlFor="manual-transcript-uploader" className="cursor-pointer block space-y-2">
+                                        <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center mx-auto text-[#4169E1]">
+                                            <Upload className="w-5 h-5" />
+                                        </div>
+                                        {manualTranscriptFileName ? (
+                                            <div>
+                                                <p className="text-xs font-bold text-[#4169E1]">{manualTranscriptFileName}</p>
+                                                <p className="text-[10px] text-slate-400 mt-1">คลิกเพื่อเปลี่ยนไฟล์</p>
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <p className="text-xs font-bold text-slate-600">คลิกที่นี่เพื่อเลือกไฟล์ Transcript</p>
+                                                <p className="text-[10px] text-slate-400 mt-1">รองรับไฟล์ PDF, TXT หรือรูปภาพ</p>
+                                            </div>
+                                        )}
                                     </label>
                                 </div>
-                                {manualTranscriptFileName && (
-                                    <div className="text-[10px] bg-blue-50 text-[#4169E1] font-semibold px-3 py-1.5 rounded-lg">
-                                        ไฟล์ผลการศึกษา: {manualTranscriptFileName}
-                                    </div>
-                                )}
-                                <textarea
-                                    required
-                                    value={manualTranscriptText}
-                                    onChange={e => setManualTranscriptText(e.target.value)}
-                                    placeholder="พิมพ์ หรือ วางข้อมูลเกรดและรายวิชาจาก Transcript ที่นี่..."
-                                    rows={5}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-700 placeholder:text-slate-350 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans leading-relaxed"
-                                />
                             </div>
 
                             {/* Modal Footer */}
@@ -1646,6 +2195,96 @@ ${tableRowsExample}
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Real-Time Raw OCR Text Modal ── */}
+            {ocrModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn font-sans">
+                    <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-100 overflow-hidden">
+                        {/* Header */}
+                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                                    <FileText className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                        ข้อความ OCR ดิบจาก Resume - {ocrModalCandidateName}
+                                    </h3>
+                                    <p className="text-slate-400 text-xs flex items-center gap-1.5">
+                                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                        Typhoon OCR Real-Time Extraction
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setOcrModalOpen(false)}
+                                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Toolbar & Search */}
+                        <div className="px-6 py-3 border-b border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-3">
+                            {/* Search in OCR */}
+                            <div className="relative w-full sm:w-72">
+                                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                <input
+                                    type="text"
+                                    value={ocrSearchQuery}
+                                    onChange={e => setOcrSearchQuery(e.target.value)}
+                                    placeholder="ค้นหาข้อความดิบใน OCR..."
+                                    className="w-full pl-8 pr-3 py-1.5 bg-slate-100/80 border border-slate-200/70 rounded-xl text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:bg-white"
+                                />
+                            </div>
+
+                            {/* Live Stats */}
+                            <div className="flex items-center gap-4 text-xs text-slate-500 font-semibold w-full sm:w-auto justify-end">
+                                <span>อักขระ: <strong className="text-slate-800 font-mono">{ocrModalText.length.toLocaleString()}</strong> ตัว</span>
+                                <span>คำ: <strong className="text-slate-800 font-mono">{ocrModalText.trim() ? ocrModalText.trim().split(/\s+/).length.toLocaleString() : 0}</strong> คำ</span>
+                            </div>
+                        </div>
+
+                        {/* Monospace Raw OCR Content Area */}
+                        <div className="p-6 flex-1 overflow-y-auto bg-slate-900 text-slate-100 font-mono text-xs leading-relaxed select-text">
+                            <pre className="whitespace-pre-wrap break-words font-mono">
+                                {ocrModalText}
+                            </pre>
+                        </div>
+
+                        {/* Footer Actions */}
+                        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+                            {ocrModalAppObj && (
+                                <button
+                                    onClick={() => {
+                                        setOcrModalOpen(false);
+                                        runSingleAnalysis(ocrModalAppObj, true);
+                                    }}
+                                    className="flex items-center gap-1.5 text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-2 rounded-xl text-xs font-bold transition-all border border-indigo-200/60"
+                                >
+                                    <RefreshCw className="w-3.5 h-3.5" />
+                                    <span>สแกน Typhoon OCR ใหม่</span>
+                                </button>
+                            )}
+                            <div className="flex items-center gap-2 ml-auto">
+                                <button
+                                    onClick={() => copyOcrToClipboard(ocrModalText)}
+                                    className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs"
+                                >
+                                    {ocrCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                                    <span>{ocrCopied ? "คัดลอกแล้ว!" : "คัดลอกข้อความ OCR"}</span>
+                                </button>
+                                <button
+                                    onClick={() => setOcrModalOpen(false)}
+                                    className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold transition-all"
+                                >
+                                    ปิด
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

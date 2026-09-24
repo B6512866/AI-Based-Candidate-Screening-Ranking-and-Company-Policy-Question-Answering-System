@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import { BookOpen, Upload, Plus, Edit3, Save, Trash2, FileText, CheckCircle2, AlertCircle } from "lucide-react";
-import { getallknowledge, getbyidknowledge, createknowledge, updateknowledge, deleteknowledge } from "../../services/knowledgeService";
+import { BookOpen, Upload, Plus, Edit3, Save, Trash2, FileText, CheckCircle2, AlertCircle, XCircle } from "lucide-react";
+import { getallknowledge, createknowledge, updateknowledge, deleteknowledge } from "../../services/knowledgeService";
+import { getTyphoonApiUrl } from "../../services/apiClient";
+import AIModelDropdown, { AVAILABLE_AI_MODELS } from "../../components/common/AIModelDropdown";
+
+const TYPHOON_API = getTyphoonApiUrl();
 
 interface Document {
     ID: number;
@@ -11,6 +15,7 @@ interface Document {
 }
 
 export default function KnowledgePage() {
+    const [selectedModel, setSelectedModel] = useState<string>("ft:gpt-4o-mini-2024-07-18:hireai:resume-json-5k:v2");
     const [docs, setDocs] = useState<Document[]>([]);
     const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
     const [editFilename, setEditFilename] = useState("");
@@ -19,9 +24,13 @@ export default function KnowledgePage() {
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
+    // activeModelObj สำหรับแสดงผลชื่อและ Badge ของโมเดลที่เลือกใช้งานอยู่
+    const activeModelObj = AVAILABLE_AI_MODELS.find(m => m.id === selectedModel) || AVAILABLE_AI_MODELS[0];
+
     // New Doc Modal
     const [isCreating, setIsCreating] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const ocrAbortControllerRef = useRef<AbortController | null>(null);
 
     const fetchDocs = async () => {
         setLoading(true);
@@ -105,19 +114,105 @@ export default function KnowledgePage() {
         }
     };
 
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // State สำหรับ AI PDF Extraction
+    const [analyzingPdf, setAnalyzingPdf] = useState(false);
+
+    const cancelOcrAnalysis = () => {
+        if (ocrAbortControllerRef.current) {
+            ocrAbortControllerRef.current.abort();
+            ocrAbortControllerRef.current = null;
+            setAnalyzingPdf(false);
+            setMessage({ text: `⏹️ ยกเลิกการอ่านและสกัดข้อความด้วย AI (${activeModelObj.badge}) แล้ว`, type: "error" });
+        }
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        const reader = new FileReader();
-        reader.onload = evt => {
-            const content = evt.target?.result as string || "";
+        const fileNameLower = file.name.toLowerCase();
+        const isPdfOrImage = fileNameLower.endsWith(".pdf") ||
+            fileNameLower.endsWith(".jpg") ||
+            fileNameLower.endsWith(".jpeg") ||
+            fileNameLower.endsWith(".png") ||
+            fileNameLower.endsWith(".webp") ||
+            file.type.includes("pdf") ||
+            file.type.includes("image");
+
+        if (!isPdfOrImage && fileNameLower.endsWith(".txt")) {
+            const reader = new FileReader();
+            reader.onload = evt => {
+                const content = evt.target?.result as string || "";
+                setIsCreating(true);
+                setSelectedDoc(null);
+                setEditFilename(file.name);
+                setEditContent(content);
+                setMessage({ text: "โหลดไฟล์ข้อความสำเร็จ ตรวจสอบเนื้อหาและกดบันทึกเข้า DB", type: "success" });
+            };
+            reader.readAsText(file, "utf-8");
+            return;
+        }
+
+        // สำหรับไฟล์ PDF หรือ รูปภาพ -> เรียกใช้ AI OCR สกัดข้อความตามโมเดลที่เลือก
+        const controller = new AbortController();
+        ocrAbortControllerRef.current = controller;
+
+        setAnalyzingPdf(true);
+        setMessage({ text: `🤖 AI (${activeModelObj.badge}) กำลังอ่านและสกัดข้อความจากเอกสาร PDF/รูปภาพ...`, type: "success" });
+
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("model", selectedModel);
+
+            const res = await fetch(`${TYPHOON_API}/ocr`, {
+                method: "POST",
+                body: formData,
+                signal: controller.signal
+            });
+
+            if (!res.ok) {
+                throw new Error(`ไม่สามารถอ่านไฟล์ได้ (HTTP ${res.status})`);
+            }
+
+            const data = await res.json();
+            const extractedText = data.text || "";
+
+            if (!extractedText.trim()) {
+                throw new Error("AI ไม่พบข้อความในเอกสารหรือรูปภาพนี้");
+            }
+
+            // บันทึกข้อความที่ AI สกัดได้เข้า Form และเตรียมพร้อมกดบันทึกใน DB
             setIsCreating(true);
             setSelectedDoc(null);
-            setEditFilename(file.name);
-            setEditContent(content);
-        };
-        reader.readAsText(file, "utf-8");
+            const cleanName = file.name.replace(/\.[^/.]+$/, "") + ".txt";
+            setEditFilename(cleanName);
+            setEditContent(extractedText);
+            setMessage({
+                text: `✨ AI (${activeModelObj.badge}) สกัดข้อความจากรูปภาพ/เอกสาร (${file.name}) สำเร็จแล้ว! ตรวจสอบเนื้อหาและกดบันทึกเข้า DB ได้เลย`,
+                type: "success"
+            });
+        } catch (err: any) {
+            if (err.name === 'AbortError') {
+                console.log("OCR Upload aborted by user");
+                return;
+            }
+            console.error("OCR Upload error:", err);
+            let userMsg = err.message || `เกิดข้อผิดพลาดในการอ่านไฟล์ด้วย AI (${activeModelObj.badge})`;
+            if (userMsg === "Failed to fetch") {
+                userMsg = `ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ AI OCR (${activeModelObj.badge}) ได้ กรุณาตรวจสอบว่าเซิร์ฟเวอร์เปิดใช้งานอยู่`;
+            }
+            setMessage({
+                text: userMsg,
+                type: "error"
+            });
+        } finally {
+            setAnalyzingPdf(false);
+            ocrAbortControllerRef.current = null;
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
+        }
     };
 
     const startNewDoc = () => {
@@ -135,18 +230,43 @@ export default function KnowledgePage() {
                     <h1 className="text-2xl font-black text-slate-800">คลังความรู้และนโยบายองค์กร</h1>
                     <p className="text-slate-400 text-sm mt-1">จัดการเอกสารนโยบายและระเบียบบริษัท (เก็บใน Database สำหรับให้ AI ตอบคำถาม)</p>
                 </div>
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 font-bold px-4 py-2.5 rounded-xl border border-slate-200 transition-all shadow-sm text-sm"
-                    >
-                        <Upload className="w-4 h-4 text-[#4169E1]" />
-                        อัปโหลดไฟล์ .txt
-                    </button>
+                <div className="flex items-center gap-3 flex-wrap">
+                    <AIModelDropdown
+                        selectedModelId={selectedModel}
+                        onSelectModel={setSelectedModel}
+                        compact
+                    />
+                    {analyzingPdf ? (
+                        <div className="flex items-center gap-2">
+                            <button
+                                disabled
+                                className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 text-[#4169E1] font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm text-sm"
+                            >
+                                <div className="w-4 h-4 border-2 border-[#4169E1] border-t-transparent rounded-full animate-spin" />
+                                AI ({activeModelObj.badge}) กำลังสกัด PDF/รูปภาพ...
+                            </button>
+                            <button
+                                onClick={cancelOcrAnalysis}
+                                className="bg-red-50 hover:bg-red-100 text-red-600 font-bold px-3 py-2.5 rounded-xl border border-red-200 transition-all text-sm flex items-center gap-1.5 shadow-sm"
+                                title="ยกเลิกการสกัดข้อความด้วย AI"
+                            >
+                                <XCircle className="w-4 h-4" />
+                                ยกเลิก
+                            </button>
+                        </div>
+                    ) : (
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 font-bold px-4 py-2.5 rounded-xl border border-slate-200 transition-all shadow-sm text-sm"
+                        >
+                            <Upload className="w-4 h-4 text-[#4169E1]" />
+                            อัปโหลดไฟล์ (PDF / รูปภาพ / TXT) ด้วย AI
+                        </button>
+                    )}
                     <input
                         ref={fileInputRef}
                         type="file"
-                        accept=".txt"
+                        accept=".pdf,.txt,.jpg,.jpeg,.png,.webp,image/*"
                         className="hidden"
                         onChange={handleFileUpload}
                     />

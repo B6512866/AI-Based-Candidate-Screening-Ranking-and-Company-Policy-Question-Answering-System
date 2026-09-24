@@ -1,5 +1,4 @@
-import React from "react";
-import { MessageCircle, User, FileText, Bell as BellIcon } from "lucide-react";
+import { MessageCircle, User } from "lucide-react";
 
 export interface EmployeeMenuItem {
     id: string;
@@ -20,17 +19,5 @@ export const employeeMenuItems: EmployeeMenuItem[] = [
         label: "ข้อมูลของฉัน",
         icon: User,
         path: "/employee/profile",
-    },
-    {
-        id: "documents",
-        label: "เอกสารของฉัน",
-        icon: FileText,
-        path: "/employee/documents",
-    },
-    {
-        id: "notifications",
-        label: "การแจ้งเตือน",
-        icon: BellIcon,
-        path: "/employee/notifications",
     },
 ];

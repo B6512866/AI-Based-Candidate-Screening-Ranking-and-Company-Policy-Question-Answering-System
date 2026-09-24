@@ -12,7 +12,8 @@ import {
 } from "./landing-components";
 import { getalljobs, applyjob, checkApplicationStatus } from "../../services/jobPositionService";
 import apiClient from "../../services/apiClient";
-import { Briefcase, MapPin, DollarSign, Clock, Search, X, Building2, ShieldCheck, Mail, AlertCircle, Upload } from "lucide-react";
+import rules from "../../components/rules/rule";
+import { Briefcase, MapPin, DollarSign, Clock, Search, X, Building2, ShieldCheck, Mail, AlertCircle, Upload, CalendarDays, Maximize2 } from "lucide-react";
 import { LoginModal } from "../auth/LoginPage";
 
 interface JobPosition {
@@ -25,10 +26,47 @@ interface JobPosition {
     benefits: string;
     contact_info: string;
     description: string;
-    criteria: string;
+    criteria: any;
     status: string;
+    image_url?: string | null;
+    image_urls?: string[];
+    application_end_date?: string | null;
     CreatedAt: string;
 }
+
+const getDateOnly = (value?: string | null) =>
+    value ? value.slice(0, 10) : "";
+
+const getDaysUntil = (value?: string | null) => {
+    const dateOnly = getDateOnly(value);
+    if (!dateOnly) return null;
+
+    const [year, month, day] = dateOnly.split("-").map(Number);
+    const targetDate = new Date(year, month - 1, day);
+    const today = new Date();
+    const todayDate = new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate()
+    );
+
+    return Math.round(
+        (targetDate.getTime() - todayDate.getTime()) /
+            (1000 * 60 * 60 * 24)
+    );
+};
+
+const formatThaiDate = (value?: string | null) => {
+    const dateOnly = getDateOnly(value);
+    if (!dateOnly) return "";
+
+    const [year, month, day] = dateOnly.split("-").map(Number);
+    return new Intl.DateTimeFormat("th-TH", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+    }).format(new Date(year, month - 1, day));
+};
 
 function LandingPage() {
     const location = useLocation();
@@ -43,6 +81,7 @@ function LandingPage() {
     const [selectedDept, setSelectedDept] = useState("all");
     const [selectedJob, setSelectedJob] = useState<JobPosition | null>(null);
     const [activeDetailJob, setActiveDetailJob] = useState<JobPosition | null>(null);
+    const [viewingJobImageUrl, setViewingJobImageUrl] = useState<string | null>(null);
     const [showApplySuccess, setShowApplySuccess] = useState(false);
     const [showApplyForm, setShowApplyForm] = useState(false);
     const [showStatusModal, setShowStatusModal] = useState(false);
@@ -62,105 +101,111 @@ function LandingPage() {
     const [applyTranscriptUrl, setApplyTranscriptUrl] = useState("");
     const [applyTranscriptFileName, setApplyTranscriptFileName] = useState("");
     const [applyTranscriptText, setApplyTranscriptText] = useState("");
+    const [resumeFile, setResumeFile] = useState<File | null>(null);
+    const [transcriptFile, setTranscriptFile] = useState<File | null>(null);
     const [submittingApply, setSubmittingApply] = useState(false);
     const [applyError, setApplyError] = useState("");
 
-    // ฟังก์ชันอัปโหลดไฟล์ Resume ไปที่ Go Backend
-    const handleResumeUpload = async (file: File) => {
-        if (!file) return;
-        setApplyFileName(file.name + " (กำลังอัปโหลด...)");
-        setApplyError("");
-        setApplyResumeText("");
-        setApplyResumeUrl("");
-
-        try {
-            const formData = new FormData();
-            formData.append("file", file);
-            
-            // อัปโหลดไฟล์ไปที่ Go Backend
-            const res = await apiClient.post("/upload", formData, {
-                headers: {
-                    "Content-Type": "multipart/form-data"
-                }
-            });
-            
-            if (res.data && res.data.url) {
-                setApplyResumeUrl(res.data.url);
-                setApplyFileName(file.name + " (อัปโหลดสำเร็จ)");
-                
-                // สำหรับไฟล์ข้อความดึงมาใส่ Text ด้วยเพื่อรักษา Compatibility
-                if (file.name.toLowerCase().endsWith(".txt")) {
-                    const reader = new FileReader();
-                    reader.onload = e => {
-                        setApplyResumeText(e.target?.result as string || "");
-                    };
-                    reader.readAsText(file, "utf-8");
-                } else {
-                    // หากเป็น PDF/รูปภาพ เก็บเป็นลิงก์และใส่ข้อมูลจำลองไว้เพื่อไม่ให้เช็คข้อความว่างผ่านยาก
-                    setApplyResumeText(`ข้อมูลประวัติย่อแบบเอกสาร/รูปภาพ ถูกบันทึกไว้ในระบบ: ${res.data.url}`);
-                }
-            } else {
-                throw new Error("อัปโหลดไฟล์ไม่สำเร็จ");
-            }
-        } catch (err: any) {
-            setApplyError(err.response?.data?.error || "เกิดข้อผิดพลาดในการอัปโหลดไฟล์");
-            setApplyFileName("");
-            setApplyResumeUrl("");
+    const getJobImageUrl = (url?: string | null) => {
+        if (!url) return "";
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            return url;
         }
+
+        const baseURL = apiClient.defaults.baseURL || "";
+        return `${baseURL.replace(/\/api\/?$/, "")}${url}`;
     };
 
-    // ฟังก์ชันอัปโหลดไฟล์ Transcript ไปที่ Go Backend
-    const handleTranscriptUpload = async (file: File) => {
+    // ฟังก์ชันเลือกไฟล์ Resume (เก็บไว้ใน State ยังไม่อัปโหลดไปที่ Server)
+    const handleResumeSelect = (file: File) => {
         if (!file) return;
-        setApplyTranscriptFileName(file.name + " (กำลังอัปโหลด...)");
+        setResumeFile(file);
+        setApplyFileName(file.name);
         setApplyError("");
-        setApplyTranscriptText("");
-        setApplyTranscriptUrl("");
-
-        try {
-            const formData = new FormData();
-            formData.append("file", file);
-            
-            // อัปโหลดไฟล์ไปที่ Go Backend
-            const res = await apiClient.post("/upload", formData, {
-                headers: {
-                    "Content-Type": "multipart/form-data"
-                }
-            });
-            
-            if (res.data && res.data.url) {
-                setApplyTranscriptUrl(res.data.url);
-                setApplyTranscriptFileName(file.name + " (อัปโหลดสำเร็จ)");
-                
-                if (file.name.toLowerCase().endsWith(".txt")) {
-                    const reader = new FileReader();
-                    reader.onload = e => {
-                        setApplyTranscriptText(e.target?.result as string || "");
-                    };
-                    reader.readAsText(file, "utf-8");
-                } else {
-                    setApplyTranscriptText(`ข้อมูลทรานสคริปต์ ถูกบันทึกไว้ในระบบ: ${res.data.url}`);
-                }
-            } else {
-                throw new Error("อัปโหลดไฟล์ไม่สำเร็จ");
-            }
-        } catch (err: any) {
-            setApplyError(err.response?.data?.error || "เกิดข้อผิดพลาดในการอัปโหลดไฟล์ Transcript");
-            setApplyTranscriptFileName("");
-            setApplyTranscriptUrl("");
-        }
     };
 
-    // ฟังก์ชันยิง API ส่งข้อมูลใบสมัครไปบันทึกที่หลังบ้าน
+    // ฟังก์ชันเลือกไฟล์ Transcript (เก็บไว้ใน State ยังไม่อัปโหลดไปที่ Server)
+    const handleTranscriptSelect = (file: File) => {
+        if (!file) return;
+        setTranscriptFile(file);
+        setApplyTranscriptFileName(file.name);
+        setApplyError("");
+    };
+
+    // ฟังก์ชันยิง API อัปโหลดไฟล์และส่งข้อมูลใบสมัครไปบันทึกที่หลังบ้านเมื่อกดปุ่ม "ส่งใบสมัครเลย"
     const handleApplySubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!applyFirstName.trim() || !applyLastName.trim() || !applyEmail.trim() || !applyPhone.trim() || !applyResumeText.trim() || !applyTranscriptUrl.trim()) {
-            setApplyError("กรุณากรอกข้อมูลให้ครบถ้วน อัปโหลดไฟล์ Resume และไฟล์ Transcript");
+        if (!applyFirstName.trim() || !applyLastName.trim() || !applyEmail.trim() || !applyPhone.trim()) {
+            setApplyError("กรุณากรอกข้อมูลส่วนตัวให้ครบถ้วน");
             return;
         }
+        if (!rules.email.validate(applyEmail)) {
+            setApplyError(rules.email.errorMessage);
+            return;
+        }
+        if (!rules.phone.validate(applyPhone)) {
+            setApplyError(rules.phone.errorMessage);
+            return;
+        }
+        if (!resumeFile && !applyResumeUrl) {
+            setApplyError("กรุณาเลือกไฟล์ Resume ก่อนส่งใบสมัคร");
+            return;
+        }
+        if (!transcriptFile && !applyTranscriptUrl) {
+            setApplyError("กรุณาเลือกไฟล์ Transcript / ใบแสดงผลการศึกษาก่อนส่งใบสมัคร");
+            return;
+        }
+
         setSubmittingApply(true);
         setApplyError("");
+
         try {
+            let finalResumeUrl = applyResumeUrl;
+            let finalResumeText = applyResumeText;
+
+            // อัปโหลดไฟล์ Resume เมื่อกดปุ่มส่งใบสมัครเท่านั้น
+            if (resumeFile) {
+                const formData = new FormData();
+                formData.append("file", resumeFile);
+                const res = await apiClient.post("/upload", formData, {
+                    headers: { "Content-Type": "multipart/form-data" }
+                });
+
+                if (res.data && res.data.url) {
+                    finalResumeUrl = res.data.url;
+                    if (resumeFile.name.toLowerCase().endsWith(".txt")) {
+                        finalResumeText = await resumeFile.text();
+                    } else {
+                        finalResumeText = `ข้อมูลประวัติย่อแบบเอกสาร/รูปภาพ ถูกบันทึกไว้ในระบบ: ${res.data.url}`;
+                    }
+                } else {
+                    throw new Error("ไม่สามารถอัปโหลดไฟล์ Resume ได้");
+                }
+            }
+
+            let finalTranscriptUrl = applyTranscriptUrl;
+            let finalTranscriptText = applyTranscriptText;
+
+            // อัปโหลดไฟล์ Transcript เมื่อกดปุ่มส่งใบสมัครเท่านั้น
+            if (transcriptFile) {
+                const formData = new FormData();
+                formData.append("file", transcriptFile);
+                const res = await apiClient.post("/upload", formData, {
+                    headers: { "Content-Type": "multipart/form-data" }
+                });
+
+                if (res.data && res.data.url) {
+                    finalTranscriptUrl = res.data.url;
+                    if (transcriptFile.name.toLowerCase().endsWith(".txt")) {
+                        finalTranscriptText = await transcriptFile.text();
+                    } else {
+                        finalTranscriptText = `ข้อมูลทรานสคริปต์ ถูกบันทึกไว้ในระบบ: ${res.data.url}`;
+                    }
+                } else {
+                    throw new Error("ไม่สามารถอัปโหลดไฟล์ Transcript ได้");
+                }
+            }
+
             if (selectedJob) {
                 const response = await applyjob(
                     selectedJob.ID,
@@ -168,12 +213,12 @@ function LandingPage() {
                     applyLastName,
                     applyEmail,
                     applyPhone,
-                    applyResumeText,
-                    applyResumeUrl,
-                    applyTranscriptUrl,
-                    applyTranscriptText
+                    finalResumeText,
+                    finalResumeUrl,
+                    finalTranscriptUrl,
+                    finalTranscriptText
                 );
-                
+
                 if (response && response.application_code) {
                     setCreatedApplicationCode(response.application_code);
                 } else if (response && response.application_id) {
@@ -181,20 +226,23 @@ function LandingPage() {
                 }
 
                 setShowApplySuccess(true);
-                setShowApplyForm(false); // ปิดฟอร์มสมัครงาน
+                setShowApplyForm(false);
                 // เคลียร์ค่าในฟอร์มเมื่อส่งสำเร็จ
                 setApplyFirstName("");
                 setApplyLastName("");
                 setApplyEmail("");
                 setApplyPhone("");
                 setApplyResumeText("");
+                setApplyResumeUrl("");
                 setApplyFileName("");
                 setApplyTranscriptUrl("");
                 setApplyTranscriptFileName("");
                 setApplyTranscriptText("");
+                setResumeFile(null);
+                setTranscriptFile(null);
             }
         } catch (err: any) {
-            setApplyError(err.response?.data?.error || "เกิดข้อผิดพลาดในการส่งใบสมัคร");
+            setApplyError(err.response?.data?.error || err.message || "เกิดข้อผิดพลาดในการส่งใบสมัคร");
         } finally {
             setSubmittingApply(false);
         }
@@ -266,6 +314,12 @@ function LandingPage() {
         
         return matchesSearch && matchesDept;
     });
+
+    const detailImageUrls = activeDetailJob?.image_urls?.length
+        ? activeDetailJob.image_urls
+        : activeDetailJob?.image_url
+            ? [activeDetailJob.image_url]
+            : [];
 
     return (
         <div className="bg-[#f8fafc] min-h-screen font-sans flex flex-col text-slate-900 scroll-smooth">
@@ -387,6 +441,35 @@ function LandingPage() {
                                                                         <span>{job.type}</span>
                                                                     </div>
                                                                 )}
+                                                                {job.application_end_date && (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <CalendarDays className="w-4 h-4 text-slate-400 shrink-0" />
+                                                                        <span>
+                                                                            สิ้นสุดรับสมัคร: {formatThaiDate(job.application_end_date)}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                                {job.application_end_date && (() => {
+                                                                    const daysRemaining = getDaysUntil(job.application_end_date);
+                                                                    if (daysRemaining === null) return null;
+
+                                                                    return (
+                                                                        <div className={`flex items-center gap-2 font-bold ${
+                                                                            daysRemaining < 0
+                                                                                ? "text-rose-500"
+                                                                                : daysRemaining <= 7
+                                                                                    ? "text-amber-600"
+                                                                                    : "text-emerald-600"
+                                                                        }`}>
+                                                                            <Clock className="w-4 h-4 shrink-0" />
+                                                                            <span>
+                                                                                {daysRemaining < 0
+                                                                                    ? "หมดเขตรับสมัครแล้ว"
+                                                                                    : `เหลือ ${daysRemaining} วัน`}
+                                                                            </span>
+                                                                        </div>
+                                                                    );
+                                                                })()}
                                                             </div>
                                                         </div>
 
@@ -556,6 +639,38 @@ function LandingPage() {
 
                         {/* Modal Content */}
                         <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 bg-slate-50/50 font-sans">
+                            {detailImageUrls.length > 0 && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {detailImageUrls.map((imageUrl, index) => (
+                                        <div
+                                            key={`${imageUrl}-${index}`}
+                                            className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"
+                                        >
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setViewingJobImageUrl(
+                                                        getJobImageUrl(imageUrl)
+                                                    )
+                                                }
+                                                className="group relative block w-full cursor-zoom-in"
+                                                title="คลิกเพื่อดูรูปเต็ม"
+                                            >
+                                                <img
+                                                    src={getJobImageUrl(imageUrl)}
+                                                    alt={`รูปประกาศงาน ${activeDetailJob.title} ${index + 1}`}
+                                                    className="h-64 w-full object-contain bg-white transition-transform group-hover:scale-[1.02]"
+                                                />
+                                                <span className="absolute right-3 bottom-3 inline-flex items-center gap-1 rounded-lg bg-slate-900/70 px-2.5 py-1.5 text-xs font-bold text-white opacity-0 transition-opacity group-hover:opacity-100">
+                                                    <Maximize2 className="w-3.5 h-3.5" />
+                                                    ดูรูปเต็ม
+                                                </span>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
                             {/* Section: ลักษณะงาน */}
                             <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3">
                                 <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-50 pb-2">
@@ -564,17 +679,6 @@ function LandingPage() {
                                 </h4>
                                 <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-wrap">
                                     {activeDetailJob.description || "ไม่มีรายละเอียดลักษณะงาน"}
-                                </p>
-                            </div>
-
-                            {/* Section: คุณสมบัติ */}
-                            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3">
-                                <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-50 pb-2">
-                                    <ShieldCheck className="w-4.5 h-4.5 text-[#4169E1]" />
-                                    คุณสมบัติผู้สมัคร / เกณฑ์คัดเลือก
-                                </h4>
-                                <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-wrap">
-                                    {activeDetailJob.criteria || "ไม่มีรายละเอียดคุณสมบัติ"}
                                 </p>
                             </div>
 
@@ -634,6 +738,28 @@ function LandingPage() {
                             </div>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {viewingJobImageUrl && (
+                <div
+                    className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm"
+                    onClick={() => setViewingJobImageUrl(null)}
+                >
+                    <button
+                        type="button"
+                        onClick={() => setViewingJobImageUrl(null)}
+                        className="absolute right-5 top-5 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+                        title="ปิดรูปเต็ม"
+                    >
+                        <X className="h-6 w-6" />
+                    </button>
+                    <img
+                        src={viewingJobImageUrl}
+                        alt="Job Announcement Full Size"
+                        className="max-h-[92vh] max-w-[95vw] object-contain"
+                        onClick={(event) => event.stopPropagation()}
+                    />
                 </div>
             )}
 
@@ -729,18 +855,22 @@ function LandingPage() {
                                     type="email"
                                     required
                                     value={applyEmail}
-                                    onChange={e => setApplyEmail(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all"
+                                    onChange={e => setApplyEmail(rules.email.sanitize(e.target.value))}
+                                    placeholder="example@company.com"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-sans"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase">เบอร์โทรศัพท์ *</label>
+                                <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase">เบอร์โทรศัพท์ (เริ่มต้นด้วย 0) *</label>
                                 <input
                                     type="tel"
                                     required
                                     value={applyPhone}
-                                    onChange={e => setApplyPhone(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all"
+                                    onKeyDown={e => rules.phone.onKeyDown(e, applyPhone)}
+                                    onChange={e => setApplyPhone(rules.phone.format(e.target.value))}
+                                    placeholder="08X-XXX-XXXX"
+                                    maxLength={12}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#4169E1]/20 focus:bg-white transition-all font-mono"
                                 />
                             </div>
                             {/* Upload Resume Box */}
@@ -753,7 +883,7 @@ function LandingPage() {
                                         required
                                         id="resume-uploader"
                                         className="hidden"
-                                        onChange={e => e.target.files?.[0] && handleResumeUpload(e.target.files[0])}
+                                        onChange={e => e.target.files?.[0] && handleResumeSelect(e.target.files[0])}
                                     />
                                     <label htmlFor="resume-uploader" className="cursor-pointer block space-y-2">
                                         <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center mx-auto text-[#4169E1]">
@@ -762,7 +892,7 @@ function LandingPage() {
                                         {applyFileName ? (
                                             <div>
                                                 <p className="text-xs font-bold text-[#4169E1]">{applyFileName}</p>
-                                                <p className="text-[10px] text-slate-400 mt-1">คลิกเพื่อเปลี่ยนไฟล์</p>
+                                                <p className="text-[10px] text-emerald-600 font-semibold mt-1">✓ เลือกไฟล์สำเร็จ (พร้อมส่งเมื่อกดปุ่มส่งใบสมัคร)</p>
                                             </div>
                                         ) : (
                                             <div>
@@ -784,7 +914,7 @@ function LandingPage() {
                                         required
                                         id="transcript-uploader"
                                         className="hidden"
-                                        onChange={e => e.target.files?.[0] && handleTranscriptUpload(e.target.files[0])}
+                                        onChange={e => e.target.files?.[0] && handleTranscriptSelect(e.target.files[0])}
                                     />
                                     <label htmlFor="transcript-uploader" className="cursor-pointer block space-y-2">
                                         <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center mx-auto text-[#4169E1]">
@@ -793,7 +923,7 @@ function LandingPage() {
                                         {applyTranscriptFileName ? (
                                             <div>
                                                 <p className="text-xs font-bold text-[#4169E1]">{applyTranscriptFileName}</p>
-                                                <p className="text-[10px] text-slate-400 mt-1">คลิกเพื่อเปลี่ยนไฟล์</p>
+                                                <p className="text-[10px] text-emerald-600 font-semibold mt-1">✓ เลือกไฟล์สำเร็จ (พร้อมส่งเมื่อกดปุ่มส่งใบสมัคร)</p>
                                             </div>
                                         ) : (
                                             <div>

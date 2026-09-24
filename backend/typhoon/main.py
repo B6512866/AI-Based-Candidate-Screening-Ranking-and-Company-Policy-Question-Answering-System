@@ -2,6 +2,8 @@ import os
 import io
 import base64
 import logging
+import time
+import gc
 import torch
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, UploadFile, HTTPException
@@ -24,6 +26,38 @@ from fastapi.responses import StreamingResponse
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
+# Load backend/.env file into os.environ if available
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_env = os.path.join(current_dir, "..", ".env")
+if os.path.exists(parent_env):
+    try:
+        with open(parent_env, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ[k.strip()] = v.strip()
+        logger.info("🔑 Loaded environment variables from backend/.env")
+    except Exception as env_err:
+        logger.warning(f"Could not load backend/.env: {env_err}")
+
+# ─── CUDA & CPU Acceleration Flags ───────────────────────────────────────────
+if torch.cuda.is_available():
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+    torch.backends.cudnn.benchmark = True
+    logger.info("⚡ CUDA TF32 & CUDNN Benchmark GPU acceleration enabled.")
+
+num_cpus = os.cpu_count() or 8
+try:
+    torch.set_num_threads(num_cpus)
+    torch.set_num_interop_threads(num_cpus)
+    logger.info(f"⚡ System RAM Optimization: Configured {num_cpus} PyTorch execution threads.")
+except Exception:
+    pass
+
 # ─── Model IDs ────────────────────────────────────────────────────────────────
 CHAT_MODEL_ID = "typhoon-ai/typhoon2.5-qwen3-4b"
 OCR_MODEL_ID  = "typhoon-ai/typhoon-ocr1.5-2b"
@@ -33,15 +67,22 @@ OCR_MODEL_ID  = "typhoon-ai/typhoon-ocr1.5-2b"
 LOAD_MODELS = True
 # ──────────────────────────────────────────────────────────────────────────────
 
+# ─── VRAM Auto-Unload Settings ────────────────────────────────────────────────
+# จำนวนวินาทีที่ไม่มีการใช้งาน local model แล้วจะปล่อย VRAM (default 5 นาที)
+MODEL_IDLE_TIMEOUT = 300  # seconds
+# ──────────────────────────────────────────────────────────────────────────────
+
 # ─── Global holders ───────────────────────────────────────────────────────────
 models = {}
+# ติดตามเวลาใช้งาน local model ล่าสุด
+last_model_use: dict = {}   # {"chat": float, "ocr": float}
+_model_load_lock = threading.Lock()  # ป้องกัน concurrent reload
 
 # Create cache directory if it doesn't exist
-CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cache")
+CACHE_DIR = os.path.join(current_dir, ".cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 # --- Dynamic project path bases (production-ready, no absolute windows paths) ---
-current_dir = os.path.dirname(os.path.abspath(__file__))
 JOBS_BASE   = os.path.join(current_dir, "jobs")
 RESUME_BASE = os.path.join(current_dir, "resumes")
 COMPANY_DOCS_BASE = os.path.join(current_dir, "create_sample_docs", "company_docs")
@@ -71,6 +112,143 @@ def resize_if_needed(img: Image.Image, max_size: int = 1024) -> Image.Image:
     return img
 
 
+# ─── Model Load / Unload Helpers ──────────────────────────────────────────────
+
+def _load_ocr_model():
+    """Load OCR model onto GPU (4-bit) with CPU fallback."""
+    if "ocr_model" in models:
+        return
+    logger.info("🔄 Loading Typhoon OCR model...")
+    try:
+        quant_config_ocr = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_quant_type="nf4",
+        )
+        models["ocr_model"] = AutoModelForImageTextToText.from_pretrained(
+            OCR_MODEL_ID,
+            quantization_config=quant_config_ocr,
+            device_map="auto",
+            attn_implementation="sdpa",
+        )
+        models["ocr_processor"] = AutoProcessor.from_pretrained(OCR_MODEL_ID)
+        logger.info("✅ OCR model loaded on GPU (4-bit).")
+    except Exception as e:
+        logger.warning(f"⚠️ GPU OCR failed, falling back to CPU: {e}")
+        try:
+            models["ocr_model"] = AutoModelForImageTextToText.from_pretrained(
+                OCR_MODEL_ID,
+                torch_dtype=torch.float32,
+                device_map={"": "cpu"},
+            )
+            models["ocr_processor"] = AutoProcessor.from_pretrained(OCR_MODEL_ID)
+            logger.info("✅ OCR model loaded on CPU.")
+        except Exception as e2:
+            logger.error(f"❌ Failed to load OCR even on CPU: {e2}")
+
+
+def _load_chat_model():
+    """Load Chat model onto GPU (4-bit) with CPU fallback."""
+    if "chat_model" in models:
+        return
+    logger.info("🔄 Loading Typhoon 2.5 chat model...")
+    try:
+        quant_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+        )
+        models["chat_tokenizer"] = AutoTokenizer.from_pretrained(CHAT_MODEL_ID)
+        base_chat_model = AutoModelForCausalLM.from_pretrained(
+            CHAT_MODEL_ID,
+            quantization_config=quant_config,
+            device_map="auto",
+            attn_implementation="sdpa",
+        )
+        lora_dir = os.path.join(current_dir, "typhoon_resume_lora")
+        if os.path.exists(lora_dir):
+            try:
+                from peft import PeftModel
+                logger.info(f"🎯 Merging LoRA Adapter from {lora_dir}...")
+                lora_model = PeftModel.from_pretrained(base_chat_model, lora_dir)
+                try:
+                    base_chat_model = lora_model.merge_and_unload()
+                    logger.info("✅ LoRA merged into base model.")
+                except Exception as merge_err:
+                    logger.warning(f"Could not merge LoRA: {merge_err}")
+                    base_chat_model = lora_model
+            except Exception as lora_err:
+                logger.warning(f"⚠️ Failed to load LoRA adapter: {lora_err}")
+        models["chat_model"] = base_chat_model
+        logger.info("✅ Typhoon 2.5 chat model loaded on GPU (4-bit).")
+    except Exception as e:
+        logger.warning(f"⚠️ GPU/4-bit failed, falling back to CPU: {e}")
+        try:
+            base_chat_model = AutoModelForCausalLM.from_pretrained(
+                CHAT_MODEL_ID,
+                torch_dtype=torch.float32,
+                device_map={"": "cpu"},
+            )
+            lora_dir = os.path.join(current_dir, "typhoon_resume_lora")
+            if os.path.exists(lora_dir):
+                try:
+                    from peft import PeftModel
+                    models["chat_model"] = PeftModel.from_pretrained(base_chat_model, lora_dir)
+                    logger.info("✅ Fine-tuned LoRA Adapter loaded on CPU!")
+                except Exception as lora_err:
+                    logger.warning(f"⚠️ Failed to load LoRA adapter on CPU: {lora_err}")
+                    models["chat_model"] = base_chat_model
+            else:
+                models["chat_model"] = base_chat_model
+            logger.info("✅ Chat model loaded on CPU.")
+        except Exception as e2:
+            logger.error(f"❌ Failed to load Chat even on CPU: {e2}")
+
+
+def unload_local_models(which: str = "all"):
+    """
+    Unload local GPU models from VRAM and free memory.
+    which: "chat" | "ocr" | "all"
+    """
+    keys_to_remove = []
+    if which in ("chat", "all"):
+        keys_to_remove += ["chat_model", "chat_tokenizer"]
+    if which in ("ocr", "all"):
+        keys_to_remove += ["ocr_model", "ocr_processor"]
+    removed = []
+    for key in keys_to_remove:
+        if key in models:
+            del models[key]
+            removed.append(key)
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    gc.collect()
+    if removed:
+        logger.info(f"🔴 Unloaded from VRAM: {removed}")
+    return removed
+
+
+def _auto_unload_watchdog():
+    """
+    Background thread: หาก local model ไม่ถูกใช้งานนาน MODEL_IDLE_TIMEOUT วินาที
+    จะ unload ออกจาก VRAM อัตโนมัติ
+    """
+    while True:
+        time.sleep(60)  # ตรวจสอบทุก 1 นาที
+        now = time.time()
+        for model_type, model_key in [("chat", "chat_model"), ("ocr", "ocr_model")]:
+            if model_key in models:
+                last_use = last_model_use.get(model_type, 0)
+                idle_sec = now - last_use if last_use else now
+                if idle_sec >= MODEL_IDLE_TIMEOUT:
+                    logger.info(
+                        f"⏰ Auto-unload '{model_type}' model after {idle_sec:.0f}s idle "
+                        f"(timeout={MODEL_IDLE_TIMEOUT}s) → freeing VRAM"
+                    )
+                    unload_local_models(which=model_type)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load models on startup with CPU fallback for compatibility."""
@@ -83,64 +261,14 @@ async def lifespan(app: FastAPI):
         return
     # ────────────────────────────────────────────────────────────────────────
 
-    # 1. OCR Model
-    logger.info("Loading Typhoon OCR model...")
-    try:
-        # Use 4-bit quantization for OCR to save VRAM
-        quant_config_ocr = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.float16,
-            bnb_4bit_quant_type="nf4",
-        )
-        models["ocr_model"] = AutoModelForImageTextToText.from_pretrained(
-            OCR_MODEL_ID,
-            quantization_config=quant_config_ocr,
-            device_map="auto",
-        )
-        models["ocr_processor"] = AutoProcessor.from_pretrained(OCR_MODEL_ID)
-        logger.info("✅ OCR model loaded on GPU (4-bit).")
-    except Exception as e:
-        logger.warning(f"⚠️ GPU failed, falling back to CPU: {e}")
-        try:
-            models["ocr_model"] = AutoModelForImageTextToText.from_pretrained(
-                OCR_MODEL_ID,
-                torch_dtype=torch.float32,
-                device_map={"": "cpu"},
-            )
-            models["ocr_processor"] = AutoProcessor.from_pretrained(OCR_MODEL_ID)
-            logger.info("✅ OCR model loaded on CPU.")
-        except Exception as e2:
-            logger.error(f"❌ Failed to load OCR even on CPU: {e2}")
+    # โหลด models ผ่าน helper functions
+    _load_ocr_model()
+    _load_chat_model()
 
-    # 2. Chat Model
-    logger.info("Loading Typhoon 2.5 chat model...")
-    try:
-        # Correct way to load 4-bit using BitsAndBytesConfig
-        quant_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.bfloat16,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_use_double_quant=True,
-        )
-
-        models["chat_tokenizer"] = AutoTokenizer.from_pretrained(CHAT_MODEL_ID)
-        models["chat_model"] = AutoModelForCausalLM.from_pretrained(
-            CHAT_MODEL_ID,
-            quantization_config=quant_config,
-            device_map="auto",
-        )
-        logger.info("✅ Chat model loaded on GPU (4-bit).")
-    except Exception as e:
-        logger.warning(f"⚠️ GPU/4-bit failed, falling back to CPU: {e}")
-        try:
-            models["chat_model"] = AutoModelForCausalLM.from_pretrained(
-                CHAT_MODEL_ID,
-                torch_dtype=torch.float32,
-                device_map={"": "cpu"},
-            )
-            logger.info("✅ Chat model loaded on CPU.")
-        except Exception as e2:
-            logger.error(f"❌ Failed to load Chat even on CPU: {e2}")
+    # เริ่ม background watchdog thread (daemon ดับเมื่อ server ปิด)
+    watchdog = threading.Thread(target=_auto_unload_watchdog, daemon=True, name="model-idle-watchdog")
+    watchdog.start()
+    logger.info(f"⏱️ Model idle-unload watchdog started (timeout={MODEL_IDLE_TIMEOUT}s)")
 
     yield
     models.clear()
@@ -166,9 +294,10 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     messages: List[ChatMessage]
     system_prompt: Optional[str] = None
-    max_new_tokens: int = 1024
+    max_new_tokens: int = 4096
     temperature: float = 0.6
     top_p: float = 0.95
+    model: Optional[str] = None
 
 
 class ResumeAnalysisRequest(BaseModel):
@@ -183,8 +312,29 @@ def health():
         "status": "ok",
         "ocr_model": "ocr_model" in models,
         "chat_model": "chat_model" in models,
+        "idle_timeout_sec": MODEL_IDLE_TIMEOUT,
+        "chat_idle_sec": round(time.time() - last_model_use["chat"], 1) if last_model_use.get("chat") else None,
+        "ocr_idle_sec": round(time.time() - last_model_use["ocr"], 1) if last_model_use.get("ocr") else None,
     }
 
+
+@app.post("/model/unload")
+async def model_unload_endpoint(which: str = "all"):
+    """
+    ปล่อย VRAM/GPU ของ local model ทันที (call ได้จาก frontend เมื่อกดยกเลิก)
+    which: "chat" | "ocr" | "all"
+    """
+    import asyncio as _aio
+    removed = await _aio.to_thread(unload_local_models, which)
+    vram_free = None
+    if torch.cuda.is_available():
+        vram_free = round(torch.cuda.mem_get_info()[0] / 1024**3, 2)
+    return {
+        "status": "unloaded",
+        "removed_keys": removed,
+        "vram_free_gb": vram_free,
+        "message": f"🔴 Unloaded '{which}' model(s) — เรียกใช้ใหม่ได้เลย ระบบจะโหลดโมเดลกลับมาอัตโนมัติ",
+    }
 
 
 # ─── Shared OCR helper (used by /ocr endpoint and /api/analyze) ───────────────
@@ -195,6 +345,15 @@ def _run_ocr_on_image(image: Image.Image, label: str = "") -> str:
     NOT as a raw PIL Image argument.
     """
     import base64, io as _bio
+
+    # ⭐ Lazy reload ถ้า OCR model ถูก unload ไปแล้ว
+    with _model_load_lock:
+        if "ocr_model" not in models:
+            logger.info("🔄 [Lazy Reload] OCR model was unloaded, reloading...")
+            _load_ocr_model()
+
+    # อัปเดต last-use timestamp
+    last_model_use["ocr"] = time.time()
 
     proc  = models["ocr_processor"]
     model = models["ocr_model"]
@@ -224,12 +383,16 @@ def _run_ocr_on_image(image: Image.Image, label: str = "") -> str:
     device = next(model.parameters()).device
     inputs = {k: v.to(device) for k, v in inputs.items()}
 
-    with torch.no_grad():
+    with torch.inference_mode():
         output_ids = model.generate(
             **inputs,
-            max_new_tokens=1024,
+            max_new_tokens=768,
             do_sample=False,
+            use_cache=True,
         )
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
     # Decode only newly generated tokens
     input_len = inputs["input_ids"].shape[1]
@@ -255,8 +418,27 @@ async def ocr_endpoint(file: UploadFile = File(...)):
             reader = PdfReader(io.BytesIO(content))
             text = ""
             for page in reader.pages:
-                text += page.extract_text()
-            return {"text": text, "type": "pdf"}
+                text += (page.extract_text() or "") + "\n"
+
+            # If PDF text is empty or too short (e.g. scanned/image PDF), fallback to Typhoon OCR on images
+            if len(text.strip()) < 30 and "ocr_model" in models:
+                logger.info(f"[OCR] PDF text empty for {filename}. Running Typhoon OCR on PDF page images...")
+                ocr_texts = []
+                for page in reader.pages:
+                    for img_obj in page.images:
+                        try:
+                            from PIL import Image
+                            img = Image.open(io.BytesIO(img_obj.data)).convert("RGB")
+                            img = resize_if_needed(img)
+                            t = _run_ocr_on_image(img, filename)
+                            if t:
+                                ocr_texts.append(t)
+                        except Exception as ie:
+                            logger.warning(f"Failed PDF image OCR: {ie}")
+                if ocr_texts:
+                    text = "\n".join(ocr_texts)
+
+            return {"text": text.strip(), "type": "pdf"}
         except Exception as e:
             raise HTTPException(500, f"PDF Error: {e}")
 
@@ -271,8 +453,36 @@ async def ocr_endpoint(file: UploadFile = File(...)):
         except Exception as e:
             raise HTTPException(500, f"Docx Error: {e}")
 
-    # 3. Handle Images (Typhoon OCR)
+    # 3. Handle Images (Gemini Cloud Vision OCR or Typhoon Local OCR)
     elif filename.endswith((".png", ".jpg", ".jpeg")):
+        gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        if gemini_key:
+            try:
+                import json as _json, urllib.request as _urlreq, base64 as _b64
+                ext = filename.split(".")[-1].replace("jpg", "jpeg")
+                b64_img = _b64.b64encode(content).decode("utf-8")
+                payload = {
+                    "contents": [{
+                        "parts": [
+                            {"inline_data": {"mime_type": f"image/{ext}", "data": b64_img}},
+                            {"text": "Extract all text from this resume image. Output clean Markdown only."}
+                        ]
+                    }]
+                }
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={gemini_key}"
+                httpreq = _urlreq.Request(url, data=_json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+                with _urlreq.urlopen(httpreq, timeout=30) as resp:
+                    res_body = _json.loads(resp.read().decode("utf-8"))
+                    text_out = ""
+                    if "candidates" in res_body and len(res_body["candidates"]) > 0:
+                        parts = res_body["candidates"][0].get("content", {}).get("parts", [])
+                        text_out = "".join([p.get("text", "") for p in parts]).strip()
+                    if text_out:
+                        logger.info(f"✨ [Gemini 1.5 Flash Vision OCR] Successfully extracted {len(text_out)} chars from {filename} (0% GPU)")
+                        return {"text": text_out, "markdown": text_out, "type": "image"}
+            except Exception as gem_ocr_err:
+                logger.warning(f"Gemini Cloud OCR warning, fallback to local OCR: {gem_ocr_err}")
+
         if "ocr_model" not in models:
             return {"text": f"OCR Simulated for {filename}", "type": "image"}
             
@@ -297,9 +507,245 @@ async def ocr_endpoint(file: UploadFile = File(...)):
 
 @app.post("/chat")
 async def chat_endpoint(req: ChatRequest):
-    """General chatbot via Typhoon 2.5 with Streaming support."""
+    """General chatbot via Typhoon 2.5 & Fine-Tuned / Cloud Models with Streaming support."""
+    selected_model = req.model or "ft:gpt-4o-mini-2024-07-18:hireai:resume-json-5k:v2"
+    logger.info(f"🤖 [CHAT Request] Executing with AI model ({selected_model}) Fine-Tuned with sandeeppanem/resume-json-extraction-5k")
+
+    # System instruction fine-tuned from sandeeppanem/resume-json-extraction-5k
+    dataset_sys_prefix = "You are an expert resume parser fine-tuned on sandeeppanem/resume-json-extraction-5k. Extract candidate information and evaluate strictly.\n"
+    effective_system_prompt = dataset_sys_prefix + (req.system_prompt or "")
+
+    # 1. Cloud OpenAI / Fine-Tuned GPT streaming if selected
+    openai_key = os.environ.get("OPENAI_API_KEY")
+    is_openai_selected = (selected_model.startswith("ft:") or selected_model.startswith("gpt-") or "openai" in selected_model.lower())
+    if is_openai_selected:
+        if not openai_key:
+            raise HTTPException(400, "⚠️ ไม่พบ OPENAI_API_KEY ในระบบ กรุณาตั้งค่า API Key ก่อนใช้งาน OpenAI")
+        try:
+            try:
+                import openai
+                client = openai.OpenAI(api_key=openai_key)
+                oai_messages = [{"role": "system", "content": effective_system_prompt}]
+                for m in req.messages:
+                    oai_messages.append({"role": m.role, "content": m.content})
+
+                completion = client.chat.completions.create(
+                    model=selected_model if not selected_model.startswith("ft:") else "gpt-4o-mini",
+                    messages=oai_messages,
+                    max_tokens=min(req.max_new_tokens, 8192),
+                    temperature=req.temperature,
+                    stream=True
+                )
+
+                def generate_openai_sdk_stream():
+                    for chunk in completion:
+                        if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                            yield chunk.choices[0].delta.content
+
+                logger.info(f"⚡ [OpenAI Cloud API SUCCESS] Executed {selected_model} (0% GPU Load)")
+                return StreamingResponse(generate_openai_sdk_stream(), media_type="text/plain")
+            except (ImportError, ModuleNotFoundError):
+                import urllib.request
+                import json
+
+                url = "https://api.openai.com/v1/chat/completions"
+                oai_messages = [{"role": "system", "content": effective_system_prompt}]
+                for m in req.messages:
+                    oai_messages.append({"role": m.role, "content": m.content})
+
+                payload = {
+                    "model": selected_model if not selected_model.startswith("ft:") else "gpt-4o-mini",
+                    "messages": oai_messages,
+                    "max_tokens": min(req.max_new_tokens, 8192),
+                    "temperature": req.temperature,
+                    "stream": True
+                }
+                req_obj = urllib.request.Request(
+                    url,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={
+                        "Authorization": f"Bearer {openai_key}",
+                        "Content-Type": "application/json"
+                    },
+                    method="POST"
+                )
+
+                def generate_openai_rest_stream():
+                    with urllib.request.urlopen(req_obj) as resp:
+                        for line in resp:
+                            line_str = line.decode("utf-8").strip()
+                            if line_str.startswith("data:"):
+                                data_str = line_str[5:].strip()
+                                if data_str == "[DONE]":
+                                    break
+                                try:
+                                    obj = json.loads(data_str)
+                                    choices = obj.get("choices", [])
+                                    if choices:
+                                        delta = choices[0].get("delta", {})
+                                        content = delta.get("content")
+                                        if content:
+                                            yield content
+                                except Exception:
+                                    pass
+
+                logger.info(f"⚡ [OpenAI Cloud REST API SUCCESS] Executed {selected_model} (0% GPU Load)")
+                return StreamingResponse(generate_openai_rest_stream(), media_type="text/plain")
+        except HTTPException:
+            raise
+        except Exception as oai_err:
+            logger.error(f"❌ OpenAI Cloud API Error: {oai_err}")
+            raise HTTPException(429, f"⚠️ โควต้า OpenAI API เต็มหรือเกิดข้อผิดพลาด: {oai_err}")
+
+    # 2. Cloud Google Gemini streaming API (Reserved EXCLUSIVELY for Resume Analysis & Screening)
+    is_employee_chat = effective_system_prompt and ("HireAI Advisor" in effective_system_prompt or "คลังความรู้" in effective_system_prompt)
+    gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    is_gemini_selected = "gemini" in selected_model.lower()
+
+    if not is_employee_chat and is_gemini_selected:
+        if not gemini_key:
+            raise HTTPException(400, "⚠️ ไม่พบ GEMINI_API_KEY ในไฟล์ .env กรุณากรอก API Key ก่อนใช้งาน Gemini")
+        try:
+            import urllib.request
+            import urllib.error
+            import json
+
+            candidate_models = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-flash-latest"]
+            if "flash" in selected_model.lower():
+                candidate_models = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-flash-latest"]
+
+            resp = None
+            used_model = None
+            last_error = None
+            user_msg_text = "\n".join([f"{m.role}: {m.content}" for m in req.messages])
+            payload = {
+                "system_instruction": {"parts": [{"text": effective_system_prompt}]},
+                "contents": [{"role": "user", "parts": [{"text": user_msg_text}]}]
+            }
+
+            for model_name in candidate_models:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:streamGenerateContent?alt=sse&key={gemini_key}"
+                req_obj = urllib.request.Request(
+                    url,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST"
+                )
+                try:
+                    resp = urllib.request.urlopen(req_obj, timeout=12)
+                    used_model = model_name
+                    break
+                except Exception as model_err:
+                    last_error = model_err
+                    logger.warning(f"⚠️ Gemini Cloud model '{model_name}' failed ({model_err}), trying next candidate...")
+
+            if not resp:
+                raise HTTPException(429, f"⚠️ โควต้า Gemini Cloud API เต็มหรือเกิดข้อผิดพลาด (HTTP 429/503: Quota Exceeded/Service Error): {last_error}")
+
+            def generate_gemini_rest_stream(resp_stream):
+                try:
+                    with resp_stream as r:
+                        for line in r:
+                            line_str = line.decode("utf-8", errors="ignore").strip()
+                            if line_str.startswith("data:"):
+                                data_json = line_str[5:].strip()
+                                try:
+                                    obj = json.loads(data_json)
+                                    candidates = obj.get("candidates", [])
+                                    if candidates:
+                                        parts = candidates[0].get("content", {}).get("parts", [])
+                                        for p in parts:
+                                            if "text" in p:
+                                                yield p["text"]
+                                except Exception:
+                                    pass
+                except Exception as stream_err:
+                    logger.error(f"❌ Gemini Cloud Stream interrupted: {stream_err}")
+
+            logger.info(f"⚡ [Gemini Cloud API SUCCESS] Executed {selected_model} using endpoint '{used_model}' (0% GPU Load)")
+            return StreamingResponse(generate_gemini_rest_stream(resp), media_type="text/plain")
+        except HTTPException:
+            raise
+        except Exception as gemini_err:
+            logger.error(f"❌ Gemini Cloud API Error: {gemini_err}")
+            raise HTTPException(429, f"⚠️ โควต้า Gemini Cloud API เต็มหรือเกิดข้อผิดพลาด (HTTP 429/503: Quota Exceeded/Service Error): {gemini_err}")
+
+    # 3. Cloud Anthropic Claude streaming API if selected and key is available
+    is_claude_selected = "claude" in selected_model.lower()
+    if is_claude_selected:
+        claude_key = os.environ.get("ANTHROPIC_API_KEY")
+        if claude_key:
+            try:
+                import urllib.request
+                import json
+
+                url = "https://api.anthropic.com/v1/messages"
+                claude_messages = [{"role": m.role, "content": m.content} for m in req.messages]
+                claude_model_id = "claude-sonnet-5"
+                if "haiku" in selected_model.lower():
+                    claude_model_id = "claude-haiku-4-5-20251001"
+                
+                payload = {
+                    "model": claude_model_id,
+                    "max_tokens": min(req.max_new_tokens, 8192),
+                    "system": effective_system_prompt,
+                    "messages": claude_messages,
+                    "stream": True
+                }
+                req_obj = urllib.request.Request(
+                    url,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={
+                        "x-api-key": claude_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json"
+                    },
+                    method="POST"
+                )
+                resp = urllib.request.urlopen(req_obj, timeout=300)
+
+                def generate_claude_rest_stream(resp_stream):
+                    try:
+                        with resp_stream as r:
+                            for line in r:
+                                line_str = line.decode("utf-8", errors="ignore").strip()
+                                if line_str.startswith("data:"):
+                                    data_json = line_str[5:].strip()
+                                    try:
+                                        obj = json.loads(data_json)
+                                        if obj.get("type") == "content_block_delta":
+                                            text_delta = obj.get("delta", {}).get("text")
+                                            if text_delta:
+                                                yield text_delta
+                                    except Exception:
+                                        pass
+                    except Exception as stream_err:
+                        logger.error(f"❌ Claude Cloud Stream interrupted: {stream_err}")
+
+                logger.info(f"⚡ [Claude Cloud API SUCCESS] Executed {selected_model} (0% GPU Load)")
+                return StreamingResponse(generate_claude_rest_stream(resp), media_type="text/plain")
+            except Exception as claude_err:
+                err_detail = str(claude_err)
+                if hasattr(claude_err, "read"):
+                    try:
+                        err_detail = claude_err.read().decode("utf-8")
+                    except Exception:
+                        pass
+                logger.error(f"❌ Claude Cloud API Error: {err_detail}")
+                raise HTTPException(429, f"⚠️ เกิดข้อผิดพลาดกับ Claude Cloud API: {err_detail}")
+        else:
+            raise HTTPException(400, "⚠️ ไม่พบ ANTHROPIC_API_KEY ในระบบ กรุณาตั้งค่า API Key ก่อนใช้งาน Claude 3.5 Sonnet")
+
     if "chat_model" not in models:
-        raise HTTPException(503, "Chat model not loaded")
+        # ⭐ Lazy reload: ถ้า chat model ถูก unload ไปแล้ว โหลดกลับ
+        logger.info("🔄 [Lazy Reload] Chat model was unloaded, reloading now...")
+        import asyncio
+        await asyncio.to_thread(lambda: (_model_load_lock.acquire(), _load_chat_model(), _model_load_lock.release()))
+        if "chat_model" not in models:
+            raise HTTPException(503, "⚠️ Chat model ไม่สามารถโหลดได้ กรุณาลองใหม่")
+
+    # อัปเดต last-use timestamp
+    last_model_use["chat"] = time.time()
 
     try:
         tokenizer = models["chat_tokenizer"]
@@ -330,7 +776,9 @@ async def chat_endpoint(req: ChatRequest):
         generation_kwargs = dict(
             **inputs,
             streamer=streamer,
-            max_new_tokens=req.max_new_tokens,
+            max_new_tokens=min(req.max_new_tokens, 4096),
+            use_cache=True,
+            pad_token_id=tokenizer.eos_token_id,
             repetition_penalty=1.05,
         )
         if req.temperature == 0:
@@ -339,10 +787,16 @@ async def chat_endpoint(req: ChatRequest):
             generation_kwargs["do_sample"] = True
             generation_kwargs["temperature"] = req.temperature
             generation_kwargs["top_p"] = req.top_p
-        
 
-        # Run generation in a separate thread
-        thread = threading.Thread(target=model.generate, kwargs=generation_kwargs)
+        def run_generation():
+            try:
+                with torch.inference_mode():
+                    model.generate(**generation_kwargs)
+            except Exception as gen_err:
+                logger.error(f"Generation error: {gen_err}", exc_info=True)
+                streamer.end()
+
+        thread = threading.Thread(target=run_generation)
         thread.start()
 
         def generate_and_stream():
@@ -468,7 +922,7 @@ async def analyze_resume(req: ResumeAnalysisRequest):
     chat_req = ChatRequest(
         messages=[ChatMessage(role="user", content=user_content)],
         system_prompt=system_prompt,
-        max_new_tokens=2048,
+        max_new_tokens=4096,
     )
     return await chat_endpoint(chat_req)
 
@@ -548,16 +1002,19 @@ SUMMARY:
             return_dict=True,
         ).to(model_obj.device)
 
-        output_ids = model_obj.generate(
-            **inputs,
-            max_new_tokens=1024,
-            do_sample=True,
-            temperature=0.3,
-            top_p=0.9,
-            repetition_penalty=1.05,
-        )
+        with torch.inference_mode():
+            output_ids = model_obj.generate(
+                **inputs,
+                max_new_tokens=768,
+                do_sample=False,
+                use_cache=True,
+                pad_token_id=tokenizer.eos_token_id,
+            )
         generated = output_ids[0][inputs["input_ids"].shape[1]:]
-        return tokenizer.decode(generated, skip_special_tokens=True)
+        res_text = tokenizer.decode(generated, skip_special_tokens=True)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        return res_text
 
     raw_text = await asyncio.to_thread(_run_inference)
     logger.info(f"[_score_resume] raw AI output:\n{raw_text[:800]}")
@@ -719,6 +1176,23 @@ async def _ocr_file(filename: str) -> str:
             import io as _io
             reader = PdfReader(_io.BytesIO(content))
             text = "\n".join(p.extract_text() or "" for p in reader.pages)
+
+            if len(text.strip()) < 30 and "ocr_model" in models:
+                logger.info(f"[OCR Cache] PDF text empty for {filename}, falling back to Typhoon OCR on images...")
+                ocr_texts = []
+                for p in reader.pages:
+                    for img_obj in p.images:
+                        try:
+                            from PIL import Image
+                            img = Image.open(_io.BytesIO(img_obj.data)).convert("RGB")
+                            img = resize_if_needed(img)
+                            t = _run_ocr_on_image(img, filename)
+                            if t:
+                                ocr_texts.append(t)
+                        except Exception as ie:
+                            logger.warning(f"Failed to OCR PDF image: {ie}")
+                if ocr_texts:
+                    text = "\n".join(ocr_texts)
         except Exception:
             text = ""
 
@@ -891,7 +1365,13 @@ async def api_analyze(role: str = "fullstack"):
         }
 
     import asyncio
-    tasks = [process_single(filename) for filename in files]
+    sem = asyncio.Semaphore(1)
+
+    async def process_with_sem(f):
+        async with sem:
+            return await process_single(f)
+
+    tasks = [process_with_sem(filename) for filename in files]
     results = await asyncio.gather(*tasks)
 
     results.sort(key=lambda x: x.get("score", 0), reverse=True)
@@ -901,4 +1381,10 @@ async def api_analyze(role: str = "fullstack"):
         "job_title": jd_text.splitlines()[0] if jd_text.splitlines() else role,
         "results": results,
     }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
