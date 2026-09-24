@@ -612,7 +612,7 @@ export default function ScreeningPage() {
                 }
 
                 if (!blob) {
-                    throw new Error(`ไม่สามารถดาวน์โหลดไฟล์ Resume (${app.resume_url}) ได้: ${lastErr || "ไม่พบไฟล์บนเซิร์ฟเวอร์"}`);
+                    throw new Error(`ไม่พบไฟล์ PDF ของผู้สมัครคนนี้บนเซิร์ฟเวอร์ Cloud (${lastErr || "HTTP 404"}) เนื่องจากดิสก์ Render มีการรีสตาร์ทไฟล์\n\n💡 แนะนำ: กรุณากดลบผู้สมัครคนนี้ (ปุ่ม ❌ สีแดงด้านขวา) แล้วกดปุ่ม '📌 กรอก Resume / เพิ่มผู้สมัครด้วยตนเอง' เพื่อเพิ่มไฟล์ Resume ใหม่ครับ`);
                 }
 
                 const filename = app.resume_url.split("/").pop() || "resume.pdf";
