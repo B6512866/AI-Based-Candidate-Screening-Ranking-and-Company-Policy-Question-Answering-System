@@ -173,6 +173,23 @@ func main() {
 		routes.ChatRoutes(api, config.DB)
 		routes.InterviewRoutes(api, config.DB)
 		routes.UserRoutes(api, config.DB)
+
+		api.GET("/test-email", func(c *gin.Context) {
+			to := c.DefaultQuery("to", "guymini02479@gmail.com")
+			err := services.SendApplicationEmail(to, "Test User", "Software Engineer", "APP-TEST-DIRECT")
+			if err != nil {
+				c.JSON(500, gin.H{
+					"status":     "error",
+					"error":      err.Error(),
+					"smtp_email": config.Env.SMTPEmail,
+				})
+				return
+			}
+			c.JSON(200, gin.H{
+				"status":  "success",
+				"message": "อีเมลทดสอบส่งสำเร็จไปยัง " + to,
+			})
+		})
 	}
 
 	fmt.Println("🚀 Server running on port:", config.Env.BackendPort)

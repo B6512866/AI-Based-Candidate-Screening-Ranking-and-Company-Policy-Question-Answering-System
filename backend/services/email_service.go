@@ -8,19 +8,23 @@ import (
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/config"
 )
 
-// SendApplicationEmail ส่งอีเมลแจ้งเตือนรหัสใบสมัครไปยัง Gmail ของผู้สมัครจริง
-func SendApplicationEmail(toEmail string, candidateName string, jobTitle string, appCode string) error {
-	fromEmail := config.Env.SMTPEmail
+// getSMTPConfig ดึงการตั้งค่า SMTP และแก้ไข typo อัตโนมัติ
+func getSMTPConfig() (string, string) {
+	fromEmail := strings.TrimSpace(config.Env.SMTPEmail)
 	if fromEmail == "" {
 		fromEmail = "guymini02479@gmail.com"
 	}
 
-	appPassword := config.Env.SMTPPassword
-	if appPassword == "" {
+	appPassword := strings.TrimSpace(strings.ReplaceAll(config.Env.SMTPPassword, " ", ""))
+	if appPassword == "" || appPassword == "gjsrveyqgsixfvlk" {
 		appPassword = "gjsrvsyeqsixfvlk"
 	}
-	// ตัดช่องว่างของ App Password ออก
-	appPassword = strings.ReplaceAll(appPassword, " ", "")
+	return fromEmail, appPassword
+}
+
+// SendApplicationEmail ส่งอีเมลแจ้งเตือนรหัสใบสมัครไปยัง Gmail ของผู้สมัครจริง
+func SendApplicationEmail(toEmail string, candidateName string, jobTitle string, appCode string) error {
+	fromEmail, appPassword := getSMTPConfig()
 
 	smtpHost := "smtp.gmail.com"
 	smtpPort := "587"
@@ -94,16 +98,7 @@ func SendApplicationEmail(toEmail string, candidateName string, jobTitle string,
 
 // SendInterviewEmail ส่งอีเมลแจ้งเตือนวันเวลาและรายละเอียดนัดหมายสัมภาษณ์ไปยัง Gmail ผู้สมัคร
 func SendInterviewEmail(toEmail string, candidateName string, jobTitle string, interviewDate string, location string, notes string) error {
-	fromEmail := config.Env.SMTPEmail
-	if fromEmail == "" {
-		fromEmail = "guymini02479@gmail.com"
-	}
-
-	appPassword := config.Env.SMTPPassword
-	if appPassword == "" {
-		appPassword = "gjsrvsyeqsixfvlk"
-	}
-	appPassword = strings.ReplaceAll(appPassword, " ", "")
+	fromEmail, appPassword := getSMTPConfig()
 
 	smtpHost := "smtp.gmail.com"
 	smtpPort := "587"
@@ -190,16 +185,7 @@ func SendInterviewEmail(toEmail string, candidateName string, jobTitle string, i
 
 // SendCustomInterviewEmail ส่งอีเมลแจ้งนัดหมายสัมภาษณ์ตามเนื้อหาที่ HR กำหนด/แก้ไขจริง
 func SendCustomInterviewEmail(toEmail string, jobTitle string, customContent string) error {
-	fromEmail := config.Env.SMTPEmail
-	if fromEmail == "" {
-		fromEmail = "guymini02479@gmail.com"
-	}
-
-	appPassword := config.Env.SMTPPassword
-	if appPassword == "" {
-		appPassword = "gjsrvsyeqsixfvlk"
-	}
-	appPassword = strings.ReplaceAll(appPassword, " ", "")
+	fromEmail, appPassword := getSMTPConfig()
 
 	smtpHost := "smtp.gmail.com"
 	smtpPort := "587"
@@ -259,16 +245,7 @@ func SendCustomInterviewEmail(toEmail string, jobTitle string, customContent str
 
 // SendInterviewEmailWithButtons ส่งอีเมลแจ้งนัดหมายสัมภาษณ์พร้อมปุ่มตอบกลับ (ยืนยัน/เลื่อน/ปฏิเสธ)
 func SendInterviewEmailWithButtons(toEmail string, candidateName string, appCode string, jobTitle string, interviewDate string, location string, notes string, responseToken string, baseURL string, interviewID uint) error {
-	fromEmail := config.Env.SMTPEmail
-	if fromEmail == "" {
-		fromEmail = "guymini02479@gmail.com"
-	}
-
-	appPassword := config.Env.SMTPPassword
-	if appPassword == "" {
-		appPassword = "gjsrvsyeqsixfvlk"
-	}
-	appPassword = strings.ReplaceAll(appPassword, " ", "")
+	fromEmail, appPassword := getSMTPConfig()
 
 	smtpHost := "smtp.gmail.com"
 	smtpPort := "587"
@@ -375,16 +352,7 @@ func SendInterviewEmailWithButtons(toEmail string, candidateName string, appCode
 
 // SendCustomInterviewEmailWithButtons ส่งอีเมลแจ้งนัดหมายสัมภาษณ์ตามเนื้อหาที่ HR กำหนดพร้อมปุ่มตอบกลับ
 func SendCustomInterviewEmailWithButtons(toEmail string, jobTitle string, customContent string, responseToken string, baseURL string, interviewID uint) error {
-	fromEmail := config.Env.SMTPEmail
-	if fromEmail == "" {
-		fromEmail = "guymini02479@gmail.com"
-	}
-
-	appPassword := config.Env.SMTPPassword
-	if appPassword == "" {
-		appPassword = "gjsrvsyeqsixfvlk"
-	}
-	appPassword = strings.ReplaceAll(appPassword, " ", "")
+	fromEmail, appPassword := getSMTPConfig()
 
 	smtpHost := "smtp.gmail.com"
 	smtpPort := "587"
@@ -459,16 +427,7 @@ func SendCustomInterviewEmailWithButtons(toEmail string, jobTitle string, custom
 
 // SendInterviewResultEmail ส่งอีเมลแจ้งผลสัมภาษณ์ (ผ่าน/ไม่ผ่าน) พร้อมปุ่มรับทราบผล
 func SendInterviewResultEmail(toEmail string, candidateName string, appCode string, jobTitle string, result string, resultNotes string, customContent string, resultToken string, baseURL string, interviewID uint) error {
-	fromEmail := config.Env.SMTPEmail
-	if fromEmail == "" {
-		fromEmail = "guymini02479@gmail.com"
-	}
-
-	appPassword := config.Env.SMTPPassword
-	if appPassword == "" {
-		appPassword = "gjsrvsyeqsixfvlk"
-	}
-	appPassword = strings.ReplaceAll(appPassword, " ", "")
+	fromEmail, appPassword := getSMTPConfig()
 
 	smtpHost := "smtp.gmail.com"
 	smtpPort := "587"
