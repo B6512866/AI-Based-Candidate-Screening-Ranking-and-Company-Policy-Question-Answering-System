@@ -94,7 +94,7 @@ type ChatRequestInput struct {
 
 // CheckLocalTyphoon checks if local Typhoon server is responsive
 func (c *AIController) isLocalTyphoonOnline() bool {
-	client := &http.Client{Timeout: 2 * time.Second}
+	client := &http.Client{Timeout: 8 * time.Second}
 	req, err := http.NewRequest("GET", c.typhoonTarget+"/health", nil)
 	if err != nil {
 		return false
