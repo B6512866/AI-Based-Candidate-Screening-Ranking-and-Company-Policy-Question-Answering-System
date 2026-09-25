@@ -9,20 +9,23 @@ import (
 )
 
 type Config struct {
-	BackendPort  string
-	DBHost       string
-	DBUser       string
-	DBPass       string
-	DBName       string
-	DBPort       string
-	JWTSecret    string
-	FrontendURL  string
-	BackendURL   string
-	SMTPEmail    string
-	SMTPPassword string
-	GeminiAPIKey string
-	ResendAPIKey string
-	BrevoAPIKey  string
+	BackendPort         string
+	DBHost              string
+	DBUser              string
+	DBPass              string
+	DBName              string
+	DBPort              string
+	JWTSecret           string
+	FrontendURL         string
+	BackendURL          string
+	SMTPEmail           string
+	SMTPPassword        string
+	GeminiAPIKey        string
+	ResendAPIKey        string
+	BrevoAPIKey         string
+	SupabaseURL         string
+	SupabaseServiceKey  string
+	SupabaseBucket      string
 }
 
 var Env Config
@@ -42,9 +45,12 @@ func LoadEnv() {
 		BackendURL:   getEnv("BACKEND_URL", "http://localhost:8080"),
 		SMTPEmail:    getEnv("SMTP_EMAIL", "guymini02479@gmail.com"),
 		SMTPPassword: getEnv("SMTP_PASSWORD", "gjsrvsyeqsixfvlk"),
-		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""), // <--- เพิ่มบรรทัดนี้ครับ!
-		ResendAPIKey: getEnv("RESEND_API_KEY", ""),
-		BrevoAPIKey:  getEnv("BREVO_API_KEY", ""),
+		GeminiAPIKey:       getEnv("GEMINI_API_KEY", ""),
+		ResendAPIKey:       getEnv("RESEND_API_KEY", ""),
+		BrevoAPIKey:        getEnv("BREVO_API_KEY", ""),
+		SupabaseURL:        getEnv("SUPABASE_URL", "https://dtogkhbjrrwpvvlstpgf.supabase.co"),
+		SupabaseServiceKey: getEnv("SUPABASE_SERVICE_KEY", ""),
+		SupabaseBucket:     getEnv("SUPABASE_STORAGE_BUCKET", "resumes"),
 	}
 
 	if Env.GeminiAPIKey == "" {

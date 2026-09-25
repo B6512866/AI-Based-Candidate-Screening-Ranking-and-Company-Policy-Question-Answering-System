@@ -278,7 +278,7 @@ export default function UploadDocumentsPage() {
 
                   <div className="mt-3 flex items-center justify-between gap-3">
                     <a
-                      href={`${getBackendBaseUrl()}${doc.file_url}`}
+                      href={doc.file_url.startsWith("http://") || doc.file_url.startsWith("https://") ? doc.file_url : `${getBackendBaseUrl()}${doc.file_url.startsWith("/") ? "" : "/"}${doc.file_url}`}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex items-center gap-1 text-xs font-semibold text-[#4169E1]"
