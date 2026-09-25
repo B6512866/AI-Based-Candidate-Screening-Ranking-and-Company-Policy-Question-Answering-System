@@ -188,6 +188,14 @@ func (c *AIController) GetRoles(ctx *gin.Context) {
 
 // POST /api/typhoon/ocr
 func (c *AIController) HandleOCR(ctx *gin.Context) {
+	bodyBytes, err := io.ReadAll(ctx.Request.Body)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ไม่สามารถอ่านคำขอได้: " + err.Error()})
+		return
+	}
+	// Restore body for Gin FormFile parsing
+	ctx.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
 	fileHeader, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาแนบไฟล์ Resume (PDF หรือรูปภาพ)"})
@@ -199,6 +207,8 @@ func (c *AIController) HandleOCR(ctx *gin.Context) {
 
 	// If Typhoon is specifically requested AND local model is running, forward to it
 	if isTyphoonRequested && c.isLocalTyphoonOnline() && c.Proxy != nil {
+		// Restore body for ReverseProxy
+		ctx.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		c.Proxy.ServeHTTP(ctx.Writer, ctx.Request)
 		return
 	}
