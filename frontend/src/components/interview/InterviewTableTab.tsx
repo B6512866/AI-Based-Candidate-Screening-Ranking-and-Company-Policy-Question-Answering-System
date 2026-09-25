@@ -301,7 +301,7 @@ export function InterviewTableTab({
                                                 );
                                             })()}
                                         </td>
-                                        <td className="px-5 py-4 whitespace-nowrap">
+                                        <td className="px-5 py-4">
                                             <span
                                                 className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold border whitespace-nowrap shrink-0 shadow-xs ${
                                                     statusStyles[thaiStatus] ||
@@ -325,6 +325,12 @@ export function InterviewTableTab({
                                                 )}
                                                 <span className="whitespace-nowrap">{thaiStatus}</span>
                                             </span>
+                                            {iv.candidate_response_notes && (
+                                                <div className="mt-1.5 p-2 rounded-lg bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600 max-w-[220px] leading-relaxed break-words">
+                                                    <span className="font-bold text-slate-700 block mb-0.5">ข้อความตอบกลับ:</span>
+                                                    <span>{iv.candidate_response_notes}</span>
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-5 py-4 text-center">
                                             <div className="flex items-center justify-center gap-2">

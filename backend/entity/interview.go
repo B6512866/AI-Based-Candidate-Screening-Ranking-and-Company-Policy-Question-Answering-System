@@ -23,6 +23,9 @@ type Interview struct {
 	// Token สำหรับตอบกลับจากอีเมล (ยืนยัน/เลื่อน/ปฏิเสธ)
 	ResponseToken string `json:"response_token" gorm:"size:64;index"`
 
+	// หมายเหตุ/เหตุผลที่ตอบกลับจากผู้สมัคร (เช่น วันเวลาใหม่ที่สะดวก หรือเหตุผลการปฏิเสธ)
+	CandidateResponseNotes string `json:"candidate_response_notes" gorm:"type:text"`
+
 	// ── ผลสัมภาษณ์ (Interview Result) ──
 	// passed, failed หรือ "" (ยังไม่ประเมิน)
 	InterviewResult    string     `json:"interview_result" gorm:"size:20;default:''"`

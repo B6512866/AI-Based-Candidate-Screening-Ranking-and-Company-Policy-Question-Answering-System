@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -280,6 +281,62 @@ func (c *InterviewController) GetCandidatesForInterview(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"data": applications})
 }
 
+// getEffectiveBackendURL หา base URL ของ backend สำหรับใส่ในอีเมล โดยไม่ผูกติดกับ localhost หากรันบน Render หรือ domain สาธารณะ
+func getEffectiveBackendURL(ctx *gin.Context, clientProvidedURL string) string {
+	// 1. ตรวจสอบ clientProvidedURL ที่ส่งมาจาก frontend (ถ้าไม่ใช่ localhost)
+	clientProvidedURL = strings.TrimRight(strings.TrimSpace(clientProvidedURL), "/")
+	if clientProvidedURL != "" && !strings.Contains(clientProvidedURL, "localhost") && !strings.Contains(clientProvidedURL, "127.0.0.1") {
+		return clientProvidedURL
+	}
+
+	// 2. ตรวจสอบ RENDER_EXTERNAL_URL ที่ Render กำหนดให้อัตโนมัติ (เช่น https://app.onrender.com)
+	if renderURL := strings.TrimRight(strings.TrimSpace(os.Getenv("RENDER_EXTERNAL_URL")), "/"); renderURL != "" {
+		return renderURL
+	}
+
+	// 3. ตรวจสอบจาก Request Host ถ้า request เข้ามาจาก domain สาธารณะ
+	if ctx != nil && ctx.Request != nil {
+		host := ctx.Request.Host
+		if host != "" && !strings.Contains(host, "localhost") && !strings.Contains(host, "127.0.0.1") {
+			proto := ctx.GetHeader("X-Forwarded-Proto")
+			if proto == "" {
+				if ctx.Request.TLS != nil {
+					proto = "https"
+				} else {
+					proto = "http"
+				}
+			}
+			return fmt.Sprintf("%s://%s", proto, host)
+		}
+	}
+
+	// 4. ตรวจสอบ config.Env.BackendURL ถ้าถูกตั้งค่าและไม่ใช่ localhost
+	cfgURL := strings.TrimRight(strings.TrimSpace(config.Env.BackendURL), "/")
+	if cfgURL != "" && !strings.Contains(cfgURL, "localhost") && !strings.Contains(cfgURL, "127.0.0.1") {
+		return cfgURL
+	}
+
+	// 5. กรณีทดสอบในวงแลนหรือมี clientProvidedURL ให้ใช้ค่านั้น
+	if clientProvidedURL != "" {
+		return clientProvidedURL
+	}
+
+	// 6. ใช้ host จาก request
+	if ctx != nil && ctx.Request != nil && ctx.Request.Host != "" {
+		proto := ctx.GetHeader("X-Forwarded-Proto")
+		if proto == "" {
+			proto = "http"
+		}
+		return fmt.Sprintf("%s://%s", proto, ctx.Request.Host)
+	}
+
+	// 7. Fallback กลับไปยัง config หรือ localhost
+	if cfgURL != "" {
+		return cfgURL
+	}
+	return fmt.Sprintf("http://localhost:%s", config.Env.BackendPort)
+}
+
 // POST /api/interviews/:id/send-email
 func (c *InterviewController) SendEmail(ctx *gin.Context) {
 	id, _ := strconv.Atoi(ctx.Param("id"))
@@ -295,6 +352,7 @@ func (c *InterviewController) SendEmail(ctx *gin.Context) {
 
 	var req struct {
 		EmailContent string `json:"email_content"`
+		BaseURL      string `json:"base_url"`
 	}
 	ctx.ShouldBindJSON(&req)
 
@@ -309,10 +367,7 @@ func (c *InterviewController) SendEmail(ctx *gin.Context) {
 		jobTitle = interview.Application.Position
 	}
 
-	backendBaseURL := strings.TrimRight(config.Env.BackendURL, "/")
-	if backendBaseURL == "" {
-		backendBaseURL = fmt.Sprintf("http://localhost:%s", config.Env.BackendPort)
-	}
+	backendBaseURL := getEffectiveBackendURL(ctx, req.BaseURL)
 
 	// สร้าง ResponseToken ถ้ายังไม่มี
 	if interview.ResponseToken == "" {
@@ -348,14 +403,51 @@ func (c *InterviewController) SendEmail(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"message": "ส่งอีเมลเชิญสัมภาษณ์สำเร็จ"})
 }
 
-// GET /api/interviews/respond?id=xxx&action=confirm|reschedule|reject&token=xxx&confirmed=true
+// GET/POST /api/interviews/respond?id=xxx&action=confirm|reschedule|reject&token=xxx&confirmed=true
 func (c *InterviewController) Respond(ctx *gin.Context) {
-	interviewID, _ := strconv.Atoi(ctx.Query("id"))
-	action := ctx.Query("action")
-	token := ctx.Query("token")
-	confirmed := ctx.Query("confirmed") == "true"
+	var interviewID int
+	var action, token, notes string
+	var confirmed bool
 
-	if interviewID == 0 || action == "" || token == "" {
+	if ctx.Request.Method == http.MethodPost {
+		// รองรับการรับค่าทั้ง Form URL-encoded และ JSON
+		var formReq struct {
+			ID        int    `form:"id" json:"id"`
+			Action    string `form:"action" json:"action"`
+			Token     string `form:"token" json:"token"`
+			Notes     string `form:"notes" json:"notes"`
+			Confirmed string `form:"confirmed" json:"confirmed"`
+		}
+		_ = ctx.ShouldBind(&formReq)
+
+		interviewID = formReq.ID
+		action = strings.TrimSpace(formReq.Action)
+		token = strings.TrimSpace(formReq.Token)
+		notes = strings.TrimSpace(formReq.Notes)
+		if formReq.Confirmed == "true" || (interviewID > 0 && action != "" && token != "") {
+			confirmed = true
+		}
+
+		// Fallback ไปอ่าน query params หาก form fields ว่าง
+		if interviewID == 0 {
+			interviewID, _ = strconv.Atoi(ctx.Query("id"))
+		}
+		if action == "" {
+			action = ctx.Query("action")
+		}
+		if token == "" {
+			token = ctx.Query("token")
+		}
+	} else {
+		// GET request (จากลิงก์อีเมล)
+		interviewID, _ = strconv.Atoi(ctx.Query("id"))
+		action = ctx.Query("action")
+		token = ctx.Query("token")
+		notes = strings.TrimSpace(ctx.Query("notes"))
+		confirmed = ctx.Query("confirmed") == "true"
+	}
+
+	if interviewID == 0 || token == "" {
 		ctx.Data(http.StatusBadRequest, "text/html; charset=utf-8", []byte(renderResponsePage("error", "ลิงก์ไม่ถูกต้อง", "กรุณาตรวจสอบลิงก์อีกครั้ง")))
 		return
 	}
@@ -393,15 +485,18 @@ func (c *InterviewController) Respond(ctx *gin.Context) {
 	formatLabel := interview.Format
 	switch interview.Format {
 	case "online":
-		formatLabel = "Video Call (Google Meet)"
+		formatLabel = "Video Call (Google Meet / Online)"
 	case "onsite":
 		formatLabel = "On-site (สัมภาษณ์ที่บริษัท)"
 	case "phone":
 		formatLabel = "Phone Interview (โทรศัพท์)"
 	}
 
-	// ── STEP 1: ถ้ายังไม่ได้กด confirm ให้ขึ้นหน้ายืนยันความชัวร์ (สะอาดตา) ──
+	// ── STEP 1: หน้าแสดงข้อมูลนัดหมาย + แบบฟอร์มตอบกลับ (กดยืนยัน เลื่อนนัด หรือสละสิทธิ์) ──
 	if !confirmed {
+		if action == "" {
+			action = "confirm"
+		}
 		ctx.Data(http.StatusOK, "text/html; charset=utf-8", []byte(renderConfirmationPromptPage(interview.ID, action, token, candName, appCode, jobTitle, dateStr, formatLabel, interview.FormatDescription, interview.Interview_Status)))
 		return
 	}
@@ -411,27 +506,34 @@ func (c *InterviewController) Respond(ctx *gin.Context) {
 	switch action {
 	case "confirm":
 		newStatus = "confirmed"
-		title = "ยืนยันการสัมภาษณ์เรียบร้อย"
-		message = "ระบบได้บันทึกการยืนยันเข้าร่วมสัมภาษณ์ของคุณแล้ว ขอให้เตรียมตัวให้พร้อมสำหรับการสัมภาษณ์งาน"
+		title = "ยืนยันการเข้าร่วมสัมภาษณ์เรียบร้อย"
+		message = "ระบบได้บันทึกการยืนยันเข้าร่วมสัมภาษณ์ของคุณแล้ว ขอให้เตรียมตัวให้พร้อมสำหรับการสัมภาษณ์งานตามวันและเวลาที่กำหนด"
 	case "reschedule":
 		newStatus = "rescheduled"
 		title = "แจ้งขอเลื่อนนัดสัมภาษณ์เรียบร้อย"
-		message = "ระบบได้บันทึกคำขอเลื่อนนัดสัมภาษณ์ของคุณแล้ว ฝ่ายทรัพยากรบุคคลจะติดต่อกลับเพื่อประสานวันและเวลาใหม่"
+		message = "ระบบได้บันทึกคำขอเลื่อนนัดสัมภาษณ์ของคุณเรียบร้อยแล้ว ฝ่ายทรัพยากรบุคคลจะติดต่อกลับเพื่อประสานวันและเวลาใหม่"
 	case "reject":
 		newStatus = "cancelled"
 		title = "แจ้งปฏิเสธการสัมภาษณ์เรียบร้อย"
 		message = "ระบบได้บันทึกการปฏิเสธการสัมภาษณ์ของคุณแล้ว ขอบคุณที่แจ้งให้ทราบและขอให้โชคดีในการก้าวหน้าทางอาชีพ"
 	default:
-		ctx.Data(http.StatusBadRequest, "text/html; charset=utf-8", []byte(renderResponsePage("error", "Action ไม่ถูกต้อง", "กรุณาตรวจสอบลิงก์อีกครั้ง")))
+		ctx.Data(http.StatusBadRequest, "text/html; charset=utf-8", []byte(renderResponsePage("error", "Action ไม่ถูกต้อง", "กรุณาตรวจสอบการเลือกคำตอบอีกครั้ง")))
 		return
 	}
 
-	if err := c.db.Model(&entity.Interview{}).Where("id = ?", interview.ID).Update("interview_status", newStatus).Error; err != nil {
+	updateData := map[string]interface{}{
+		"interview_status": newStatus,
+	}
+	if notes != "" {
+		updateData["candidate_response_notes"] = notes
+	}
+
+	if err := c.db.Model(&entity.Interview{}).Where("id = ?", interview.ID).Updates(updateData).Error; err != nil {
 		fmt.Printf("[Interview Respond Error] Failed to update status: %v\n", err)
 		ctx.Data(http.StatusInternalServerError, "text/html; charset=utf-8", []byte(renderResponsePage("error", "เกิดข้อผิดพลาด", "ไม่สามารถอัปเดตสถานะได้ กรุณาลองใหม่อีกครั้ง")))
 		return
 	}
-	fmt.Printf("[Interview Respond Success] Interview ID %d status changed to %s by candidate\n", interview.ID, newStatus)
+	fmt.Printf("[Interview Respond Success] Interview ID %d status changed to %s by candidate (notes: %s)\n", interview.ID, newStatus, notes)
 
 	// 🔔 แจ้งเตือน HR เมื่อผู้สมัครตอบกลับการสัมภาษณ์
 	var notifTitle, notifMsg, notifCatLabel string
@@ -440,19 +542,29 @@ func (c *InterviewController) Respond(ctx *gin.Context) {
 	case "confirm":
 		notifTitle = "ผู้สมัครยืนยันการสัมภาษณ์แล้ว 🎉"
 		notifMsg = fmt.Sprintf("คุณ %s ยืนยันเข้าร่วมสัมภาษณ์ตำแหน่ง %s วันที่ %s (%s)", candName, jobTitle, dateStr, formatLabel)
+		if notes != "" {
+			notifMsg += fmt.Sprintf(" [หมายเหตุ: %s]", notes)
+		}
 		notifCatLabel = "ยืนยันสัมภาษณ์"
 		isPrio = true
 	case "reschedule":
 		notifTitle = "ผู้สมัครขอเลื่อนเวลานัดสัมภาษณ์ ⚠️"
 		notifMsg = fmt.Sprintf("คุณ %s แจ้งขอเลื่อนนัดสัมภาษณ์ตำแหน่ง %s (นัดเดิม: %s) โปรดประสานวันเวลาใหม่", candName, jobTitle, dateStr)
+		if notes != "" {
+			notifMsg += fmt.Sprintf(" [วันเวลาที่สะดวก: %s]", notes)
+		}
 		notifCatLabel = "ขอเลื่อนนัด"
 		isPrio = true
 	case "reject":
 		notifTitle = "ผู้สมัครปฏิเสธการสัมภาษณ์"
 		notifMsg = fmt.Sprintf("คุณ %s แจ้งปฏิเสธการเข้าร่วมสัมภาษณ์ตำแหน่ง %s", candName, jobTitle)
+		if notes != "" {
+			notifMsg += fmt.Sprintf(" [เหตุผล: %s]", notes)
+		}
 		notifCatLabel = "ยกเลิกสัมภาษณ์"
 		isPrio = false
 	}
+
 	go services.CreateNotification(
 		c.db,
 		notifTitle,
@@ -465,56 +577,18 @@ func (c *InterviewController) Respond(ctx *gin.Context) {
 		isPrio,
 	)
 
-	ctx.Data(http.StatusOK, "text/html; charset=utf-8", []byte(renderSuccessResponsePage("success", title, message, appCode, candName)))
+	ctx.Data(http.StatusOK, "text/html; charset=utf-8", []byte(renderSuccessResponsePage("success", title, message, appCode, candName, notes)))
 }
 
-// renderConfirmationPromptPage หน้าสำหรับให้ผู้สมัครกด Confirm อีกรอบเพื่อความชัวร์ (ดีไซน์สะอาดตา สบายตา)
-func renderConfirmationPromptPage(interviewID uint, action, token, candName, appCode, jobTitle, dateStr, formatLabel, formatDesc, currentStatus string) string {
-	var badgeClass, badgeText, title, actionDesc, btnClass, btnText string
-	switch action {
-	case "confirm":
-		badgeClass = "badge-confirm"
-		badgeText = "ยืนยันเข้าร่วมสัมภาษณ์"
-		title = "ยืนยันการเข้าร่วมสัมภาษณ์"
-		actionDesc = "คุณกำลังจะกดยืนยันเข้ารับการสัมภาษณ์งานตามวัน เวลา และรูปแบบที่ระบุไว้"
-		btnClass = "btn-confirm"
-		btnText = "กดยืนยันการเข้าร่วมสัมภาษณ์"
-	case "reschedule":
-		badgeClass = "badge-reschedule"
-		badgeText = "ขอเลื่อนนัดสัมภาษณ์"
-		title = "แจ้งขอเลื่อนนัดสัมภาษณ์"
-		actionDesc = "คุณต้องการแจ้งขอเลื่อนวันเวลานัดสัมภาษณ์ ฝ่าย HR จะติดต่อกลับเพื่อประสานงานใหม่"
-		btnClass = "btn-reschedule"
-		btnText = "กดยืนยันขอเลื่อนนัด"
-	case "reject":
-		badgeClass = "badge-reject"
-		badgeText = "ปฏิเสธการสัมภาษณ์"
-		title = "แจ้งปฏิเสธการสัมภาษณ์"
-		actionDesc = "คุณต้องการแจ้งปฏิเสธการเข้าร่วมสัมภาษณ์งานสำหรับตำแหน่งนี้"
-		btnClass = "btn-reject"
-		btnText = "กดยืนยันปฏิเสธการสัมภาษณ์"
-	default:
-		badgeClass = "badge-default"
-		badgeText = "ตรวจสอบข้อมูล"
-		title = "ยืนยันคำตอบนัดสัมภาษณ์"
-		actionDesc = "กรุณาตรวจสอบข้อมูลและกดยืนยันการทำรายการ"
-		btnClass = "btn-default"
-		btnText = "กดยืนยันข้อมูล"
-	}
-
-	backendBaseURL := strings.TrimRight(config.Env.BackendURL, "/")
-	if backendBaseURL == "" {
-		backendBaseURL = fmt.Sprintf("http://localhost:%s", config.Env.BackendPort)
-	}
-	confirmURL := fmt.Sprintf("%s/api/interviews/respond?id=%d&action=%s&token=%s&confirmed=true", backendBaseURL, interviewID, action, token)
-
+// renderConfirmationPromptPage หน้าสำหรับให้ผู้สมัครเลือกยืนยัน เลื่อนนัด หรือปฏิเสธ พร้อมระบุข้อความ/เหตุผล
+func renderConfirmationPromptPage(interviewID uint, defaultAction, token, candName, appCode, jobTitle, dateStr, formatLabel, formatDesc, currentStatus string) string {
 	statusNoticeHtml := ""
 	if currentStatus == "confirmed" {
-		statusNoticeHtml = `<div style="background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46; padding:10px 14px; border-radius:12px; margin-bottom:16px; font-size:12px; font-weight:600; text-align:center;">นัดสัมภาษณ์นี้ได้รับการยืนยันไว้แล้วเรียบร้อย</div>`
+		statusNoticeHtml = `<div style="background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46; padding:10px 14px; border-radius:12px; margin-bottom:16px; font-size:12.5px; font-weight:600; text-align:center;">✓ นัดสัมภาษณ์นี้ได้รับการบันทึกว่า "ยืนยันแล้ว" (ท่านสามารถปรับเปลี่ยนคำตอบได้)</div>`
 	} else if currentStatus == "rescheduled" {
-		statusNoticeHtml = `<div style="background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:10px 14px; border-radius:12px; margin-bottom:16px; font-size:12px; font-weight:600; text-align:center;">นัดสัมภาษณ์นี้ได้เคยแจ้งขอเลื่อนนัดไว้แล้ว</div>`
+		statusNoticeHtml = `<div style="background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:10px 14px; border-radius:12px; margin-bottom:16px; font-size:12.5px; font-weight:600; text-align:center;">ℹ นัดสัมภาษณ์นี้ได้เคยแจ้ง "ขอเลื่อนนัด" ไว้แล้ว</div>`
 	} else if currentStatus == "cancelled" {
-		statusNoticeHtml = `<div style="background:#fff1f2; border:1px solid #fecdd3; color:#9f1239; padding:10px 14px; border-radius:12px; margin-bottom:16px; font-size:12px; font-weight:600; text-align:center;">นัดสัมภาษณ์นี้ได้เคยแจ้งปฏิเสธไว้แล้ว</div>`
+		statusNoticeHtml = `<div style="background:#fff1f2; border:1px solid #fecdd3; color:#9f1239; padding:10px 14px; border-radius:12px; margin-bottom:16px; font-size:12.5px; font-weight:600; text-align:center;">✕ นัดสัมภาษณ์นี้ได้เคยแจ้ง "สละสิทธิ์/ปฏิเสธ" ไว้แล้ว</div>`
 	}
 
 	formatDetailHtml := ""
@@ -525,7 +599,7 @@ func renderConfirmationPromptPage(interviewID uint, action, token, candName, app
 		if strings.HasPrefix(trimmed, "{") && json.Unmarshal([]byte(trimmed), &jsonMap) == nil {
 			var parts []string
 			if link, ok := jsonMap["link"]; ok && link != "" {
-				parts = append(parts, fmt.Sprintf("<a href='%s' target='_blank' style='color:#4169E1; word-break:break-all;'>%s</a>", link, link))
+				parts = append(parts, fmt.Sprintf("<a href='%s' target='_blank' style='color:#2563eb; font-weight:600; word-break:break-all;'>%s</a>", link, link))
 			}
 			if venue, ok := jsonMap["venue"]; ok && venue != "" {
 				parts = append(parts, venue)
@@ -543,7 +617,19 @@ func renderConfirmationPromptPage(interviewID uint, action, token, candName, app
 				displayDesc = strings.Join(parts, "<br/>")
 			}
 		}
-		formatDetailHtml = fmt.Sprintf(`<div class="info-row"><span class="info-label">ข้อมูลติดต่อกลับ/สถานที่</span><span class="info-val">%s</span></div>`, displayDesc)
+		formatDetailHtml = fmt.Sprintf(`<div class="info-row"><span class="info-label">ข้อมูลนัดหมาย</span><span class="info-val">%s</span></div>`, displayDesc)
+	}
+
+	confirmChecked := ""
+	rescheduleChecked := ""
+	rejectChecked := ""
+	switch defaultAction {
+	case "reschedule":
+		rescheduleChecked = "checked"
+	case "reject":
+		rejectChecked = "checked"
+	default:
+		confirmChecked = "checked"
 	}
 
 	return fmt.Sprintf(`<!DOCTYPE html>
@@ -551,38 +637,30 @@ func renderConfirmationPromptPage(interviewID uint, action, token, candName, app
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HireAI - ยืนยันคำตอบนัดสัมภาษณ์</title>
+    <title>HireAI - ตอบกลับนัดสัมภาษณ์งาน</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        html {
-            min-height: 100%%;
-            -webkit-text-size-adjust: 100%%;
-            scroll-behavior: smooth;
-        }
+        html { min-height: 100%%; -webkit-text-size-adjust: 100%%; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans Thai', sans-serif;
             background-color: #f8fafc;
             min-height: 100vh;
-            min-height: 100dvh;
             margin: 0;
-            padding: 20px 14px;
+            padding: 24px 14px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            box-sizing: border-box;
             color: #1e293b;
         }
         .card {
             background: #ffffff;
             border-radius: clamp(14px, 2.5vw, 20px);
             box-shadow: 0 4px 24px -2px rgba(15, 23, 42, 0.06), 0 1px 3px 0 rgba(15, 23, 42, 0.04);
-            max-width: 520px;
+            max-width: 560px;
             width: 100%%;
             border: 1px solid #e2e8f0;
             margin: auto 0;
-            flex-shrink: 0;
             overflow: hidden;
-            box-sizing: border-box;
             animation: fadeIn 0.25s ease;
         }
         @keyframes fadeIn {
@@ -590,7 +668,7 @@ func renderConfirmationPromptPage(interviewID uint, action, token, candName, app
             to { opacity: 1; transform: translateY(0); }
         }
         .header {
-            padding: clamp(18px, 4vw, 28px) clamp(16px, 4vw, 28px) clamp(12px, 3vw, 18px) clamp(16px, 4vw, 28px);
+            padding: 24px 24px 18px 24px;
             text-align: center;
             border-bottom: 1px solid #f1f5f9;
         }
@@ -600,40 +678,31 @@ func renderConfirmationPromptPage(interviewID uint, action, token, candName, app
             color: #64748b;
             text-transform: uppercase;
             letter-spacing: 1.2px;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 5px 14px;
-            border-radius: 9999px;
-            font-size: 12px;
-            font-weight: 700;
-            margin-bottom: 10px;
-        }
-        .badge-confirm { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
-        .badge-reschedule { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
-        .badge-reject { background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; }
-        .badge-default { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
         .header h1 {
-            font-size: clamp(16px, 3.5vw, 19px);
+            font-size: 20px;
             font-weight: 800;
             color: #0f172a;
-            line-height: 1.4;
+            line-height: 1.35;
+        }
+        .header p {
+            font-size: 13px;
+            color: #64748b;
+            margin-top: 4px;
         }
         .content {
-            padding: clamp(16px, 4vw, 24px) clamp(14px, 4vw, 28px) clamp(18px, 4vw, 24px) clamp(14px, 4vw, 28px);
+            padding: 20px 24px 24px 24px;
         }
         .info-box {
             background: #f8fafc;
             border: 1px solid #e2e8f0;
             border-radius: 14px;
-            padding: clamp(12px, 3vw, 16px);
-            margin-bottom: 14px;
+            padding: 14px 16px;
+            margin-bottom: 18px;
             display: flex;
             flex-direction: column;
-            gap: 9px;
+            gap: 10px;
         }
         .info-row {
             display: flex;
@@ -652,8 +721,7 @@ func renderConfirmationPromptPage(interviewID uint, action, token, candName, app
             color: #64748b;
             font-weight: 500;
             flex-shrink: 0;
-            font-size: 12px;
-            margin-top: 1px;
+            font-size: 12.5px;
         }
         .info-val {
             color: #0f172a;
@@ -672,16 +740,101 @@ func renderConfirmationPromptPage(interviewID uint, action, token, candName, app
             font-weight: 700;
             border: 1px solid #dbeafe;
         }
-        .prompt-text {
-            font-size: 12.5px;
-            color: #475569;
-            line-height: 1.55;
-            margin-bottom: 16px;
-            text-align: center;
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            padding: 10px 14px;
+        .section-title {
+            font-size: 13.5px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .choice-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+        .choice-card {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px 14px;
+            border: 1.5px solid #e2e8f0;
             border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            background: #ffffff;
+        }
+        .choice-card:hover {
+            border-color: #cbd5e1;
+            background: #fafafa;
+        }
+        .choice-card input[type="radio"] {
+            margin-top: 3px;
+            width: 17px;
+            height: 17px;
+            accent-color: #2563eb;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .choice-card.selected-confirm {
+            border-color: #10b981;
+            background: #f0fdf4;
+        }
+        .choice-card.selected-reschedule {
+            border-color: #f59e0b;
+            background: #fffbeb;
+        }
+        .choice-card.selected-reject {
+            border-color: #f43f5e;
+            background: #fff1f2;
+        }
+        .choice-title {
+            font-size: 13.5px;
+            font-weight: 700;
+            color: #0f172a;
+            display: block;
+        }
+        .choice-desc {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 2px;
+            line-height: 1.4;
+        }
+        .notes-wrapper {
+            margin-bottom: 18px;
+        }
+        .notes-label {
+            display: block;
+            font-size: 12.5px;
+            font-weight: 600;
+            color: #334155;
+            margin-bottom: 6px;
+        }
+        .notes-input {
+            width: 100%%;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1.5px solid #cbd5e1;
+            font-family: inherit;
+            font-size: 13px;
+            color: #1e293b;
+            resize: vertical;
+            min-height: 72px;
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        .notes-input:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+        }
+        .notes-hint {
+            font-size: 11.5px;
+            color: #b45309;
+            margin-top: 5px;
+            line-height: 1.4;
         }
         .btn-action {
             display: flex;
@@ -690,33 +843,25 @@ func renderConfirmationPromptPage(interviewID uint, action, token, candName, app
             width: 100%%;
             padding: 13px 20px;
             border-radius: 12px;
-            font-size: clamp(13.5px, 2.8vw, 15px);
+            font-size: 15px;
             font-weight: 700;
             text-align: center;
-            text-decoration: none;
-            color: #ffffff !important;
+            border: none;
+            cursor: pointer;
+            color: #ffffff;
             transition: all 0.2s ease;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
         }
-        .btn-action:hover { opacity: 0.92; transform: translateY(-1px); }
+        .btn-action:hover { opacity: 0.93; transform: translateY(-1px); }
         .btn-confirm { background: #059669; }
         .btn-reschedule { background: #d97706; }
         .btn-reject { background: #e11d48; }
-        .btn-default { background: #2563eb; }
         .cancel-hint {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
             text-align: center;
             font-size: 11.5px;
             color: #94a3b8;
             margin-top: 12px;
             line-height: 1.5;
-        }
-        .cancel-hint svg {
-            flex-shrink: 0;
-            color: #94a3b8;
         }
         .footer {
             padding: 12px;
@@ -727,18 +872,13 @@ func renderConfirmationPromptPage(interviewID uint, action, token, candName, app
             background: #fafafa;
         }
         @media (max-width: 480px) {
-            body { padding: 12px 10px; }
-            .content { padding: 12px 10px; }
-            .header { padding: 14px 10px 10px 10px; }
-            .brand { margin-bottom: 6px; font-size: 10.5px; }
-            .badge { padding: 4px 12px; margin-bottom: 8px; font-size: 11.5px; }
-            .header h1 { font-size: 16px; }
-            .info-box { padding: 8px 10px; gap: 6px; margin-bottom: 10px; border-radius: 10px; }
-            .info-row { font-size: 12px; gap: 6px; padding-bottom: 6px; }
-            .prompt-text { font-size: 11.5px; padding: 7px 10px; margin-bottom: 10px; border-radius: 10px; }
-            .btn-action { padding: 11px 14px; font-size: 13.5px; border-radius: 10px; }
-            .cancel-hint { font-size: 11px; gap: 5px; margin-top: 8px; }
-            .footer { padding: 10px; font-size: 10.5px; }
+            body { padding: 12px 8px; }
+            .header { padding: 18px 16px 14px 16px; }
+            .content { padding: 16px; }
+            .header h1 { font-size: 18px; }
+            .choice-card { padding: 10px 12px; }
+            .choice-title { font-size: 13px; }
+            .btn-action { padding: 12px 16px; font-size: 14px; }
         }
     </style>
 </head>
@@ -746,8 +886,8 @@ func renderConfirmationPromptPage(interviewID uint, action, token, candName, app
     <div class="card">
         <div class="header">
             <div class="brand">HireAI Recruitment Platform</div>
-            <div class="badge %s">%s</div>
-            <h1>%s</h1>
+            <h1>ตอบกลับนัดสัมภาษณ์งาน</h1>
+            <p>โปรดตรวจสอบข้อมูลและเลือกคำตอบเพื่อแจ้งกลับฝ่าย HR</p>
         </div>
         <div class="content">
             %s
@@ -775,30 +915,113 @@ func renderConfirmationPromptPage(interviewID uint, action, token, candName, app
                 %s
             </div>
 
-            <div class="prompt-text">
-                %s<br/>
-            </div>
+            <form method="POST" action="/api/interviews/respond" id="respondForm">
+                <input type="hidden" name="id" value="%d" />
+                <input type="hidden" name="token" value="%s" />
+                <input type="hidden" name="confirmed" value="true" />
 
-            <a href="%s" class="btn-action %s">%s</a>
+                <div class="section-title">
+                    <span>เลือกการตอบรับของท่าน:</span>
+                </div>
+
+                <div class="choice-group">
+                    <label class="choice-card" id="card-confirm">
+                        <input type="radio" name="action" value="confirm" %s onchange="handleActionChange('confirm')" />
+                        <div>
+                            <span class="choice-title" style="color: #059669;">✓ ยืนยันเข้าร่วมสัมภาษณ์</span>
+                            <span class="choice-desc">สะดวกและพร้อมเข้าร่วมการสัมภาษณ์ตามวันและเวลาที่ระบุ</span>
+                        </div>
+                    </label>
+
+                    <label class="choice-card" id="card-reschedule">
+                        <input type="radio" name="action" value="reschedule" %s onchange="handleActionChange('reschedule')" />
+                        <div>
+                            <span class="choice-title" style="color: #d97706;">⏱ ขอเลื่อนวัน-เวลาสัมภาษณ์</span>
+                            <span class="choice-desc">ไม่สะดวกในวันเวลาดังกล่าว ขอประสานงานนัดหมายวันเวลาใหม่</span>
+                        </div>
+                    </label>
+
+                    <label class="choice-card" id="card-reject">
+                        <input type="radio" name="action" value="reject" %s onchange="handleActionChange('reject')" />
+                        <div>
+                            <span class="choice-title" style="color: #e11d48;">✕ ขอสละสิทธิ์ / ไม่สะดวกสัมภาษณ์</span>
+                            <span class="choice-desc">ต้องการสละสิทธิ์หรือขอปฏิเสธการเข้ารับการสัมภาษณ์งาน</span>
+                        </div>
+                    </label>
+                </div>
+
+                <div class="notes-wrapper">
+                    <label for="notes" id="notesLabel" class="notes-label">ข้อความหรือหมายเหตุเพิ่มเติม (ถ้ามี):</label>
+                    <textarea name="notes" id="notes" class="notes-input" placeholder="ระบุข้อความหรือข้อมูลเพิ่มเติมถึงฝ่ายทรัพยากรบุคคล (HR)..."></textarea>
+                    <div id="rescheduleHint" class="notes-hint" style="display: none;">
+                        💡 แนะนำระบุช่วงวันและเวลาใหม่ที่ท่านสะดวก เพื่อให้ฝ่าย HR จัดตารางนัดหมายใหม่ได้อย่างรวดเร็ว
+                    </div>
+                </div>
+
+                <button type="submit" id="submitBtn" class="btn-action btn-confirm">
+                    <span id="btnText">บันทึกและส่งคำตอบ</span>
+                </button>
+            </form>
 
             <p class="cancel-hint">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="8" x2="12" y2="12"></line>
-                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                </svg>
-                <span>หากเปิดหน้านี้โดยไม่ตั้งใจ สามารถปิดหน้าต่างนี้ได้ทันที</span>
+                เมื่อกดส่งคำตอบแล้ว ระบบจะแจ้งเตือนไปยังฝ่ายทรัพยากรบุคคลโดยอัตโนมัติ
             </p>
         </div>
         <div class="footer">
             HireAI Recruitment Platform &copy; All Rights Reserved
         </div>
     </div>
+
+    <script>
+        function handleActionChange(act) {
+            document.querySelectorAll('.choice-card').forEach(function(el) {
+                el.classList.remove('selected-confirm', 'selected-reschedule', 'selected-reject');
+            });
+
+            var label = document.getElementById('notesLabel');
+            var input = document.getElementById('notes');
+            var hint = document.getElementById('rescheduleHint');
+            var btn = document.getElementById('submitBtn');
+            var btnText = document.getElementById('btnText');
+
+            btn.className = 'btn-action';
+
+            if (act === 'confirm') {
+                document.getElementById('card-confirm').classList.add('selected-confirm');
+                label.innerText = 'ข้อความหรือหมายเหตุเพิ่มเติมถึง HR (ถ้ามี):';
+                input.placeholder = 'เช่น มีคำถามเพิ่มเติม หรือแจ้งการเตรียมตัว...';
+                hint.style.display = 'none';
+                btn.classList.add('btn-confirm');
+                btnText.innerText = 'ยืนยันการเข้าร่วมสัมภาษณ์';
+            } else if (act === 'reschedule') {
+                document.getElementById('card-reschedule').classList.add('selected-reschedule');
+                label.innerText = 'ระบุวันและเวลาใหม่ที่ท่านสะดวก หรือข้อความถึง HR:';
+                input.placeholder = 'เช่น สะดวกเป็นวันจันทร์หน้า เวลา 14:00 น. หรือช่วงบ่ายของวันพุธ...';
+                hint.style.display = 'block';
+                btn.classList.add('btn-reschedule');
+                btnText.innerText = 'ส่งคำขอเลื่อนนัดสัมภาษณ์';
+            } else if (act === 'reject') {
+                document.getElementById('card-reject').classList.add('selected-reject');
+                label.innerText = 'ระบุเหตุผลในการปฏิเสธการสัมภาษณ์ (ถ้ามี):';
+                input.placeholder = 'เช่น ได้รับข้อเสนองานจากที่อื่นแล้ว หรือติดภารกิจ...';
+                hint.style.display = 'none';
+                btn.classList.add('btn-reject');
+                btnText.innerText = 'ยืนยันปฏิเสธการสัมภาษณ์';
+            }
+        }
+
+        // Initialize state on page load
+        (function() {
+            var selected = document.querySelector('input[name="action"]:checked');
+            if (selected) {
+                handleActionChange(selected.value);
+            } else {
+                handleActionChange('confirm');
+            }
+        })();
+    </script>
 </body>
 </html>`,
-		badgeClass,
-		badgeText,
-		title,
 		statusNoticeHtml,
 		appCode,
 		candName,
@@ -806,15 +1029,21 @@ func renderConfirmationPromptPage(interviewID uint, action, token, candName, app
 		dateStr,
 		formatLabel,
 		formatDetailHtml,
-		actionDesc,
-		confirmURL,
-		btnClass,
-		btnText,
+		interviewID,
+		token,
+		confirmChecked,
+		rescheduleChecked,
+		rejectChecked,
 	)
 }
 
-// renderSuccessResponsePage แสดงผลลัพธ์หลังกดยืนยันแล้ว (ดีไซน์สะอาดตา สบายตา)
-func renderSuccessResponsePage(status, title, message, appCode, candName string) string {
+// renderSuccessResponsePage แสดงผลลัพธ์หลังกดยืนยันแล้ว พร้อมแสดงหมายเหตุของผู้สมัคร
+func renderSuccessResponsePage(status, title, message, appCode, candName, notes string) string {
+	notesHtml := ""
+	if notes != "" {
+		notesHtml = fmt.Sprintf(`<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px 14px; margin-bottom:18px; text-align:left; font-size:12.5px; color:#334155;"><span style="font-weight:700; color:#0f172a; display:block; margin-bottom:4px;">ข้อความที่ท่านส่งถึง HR:</span><span style="font-style:italic;">"%s"</span></div>`, notes)
+	}
+
 	return fmt.Sprintf(`<!DOCTYPE html>
 <html lang="th">
 <head>
@@ -823,22 +1052,16 @@ func renderSuccessResponsePage(status, title, message, appCode, candName string)
     <title>HireAI - บันทึกข้อมูลสำเร็จ</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        html {
-            min-height: 100%%;
-            -webkit-text-size-adjust: 100%%;
-            scroll-behavior: smooth;
-        }
+        html { min-height: 100%%; -webkit-text-size-adjust: 100%%; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans Thai', sans-serif;
             background-color: #f8fafc;
             min-height: 100vh;
-            min-height: 100dvh;
             margin: 0;
             padding: 24px 16px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            box-sizing: border-box;
             color: #1e293b;
         }
         .card {
@@ -850,8 +1073,6 @@ func renderSuccessResponsePage(status, title, message, appCode, candName string)
             overflow: hidden;
             border: 1px solid #e2e8f0;
             margin: auto 0;
-            flex-shrink: 0;
-            box-sizing: border-box;
             animation: fadeIn 0.25s ease;
             text-align: center;
         }
@@ -860,19 +1081,33 @@ func renderSuccessResponsePage(status, title, message, appCode, candName string)
             to { opacity: 1; transform: translateY(0); }
         }
         .content {
-            padding: clamp(28px, 5vw, 40px) clamp(16px, 4vw, 28px) clamp(24px, 4vw, 32px) clamp(16px, 4vw, 28px);
+            padding: 32px 24px 28px 24px;
+        }
+        .success-icon {
+            width: 56px;
+            height: 56px;
+            background: #ecfdf5;
+            color: #059669;
+            border-radius: 50%%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            margin-bottom: 16px;
+            border: 1.5px solid #a7f3d0;
         }
         h1 {
-            font-size: clamp(17px, 3.8vw, 20px);
+            font-size: 19px;
             font-weight: 800;
             color: #0f172a;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
+            line-height: 1.35;
         }
         .message {
             font-size: 13px;
             color: #64748b;
             line-height: 1.6;
-            margin-bottom: 20px;
+            margin-bottom: 18px;
         }
         .pill {
             display: inline-block;
@@ -882,13 +1117,11 @@ func renderSuccessResponsePage(status, title, message, appCode, candName string)
             border-radius: 10px;
             font-size: 12px;
             color: #475569;
-            margin-bottom: 20px;
+            margin-bottom: 18px;
             max-width: 100%%;
             word-break: break-word;
         }
-        .pill b {
-            color: #0f172a;
-        }
+        .pill b { color: #0f172a; }
         .btn-close {
             display: inline-flex;
             align-items: center;
@@ -908,12 +1141,6 @@ func renderSuccessResponsePage(status, title, message, appCode, candName string)
         .btn-close:hover {
             background: #1e293b;
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
-        }
-        .stay-hint {
-            font-size: 11px;
-            color: #94a3b8;
-            margin-top: 12px;
         }
         .footer {
             padding: 12px;
@@ -924,19 +1151,18 @@ func renderSuccessResponsePage(status, title, message, appCode, candName string)
         }
         @media (max-width: 480px) {
             body { padding: 14px 10px; }
-            .card { border-radius: 16px; }
-            .content { padding: 22px 16px 18px 16px; }
-            .message { font-size: 12.5px; margin-bottom: 14px; }
-            .pill { padding: 7px 12px; font-size: 11.5px; margin-bottom: 16px; }
-            .btn-close { padding: 12px 16px; font-size: 13.5px; }
+            .content { padding: 24px 16px; }
+            h1 { font-size: 17px; }
         }
     </style>
 </head>
 <body>
     <div class="card">
         <div class="content">
+            <div class="success-icon">✓</div>
             <h1>%s</h1>
             <p class="message">%s</p>
+            %s
             <div class="pill">
                 ผู้สมัคร: <b>%s</b> &bull; รหัส: <b style="font-family: monospace; color: #2563eb;">%s</b>
             </div>
@@ -947,7 +1173,7 @@ func renderSuccessResponsePage(status, title, message, appCode, candName string)
         </div>
     </div>
 </body>
-</html>`, title, message, candName, appCode)
+</html>`, title, message, notesHtml, candName, appCode)
 }
 
 // renderResponsePage สำหรับแสดงหน้าข้อผิดพลาด
@@ -1049,6 +1275,7 @@ func (c *InterviewController) NotifyResult(ctx *gin.Context) {
 		InterviewerScore *float64 `json:"interviewer_score"`
 		ResultNotes      string   `json:"result_notes"`
 		EmailContent     string   `json:"email_content"`
+		BaseURL          string   `json:"base_url"`
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -1104,10 +1331,7 @@ func (c *InterviewController) NotifyResult(ctx *gin.Context) {
 		jobTitle = interview.Application.Position
 	}
 
-	backendBaseURL := strings.TrimRight(config.Env.BackendURL, "/")
-	if backendBaseURL == "" {
-		backendBaseURL = fmt.Sprintf("http://localhost:%s", config.Env.BackendPort)
-	}
+	backendBaseURL := getEffectiveBackendURL(ctx, req.BaseURL)
 
 	err := services.SendInterviewResultEmail(
 		candidateEmail, candName, appCode, jobTitle,
@@ -1187,11 +1411,35 @@ func (c *InterviewController) UpdateScore(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"message": "บันทึกคะแนนเรียบร้อย"})
 }
 
-// GET /api/interviews/acknowledge-result?id=xxx&token=xxx&confirmed=true
+// GET/POST /api/interviews/acknowledge-result?id=xxx&token=xxx&confirmed=true
 func (c *InterviewController) AcknowledgeResult(ctx *gin.Context) {
-	interviewID, _ := strconv.Atoi(ctx.Query("id"))
-	token := ctx.Query("token")
-	confirmed := ctx.Query("confirmed") == "true"
+	var interviewID int
+	var token string
+	var confirmed bool
+
+	if ctx.Request.Method == http.MethodPost {
+		var formReq struct {
+			ID        int    `form:"id" json:"id"`
+			Token     string `form:"token" json:"token"`
+			Confirmed string `form:"confirmed" json:"confirmed"`
+		}
+		_ = ctx.ShouldBind(&formReq)
+		interviewID = formReq.ID
+		token = strings.TrimSpace(formReq.Token)
+		if formReq.Confirmed == "true" || (interviewID > 0 && token != "") {
+			confirmed = true
+		}
+		if interviewID == 0 {
+			interviewID, _ = strconv.Atoi(ctx.Query("id"))
+		}
+		if token == "" {
+			token = ctx.Query("token")
+		}
+	} else {
+		interviewID, _ = strconv.Atoi(ctx.Query("id"))
+		token = ctx.Query("token")
+		confirmed = ctx.Query("confirmed") == "true"
+	}
 
 	if interviewID == 0 || token == "" {
 		ctx.Data(http.StatusBadRequest, "text/html; charset=utf-8", []byte(renderResponsePage("error", "ลิงก์ไม่ถูกต้อง", "กรุณาตรวจสอบลิงก์อีกครั้ง")))
@@ -1266,11 +1514,7 @@ func (c *InterviewController) AcknowledgeResult(ctx *gin.Context) {
 
 // renderAcknowledgePromptPage หน้าแสดงผลสัมภาษณ์ + ปุ่มรับทราบ (Step 1)
 func renderAcknowledgePromptPage(interviewID uint, token, candName, appCode, jobTitle, result, resultNotes string, alreadyAcknowledged bool) string {
-	backendBaseURL := strings.TrimRight(config.Env.BackendURL, "/")
-	if backendBaseURL == "" {
-		backendBaseURL = fmt.Sprintf("http://localhost:%s", config.Env.BackendPort)
-	}
-	confirmURL := fmt.Sprintf("%s/api/interviews/acknowledge-result?id=%d&token=%s&confirmed=true", backendBaseURL, interviewID, token)
+	confirmURL := fmt.Sprintf("/api/interviews/acknowledge-result?id=%d&token=%s&confirmed=true", interviewID, token)
 
 	var headerGradient, badgeBg, badgeColor, resultText string
 	if result == "passed" {
