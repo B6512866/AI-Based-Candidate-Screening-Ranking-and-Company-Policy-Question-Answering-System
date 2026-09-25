@@ -980,6 +980,13 @@ func (c *JobPositionController) UpdateApplicationScreening(ctx *gin.Context) {
 		}
 	}
 
+	// ถ้าเป็นการบันทึกเฉพาะข้อความ OCR (ยังไม่ได้วิเคราะห์ AI) ให้บันทึกเฉพาะ ResumeText และออกได้เลย
+	if strings.TrimSpace(req.Strengths) == "" && strings.TrimSpace(req.AnalysisData) == "" && req.Score == 0 {
+		c.db.Save(&app)
+		ctx.JSON(http.StatusOK, gin.H{"message": "บันทึกข้อความ OCR สำเร็จ", "data": nil})
+		return
+	}
+
 	// 1. ถ้ามีประวัติการประเมินอยู่แล้ว ให้อัปเดตของเดิม
 	if app.ScreeningID != nil {
 		var scr entity.AIScreening

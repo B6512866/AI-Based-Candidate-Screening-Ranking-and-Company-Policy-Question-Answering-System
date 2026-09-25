@@ -777,9 +777,10 @@ async def chat_endpoint(req: ChatRequest):
         generation_kwargs = dict(
             **inputs,
             streamer=streamer,
-            max_new_tokens=min(req.max_new_tokens, 4096),
+            max_new_tokens=min(req.max_new_tokens, 2048),
             use_cache=True,
-            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=[151645, 151643],
+            pad_token_id=151643,
             repetition_penalty=1.05,
         )
         if req.temperature == 0:
