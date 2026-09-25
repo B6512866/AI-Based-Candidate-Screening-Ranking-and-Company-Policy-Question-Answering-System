@@ -342,7 +342,15 @@ func (c *AIController) streamLocalTyphoon(ctx *gin.Context, bodyBytes []byte) bo
 		return false
 	}
 
-	log.Printf("🌀 [Local Typhoon Chat] Streaming tokens from %s directly to client...", targetURL)
+	// Read first chunk before writing 200 OK headers to ensure stream has real content
+	buf := make([]byte, 1024)
+	n, readErr := resp.Body.Read(buf)
+	if n == 0 || (readErr != nil && readErr != io.EOF) {
+		log.Printf("⚠️ Local Typhoon Chat first read failed or empty (n=%d, err=%v), aborting and falling back", n, readErr)
+		return false
+	}
+
+	log.Printf("🌀 [Local Typhoon Chat] First token received (%d bytes), streaming tokens from %s directly to client...", n, targetURL)
 	ctx.Header("Content-Type", "text/plain; charset=utf-8")
 	ctx.Header("X-Accel-Buffering", "no")
 	ctx.Header("Cache-Control", "no-cache, no-transform")
@@ -350,25 +358,30 @@ func (c *AIController) streamLocalTyphoon(ctx *gin.Context, bodyBytes []byte) bo
 	ctx.Writer.WriteHeader(http.StatusOK)
 
 	flusher, ok := ctx.Writer.(http.Flusher)
-	buf := make([]byte, 1024)
-	bytesWritten := 0
+	ctx.Writer.Write(buf[:n])
+	bytesWritten := n
+	if ok {
+		flusher.Flush()
+	}
 
-	for {
-		n, readErr := resp.Body.Read(buf)
-		if n > 0 {
-			ctx.Writer.Write(buf[:n])
-			bytesWritten += n
-			if ok {
-				flusher.Flush()
+	if readErr == nil {
+		for {
+			rn, rErr := resp.Body.Read(buf)
+			if rn > 0 {
+				ctx.Writer.Write(buf[:rn])
+				bytesWritten += rn
+				if ok {
+					flusher.Flush()
+				}
 			}
-		}
-		if readErr != nil {
-			break
+			if rErr != nil {
+				break
+			}
 		}
 	}
 
 	log.Printf("✅ [Local Typhoon Chat Done] Streamed %d bytes to client.", bytesWritten)
-	return bytesWritten > 0
+	return bytesWritten >= 20
 }
 
 // POST /api/typhoon/chat
