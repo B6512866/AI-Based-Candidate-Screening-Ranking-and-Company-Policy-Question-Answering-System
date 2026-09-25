@@ -29,12 +29,9 @@ func getSMTPConfig() (string, string) {
 
 // sendViaResend ส่งอีเมลผ่าน Resend HTTP REST API (พอร์ต 443 — ใช้งานบน Render Free ได้ 100%)
 func sendViaResend(apiKey string, fromEmail string, toEmail string, subject string, htmlBody string) error {
-	from := strings.TrimSpace(config.Env.ResendFrom)
-	if from == "" {
-		from = fromEmail
-		if strings.HasSuffix(from, "@gmail.com") || !strings.Contains(from, "@") {
-			from = "HireAI <onboarding@resend.dev>"
-		}
+	from := fromEmail
+	if strings.HasSuffix(from, "@gmail.com") || !strings.Contains(from, "@") {
+		from = "HireAI <onboarding@resend.dev>"
 	}
 	payload := map[string]interface{}{
 		"from":    from,
@@ -67,16 +64,12 @@ func sendViaResend(apiKey string, fromEmail string, toEmail string, subject stri
 	return nil
 }
 
-// sendViaBrevo ส่งอีเมลผ่าน Brevo (Sendinblue) HTTP API (พอร์ต 443 — ใช้งานบน Render Free ได้ 100% ส่งได้ทุกเมล)
+// sendViaBrevo ส่งอีเมลผ่าน Brevo (Sendinblue) HTTP API (พอร์ต 443 — ใช้งานบน Render Free ได้ 100%)
 func sendViaBrevo(apiKey string, fromEmail string, toEmail string, subject string, htmlBody string) error {
-	senderEmail := strings.TrimSpace(config.Env.BrevoSenderEmail)
-	if senderEmail == "" {
-		senderEmail = fromEmail
-	}
 	payload := map[string]interface{}{
 		"sender": map[string]string{
 			"name":  "HireAI Recruitment",
-			"email": senderEmail,
+			"email": fromEmail,
 		},
 		"to": []map[string]string{
 			{"email": toEmail},
@@ -110,47 +103,22 @@ func sendViaBrevo(apiKey string, fromEmail string, toEmail string, subject strin
 	return nil
 }
 
-// sendViaGmailWebhook ส่งอีเมลผ่าน Google Apps Script Webhook (พอร์ต 443 — ส่งจาก Gmail จริงได้ทุกอีเมล ปลายทางไม่จำกัด)
-func sendViaGmailWebhook(webhookURL string, toEmail string, subject string, htmlBody string) error {
-	payload := map[string]string{
-		"to":      toEmail,
-		"subject": subject,
-		"html":    htmlBody,
-	}
-	bodyBytes, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequest("POST", webhookURL, bytes.NewBuffer(bodyBytes))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{
-		Timeout: 20 * time.Second,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return nil
-		},
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("gmail webhook request failed: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("gmail webhook error (%d): %s", resp.StatusCode, string(b))
-	}
-	return nil
-}
-
-// sendEmailUnified ส่งอีเมลแบบ Unified (ตรวจจับ Brevo API -> Gmail Webhook -> Resend API -> Gmail SMTP)
+// sendEmailUnified ส่งอีเมลแบบ Unified (ตรวจจับ Resend API -> Brevo API -> Gmail SMTP)
 func sendEmailUnified(toEmail string, subject string, htmlBody string) error {
 	fromEmail, appPassword := getSMTPConfig()
 
-	// 1. ลอง Brevo HTTP API (Port 443 — บริการหลัก ส่งได้ทุกอีเมล ไม่จำกัดโดเมน)
+	// 1. ลอง Resend HTTP API (Port 443)
+	if config.Env.ResendAPIKey != "" {
+		fmt.Printf("[Email Service] 🚀 Sending via Resend HTTP API to %s...\n", toEmail)
+		err := sendViaResend(config.Env.ResendAPIKey, fromEmail, toEmail, subject, htmlBody)
+		if err == nil {
+			fmt.Printf("[Email Service] ✅ Resend sent successfully to %s\n", toEmail)
+			return nil
+		}
+		fmt.Printf("[Email Service] ⚠️ Resend failed: %v, falling back...\n", err)
+	}
+
+	// 2. ลอง Brevo HTTP API (Port 443)
 	if config.Env.BrevoAPIKey != "" {
 		fmt.Printf("[Email Service] 🚀 Sending via Brevo HTTP API to %s...\n", toEmail)
 		err := sendViaBrevo(config.Env.BrevoAPIKey, fromEmail, toEmail, subject, htmlBody)
@@ -161,36 +129,7 @@ func sendEmailUnified(toEmail string, subject string, htmlBody string) error {
 		fmt.Printf("[Email Service] ⚠️ Brevo failed: %v, falling back...\n", err)
 	}
 
-	// 2. ลอง Google Apps Script Webhook (Port 443 — ส่งผ่าน Gmail จริง)
-	if config.Env.GmailWebhookURL != "" {
-		fmt.Printf("[Email Service] 🚀 Sending via Gmail Webhook to %s...\n", toEmail)
-		err := sendViaGmailWebhook(config.Env.GmailWebhookURL, toEmail, subject, htmlBody)
-		if err == nil {
-			fmt.Printf("[Email Service] ✅ Gmail Webhook sent successfully to %s\n", toEmail)
-			return nil
-		}
-		fmt.Printf("[Email Service] ⚠️ Gmail Webhook failed: %v, falling back...\n", err)
-	}
-
-	// 3. ลอง Resend HTTP API (Port 443)
-	if config.Env.ResendAPIKey != "" {
-		isSandbox := config.Env.ResendFrom == "" || strings.Contains(config.Env.ResendFrom, "onboarding@resend.dev")
-		isOwner := strings.EqualFold(toEmail, fromEmail)
-
-		if isSandbox && !isOwner {
-			fmt.Printf("[Email Service] ℹ️ Resend is in Sandbox mode (onboarding@resend.dev). Recipient %s is not owner (%s). Resend only allows sending to owner.\n", toEmail, fromEmail)
-		}
-
-		fmt.Printf("[Email Service] 🚀 Sending via Resend HTTP API to %s...\n", toEmail)
-		err := sendViaResend(config.Env.ResendAPIKey, fromEmail, toEmail, subject, htmlBody)
-		if err == nil {
-			fmt.Printf("[Email Service] ✅ Resend sent successfully to %s\n", toEmail)
-			return nil
-		}
-		fmt.Printf("[Email Service] ⚠️ Resend failed: %v, falling back...\n", err)
-	}
-
-	// 4. Fallback เป็น SMTP Port 587 (สำหรับ Localhost หรือเมื่อเปิดพอร์ต SMTP)
+	// 3. Fallback เป็น SMTP Port 587 (สำหรับ Localhost หรือเมื่อเปิดพอร์ต SMTP)
 	fmt.Printf("[Email Service] 📧 Sending via Gmail SMTP (port 587) to %s...\n", toEmail)
 	smtpHost := "smtp.gmail.com"
 	smtpPort := "587"
