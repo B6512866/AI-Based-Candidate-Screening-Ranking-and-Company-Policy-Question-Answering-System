@@ -153,7 +153,6 @@ func main() {
 		api.POST("/typhoon/api/score", proxyHandler("/api/score"))
 		api.POST("/typhoon/analyze-resume", proxyHandler("/analyze-resume"))
 
-
 		routes.SetupJobRoutes(api, jobController)
 
 		routes.AuthRoutes(api, config.DB)

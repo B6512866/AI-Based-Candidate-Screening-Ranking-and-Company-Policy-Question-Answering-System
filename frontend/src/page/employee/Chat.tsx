@@ -23,9 +23,9 @@ function generateSessionId() {
 async function checkTyphoon(): Promise<boolean> {
     try {
         // Use backend /api/typhoon-status to avoid CORS issues in browser
-        const r = await fetch(`${getApiUrl()}/typhoon-status`, { signal: AbortSignal.timeout(12000) });
+        const r = await fetch(`${getApiUrl()}/typhoon-status?model=typhoon`, { signal: AbortSignal.timeout(12000) });
         const d = await r.json();
-        return d.online === true;
+        return d.local_typhoon === true || (d.online === true && !d.cloud_ai);
     } catch {
         return false;
     }
@@ -493,12 +493,12 @@ ${knowledgeContext || "(ขณะนี้ยังไม่มีเอกส�
                         ) : online ? (
                             <span className="hidden sm:flex items-center gap-1 text-[11px] text-emerald-600 font-semibold bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100/60">
                                 <Wifi className="w-3.5 h-3.5" />
-                                AI พร้อมตอบคำถาม
+                                {selectedModel.includes("typhoon") ? "Typhoon พร้อมใช้" : "AI พร้อมใช้"}
                             </span>
                         ) : (
-                            <span className="hidden sm:flex items-center gap-1 text-[11px] text-red-500 font-semibold bg-red-50 px-2 py-1 rounded-lg border border-red-100/60">
+                            <span className="hidden sm:flex items-center gap-1 text-[11px] text-red-500 font-semibold bg-red-50 px-2 py-1 rounded-lg border border-red-100/60" title="โมเดล Typhoon จำเป็นต้องรัน python main.py ในเครื่องก่อนใช้งาน">
                                 <WifiOff className="w-3.5 h-3.5" />
-                                AI ออฟไลน์
+                                {selectedModel.includes("typhoon") ? "Typhoon ออฟไลน์ (ยังไม่ได้รันโมเดล)" : "AI ออฟไลน์"}
                             </span>
                         )}
                         <button
