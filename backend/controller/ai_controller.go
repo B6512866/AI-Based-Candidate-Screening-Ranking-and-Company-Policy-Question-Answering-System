@@ -214,6 +214,17 @@ func (c *AIController) forwardToLocalTyphoonOCR(ctx *gin.Context, bodyBytes []by
 		return false
 	}
 
+	var ocrResult struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(respBytes, &ocrResult); err == nil {
+		trimmed := strings.TrimSpace(ocrResult.Text)
+		if trimmed == "" || strings.HasPrefix(trimmed, "OCR Simulated") || strings.HasPrefix(trimmed, "OCR model disabled") {
+			log.Printf("⚠️ Local Typhoon OCR returned empty or simulated text (%q), falling back to Gemini Cloud OCR...", trimmed)
+			return false
+		}
+	}
+
 	ctx.Data(resp.StatusCode, resp.Header.Get("Content-Type"), respBytes)
 	return true
 }

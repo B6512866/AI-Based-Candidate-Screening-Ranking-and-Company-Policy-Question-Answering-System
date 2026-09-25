@@ -420,7 +420,7 @@ async def ocr_endpoint(file: UploadFile = File(...)):
                 text += (page.extract_text() or "") + "\n"
 
             # If PDF text is empty or too short (e.g. scanned/image PDF), fallback to Typhoon OCR on images
-            if len(text.strip()) < 30 and "ocr_model" in models:
+            if len(text.strip()) < 30 and LOAD_MODELS:
                 logger.info(f"[OCR] PDF text empty for {filename}. Running Typhoon OCR on PDF page images...")
                 ocr_texts = []
                 for page in reader.pages:
@@ -468,7 +468,7 @@ async def ocr_endpoint(file: UploadFile = File(...)):
                         ]
                     }]
                 }
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={gemini_key}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
                 httpreq = _urlreq.Request(url, data=_json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
                 with _urlreq.urlopen(httpreq, timeout=30) as resp:
                     res_body = _json.loads(resp.read().decode("utf-8"))
@@ -477,12 +477,12 @@ async def ocr_endpoint(file: UploadFile = File(...)):
                         parts = res_body["candidates"][0].get("content", {}).get("parts", [])
                         text_out = "".join([p.get("text", "") for p in parts]).strip()
                     if text_out:
-                        logger.info(f"✨ [Gemini 1.5 Flash Vision OCR] Successfully extracted {len(text_out)} chars from {filename} (0% GPU)")
+                        logger.info(f"✨ [Gemini Cloud Vision OCR] Successfully extracted {len(text_out)} chars from {filename} (0% GPU)")
                         return {"text": text_out, "markdown": text_out, "type": "image"}
             except Exception as gem_ocr_err:
                 logger.warning(f"Gemini Cloud OCR warning, fallback to local OCR: {gem_ocr_err}")
 
-        if "ocr_model" not in models:
+        if not LOAD_MODELS:
             return {"text": f"OCR Simulated for {filename}", "type": "image"}
             
         try:
@@ -1176,7 +1176,7 @@ async def _ocr_file(filename: str) -> str:
             reader = PdfReader(_io.BytesIO(content))
             text = "\n".join(p.extract_text() or "" for p in reader.pages)
 
-            if len(text.strip()) < 30 and "ocr_model" in models:
+            if len(text.strip()) < 30 and LOAD_MODELS:
                 logger.info(f"[OCR Cache] PDF text empty for {filename}, falling back to Typhoon OCR on images...")
                 ocr_texts = []
                 for p in reader.pages:
@@ -1205,8 +1205,8 @@ async def _ocr_file(filename: str) -> str:
             text = ""
 
     elif ext.endswith((".png", ".jpg", ".jpeg")):
-        if "ocr_model" not in models:
-            return f"OCR model not loaded for {filename}"
+        if not LOAD_MODELS:
+            return f"OCR model disabled for {filename}"
         try:
             import asyncio
             def sync_ocr():
