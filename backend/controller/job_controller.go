@@ -2,10 +2,11 @@ package controller
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"io"
 	"net/http"
-	"os"
-	"path/filepath"
+	"strings"
 	"time"
 
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/dto"
@@ -53,31 +54,23 @@ func (c *JobController) ExtractFromImage(ctx *gin.Context) {
 		return
 	}
 
-	// 1. สร้างโฟลเดอร์สำหรับเก็บไฟล์รูปภาพถ้ายังไม่มี
-	uploadDir := "./uploads/jobs"
-	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้างโฟลเดอร์บันทึกไฟล์ได้"})
-		return
-	}
-
 	imageInputs := make([]services.JobImageInput, 0, len(fileHeaders))
 	imageURLs := make([]string, 0, len(fileHeaders))
-	for index, fileHeader := range fileHeaders {
-		filename := fmt.Sprintf("%d_%d_%s", time.Now().UnixNano(), index, filepath.Base(fileHeader.Filename))
-		filePath := filepath.Join(uploadDir, filename)
-		if err := ctx.SaveUploadedFile(fileHeader, filePath); err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกไฟล์รูปภาพได้"})
+	for _, fileHeader := range fileHeaders {
+		f, err := fileHeader.Open()
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถเปิดไฟล์รูปภาพได้"})
 			return
 		}
-
-		imageBytes, err := os.ReadFile(filePath)
+		imageBytes, err := io.ReadAll(f)
+		f.Close()
 		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอ่านไฟล์รูปภาพจากดิสก์ได้"})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอ่านไฟล์รูปภาพได้"})
 			return
 		}
 
 		detectedMime := http.DetectContentType(imageBytes)
-		if !filepath.HasPrefix(detectedMime, "image/") {
+		if !strings.HasPrefix(detectedMime, "image/") {
 			detectedMime = "image/jpeg"
 		}
 
@@ -85,7 +78,10 @@ func (c *JobController) ExtractFromImage(ctx *gin.Context) {
 			Bytes:    imageBytes,
 			MimeType: detectedMime,
 		})
-		imageURLs = append(imageURLs, fmt.Sprintf("/uploads/jobs/%s", filename))
+
+		encoded := base64.StdEncoding.EncodeToString(imageBytes)
+		dataURI := fmt.Sprintf("data:%s;base64,%s", detectedMime, encoded)
+		imageURLs = append(imageURLs, dataURI)
 	}
 
 	// 5. สร้าง Context แยกต่างหากสำหรับยิงหา Gemini โดยกำหนดเวลาเผื่อไว้ 180 วินาที (3 นาที)

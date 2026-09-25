@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { Upload, FileText, Briefcase, Sparkles, X, ChevronDown, ChevronUp, Wifi, WifiOff, RefreshCw, Copy, Check, Search, Trash2, Square } from "lucide-react";
 import { getalljobs, getapplications, updateApplicationScreening, deleteapplication, applyjob } from "../../services/jobPositionService";
 import apiClient, { getTyphoonApiUrl, getApiUrl, getBackendBaseUrl } from "../../services/apiClient";
+import { openFileInNewTab, base64ToBlob } from "../../utils/fileViewer";
 import AIModelDropdown, { AVAILABLE_AI_MODELS } from "../../components/common/AIModelDropdown";
 
 const TYPHOON_API = getTyphoonApiUrl();
@@ -579,36 +580,40 @@ export default function ScreeningPage() {
                 setAnalyzingStates(prev => ({ ...prev, [app.ID]: "ocr" }));
 
                 let rawUrl = app.resume_url.replace(/\\/g, "/");
-                const baseBackendUrl = getBackendBaseUrl();
-
-                const candidateUrls: string[] = [];
-                if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
-                    candidateUrls.push(rawUrl);
-                } else {
-                    if (!rawUrl.startsWith("/")) rawUrl = "/" + rawUrl;
-                    candidateUrls.push(`${baseBackendUrl}${rawUrl}`);
-                    if (!rawUrl.startsWith("/api")) {
-                        candidateUrls.push(`${baseBackendUrl}/api${rawUrl}`);
-                    } else {
-                        candidateUrls.push(`${baseBackendUrl}${rawUrl.slice(4)}`);
-                    }
-                }
-
                 let blob: Blob | null = null;
                 let lastErr = "";
 
-                for (const targetUrl of candidateUrls) {
-                    try {
-                        console.log("[OCR] Attempting to fetch resume file from:", targetUrl);
-                        const res = await fetch(targetUrl);
-                        if (res.ok) {
-                            blob = await res.blob();
-                            break;
+                if (rawUrl.startsWith("data:")) {
+                    console.log("[OCR] Parsing Base64 resume file directly...");
+                    blob = base64ToBlob(rawUrl);
+                } else {
+                    const baseBackendUrl = getBackendBaseUrl();
+                    const candidateUrls: string[] = [];
+                    if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+                        candidateUrls.push(rawUrl);
+                    } else {
+                        if (!rawUrl.startsWith("/")) rawUrl = "/" + rawUrl;
+                        candidateUrls.push(`${baseBackendUrl}${rawUrl}`);
+                        if (!rawUrl.startsWith("/api")) {
+                            candidateUrls.push(`${baseBackendUrl}/api${rawUrl}`);
                         } else {
-                            lastErr = `HTTP ${res.status}`;
+                            candidateUrls.push(`${baseBackendUrl}${rawUrl.slice(4)}`);
                         }
-                    } catch (e: any) {
-                        lastErr = e.message || "Network Error";
+                    }
+
+                    for (const targetUrl of candidateUrls) {
+                        try {
+                            console.log("[OCR] Attempting to fetch resume file from:", targetUrl);
+                            const res = await fetch(targetUrl);
+                            if (res.ok) {
+                                blob = await res.blob();
+                                break;
+                            } else {
+                                lastErr = `HTTP ${res.status}`;
+                            }
+                        } catch (e: any) {
+                            lastErr = e.message || "Network Error";
+                        }
                     }
                 }
 
@@ -616,7 +621,7 @@ export default function ScreeningPage() {
                     throw new Error(`ไม่พบไฟล์ PDF ของผู้สมัครคนนี้บนเซิร์ฟเวอร์ Cloud (${lastErr || "HTTP 404"}) เนื่องจากดิสก์ Render มีการรีสตาร์ทไฟล์\n\n💡 แนะนำ: กรุณากดลบผู้สมัครคนนี้ (ปุ่ม ❌ สีแดงด้านขวา) แล้วกดปุ่ม '📌 กรอก Resume / เพิ่มผู้สมัครด้วยตนเอง' เพื่อเพิ่มไฟล์ Resume ใหม่ครับ`);
                 }
 
-                const filename = app.resume_url.split("/").pop() || "resume.pdf";
+                const filename = app.resume_url.startsWith("data:") ? "resume.pdf" : (app.resume_url.split("/").pop() || "resume.pdf");
                 const file = new File([blob], filename, { type: blob.type || "application/pdf" });
 
                 const formData = new FormData();
@@ -1817,14 +1822,13 @@ ${tableRowsExample}
                                                                         {candidateName}
                                                                     </h4>
                                                                     {app.resume_url && (
-                                                                        <a
-                                                                            href={app.resume_url.startsWith("http://") || app.resume_url.startsWith("https://") ? app.resume_url : (apiClient.defaults.baseURL || "").replace("/api", "") + (app.resume_url.startsWith("/") ? "" : "/") + app.resume_url}
-                                                                            target="_blank"
-                                                                            rel="noreferrer"
-                                                                            className="text-[10px] text-[#4169E1] bg-blue-50 hover:bg-blue-100 font-bold px-2 py-0.5 rounded transition-all shrink-0"
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => openFileInNewTab(app.resume_url, `${candidateName}_resume.pdf`)}
+                                                                            className="text-[10px] text-[#4169E1] bg-blue-50 hover:bg-blue-100 font-bold px-2 py-0.5 rounded transition-all shrink-0 cursor-pointer"
                                                                         >
                                                                             Resume
-                                                                        </a>
+                                                                        </button>
                                                                     )}
                                                                     {/* Status Badge */}
                                                                     {(() => {

@@ -1,12 +1,13 @@
 package controller
 
 import (
-	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/config"
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/entity"
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/services"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/http"
 	"os"
@@ -798,24 +799,40 @@ func (c *JobPositionController) UploadDocument(ctx *gin.Context) {
 		}
 	}
 
-	supStorage := services.NewSupabaseStorageService(
-		config.Env.SupabaseURL,
-		config.Env.SupabaseServiceKey,
-		config.Env.SupabaseBucket,
-	)
-
 	for _, fileHeader := range files {
-		var fileURL string
-		if publicURL, err := supStorage.UploadFileHeader(fileHeader); err == nil && publicURL != "" {
-			fileURL = publicURL
-		} else {
-			filePath := filepath.Join("./upload/documents", fmt.Sprintf("%d_%s", time.Now().UnixNano(), filepath.Base(fileHeader.Filename)))
-			if err := ctx.SaveUploadedFile(fileHeader, filePath); err != nil {
-				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกไฟล์ได้"})
-				return
-			}
-			fileURL = fmt.Sprintf("/api/upload/documents/%s", filepath.Base(filePath))
+		f, err := fileHeader.Open()
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถเปิดไฟล์ได้"})
+			return
 		}
+		fileBytes, err := io.ReadAll(f)
+		f.Close()
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอ่านไฟล์ได้"})
+			return
+		}
+
+		contentType := fileHeader.Header.Get("Content-Type")
+		ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
+		switch ext {
+		case ".pdf":
+			contentType = "application/pdf"
+		case ".jpg", ".jpeg":
+			contentType = "image/jpeg"
+		case ".png":
+			contentType = "image/png"
+		case ".webp":
+			contentType = "image/webp"
+		case ".txt":
+			contentType = "text/plain"
+		default:
+			if contentType == "" || contentType == "application/octet-stream" {
+				contentType = http.DetectContentType(fileBytes)
+			}
+		}
+
+		encoded := base64.StdEncoding.EncodeToString(fileBytes)
+		fileURL := fmt.Sprintf("data:%s;base64,%s", contentType, encoded)
 
 		title := strings.TrimSpace(ctx.PostForm("title"))
 		if title == "" {
@@ -855,22 +872,6 @@ func (c *JobPositionController) DeleteDocument(ctx *gin.Context) {
 	if err := c.db.First(&doc, uint(docID)).Error; err != nil {
 		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบเอกสารนี้"})
 		return
-	}
-
-	if doc.FileURL != "" {
-		supStorage := services.NewSupabaseStorageService(
-			config.Env.SupabaseURL,
-			config.Env.SupabaseServiceKey,
-			config.Env.SupabaseBucket,
-		)
-		if supStorage.IsSupabaseURL(doc.FileURL) {
-			_ = supStorage.DeleteFile(doc.FileURL)
-		} else {
-			fileName := strings.TrimPrefix(doc.FileURL, "/api/upload/documents/")
-			if fileName != "" {
-				_ = os.Remove(filepath.Join("./upload/documents", fileName))
-			}
-		}
 	}
 
 	if err := c.db.Delete(&doc).Error; err != nil {
