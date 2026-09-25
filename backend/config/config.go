@@ -23,6 +23,9 @@ type Config struct {
 	GeminiAPIKey        string
 	ResendAPIKey        string
 	BrevoAPIKey         string
+	ResendFrom          string
+	GmailWebhookURL     string
+	BrevoSenderEmail    string
 	SupabaseURL         string
 	SupabaseServiceKey  string
 	SupabaseBucket      string
@@ -48,6 +51,9 @@ func LoadEnv() {
 		GeminiAPIKey:       getEnv("GEMINI_API_KEY", ""),
 		ResendAPIKey:       getEnv("RESEND_API_KEY", ""),
 		BrevoAPIKey:        getEnv("BREVO_API_KEY", ""),
+		ResendFrom:          getEnv("RESEND_FROM", ""),
+		GmailWebhookURL:     getEnv("GMAIL_WEBHOOK_URL", ""),
+		BrevoSenderEmail:    getEnv("BREVO_SENDER_EMAIL", getEnv("SMTP_EMAIL", "guymini02479@gmail.com")),
 		SupabaseURL:        getEnv("SUPABASE_URL", "https://dtogkhbjrrwpvvlstpgf.supabase.co"),
 		SupabaseServiceKey: getEnv("SUPABASE_SERVICE_KEY", ""),
 		SupabaseBucket:     getEnv("SUPABASE_STORAGE_BUCKET", "resumes"),
