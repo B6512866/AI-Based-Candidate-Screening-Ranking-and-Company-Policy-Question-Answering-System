@@ -1966,15 +1966,19 @@ ${tableRowsExample}
                                                         </div>
                                                     </div>
 
-                                                    {/* ─── 3.5 Real-Time Live AI Streaming & Analysis Report (กล่องวิเคราะห์เดี่ยว AI กล่องเดียวจบ) ─── */}
+                                                    {/* ─── 3.5 Collapsible AI Analysis Report & Real-Time Live Streaming (เปิด/ปิด ได้ & ไม่กินที่) ─── */}
                                                     {Boolean(
                                                         status === "ai" ||
                                                         status === "saving" ||
                                                         getCleanStrengths(liveStreamingTexts[app.ID] || getStrengthsText(app)).trim()
                                                     ) && (
-                                                        <div className="mx-4 mb-4 p-4 rounded-2xl bg-gradient-to-br from-indigo-50/90 via-blue-50/70 to-purple-50/50 border border-indigo-200/90 shadow-sm animate-fadeIn">
-                                                            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-indigo-100/90">
+                                                        <details 
+                                                            open={status === "ai" || status === "saving" ? true : undefined}
+                                                            className="group mx-4 mb-3 rounded-2xl bg-gradient-to-br from-indigo-50/90 via-blue-50/70 to-purple-50/50 border border-indigo-200/90 shadow-sm transition-all overflow-hidden"
+                                                        >
+                                                            <summary className="font-extrabold text-xs text-[#4169E1] select-none p-3.5 hover:bg-indigo-100/50 transition-all flex flex-wrap items-center justify-between gap-2 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
                                                                 <div className="flex items-center gap-2">
+                                                                    <ChevronDown className="w-4 h-4 text-[#4169E1] transition-transform duration-200 group-open:rotate-180 shrink-0" />
                                                                     {status === "ai" || status === "saving" ? (
                                                                         <>
                                                                             <span className="relative flex h-2.5 w-2.5">
@@ -1991,7 +1995,7 @@ ${tableRowsExample}
                                                                     ) : (
                                                                         <span className="font-extrabold text-xs text-[#4169E1] flex items-center gap-1.5">
                                                                             <Sparkles className="w-3.5 h-3.5" />
-                                                                            รายละเอียดผลการวิเคราะห์เดี่ยวจาก AI ({app.AIScreening?.model_used || AVAILABLE_AI_MODELS.find(m => m.id === selectedModel)?.name || selectedModel})
+                                                                            รายละเอียดผลการวิเคราะห์เดี่ยวจาก AI
                                                                         </span>
                                                                     )}
                                                                 </div>
@@ -2006,39 +2010,48 @@ ${tableRowsExample}
                                                                             </span>
                                                                         </>
                                                                     ) : (
-                                                                        <button
-                                                                            onClick={() => {
-                                                                                const text = getCleanStrengths(liveStreamingTexts[app.ID] || getStrengthsText(app));
-                                                                                if (text) {
-                                                                                    navigator.clipboard.writeText(text);
-                                                                                    alert("คัดลอกผลการวิเคราะห์เรียบร้อยแล้ว");
-                                                                                }
-                                                                            }}
-                                                                            className="flex items-center gap-1 bg-white hover:bg-slate-50 text-slate-600 px-2.5 py-1 rounded-lg border border-slate-200 text-[11px] font-semibold transition-all cursor-pointer shadow-2xs"
-                                                                            title="คัดลอกผลการวิเคราะห์"
-                                                                        >
-                                                                            <Copy className="w-3 h-3 text-indigo-600" />
-                                                                            <span>คัดลอก</span>
-                                                                        </button>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="text-[10px] font-normal text-slate-400 select-none">คลิกเพื่อขยาย/ซ่อน</span>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    const text = getCleanStrengths(liveStreamingTexts[app.ID] || getStrengthsText(app));
+                                                                                    if (text) {
+                                                                                        navigator.clipboard.writeText(text);
+                                                                                        alert("คัดลอกผลการวิเคราะห์เรียบร้อยแล้ว");
+                                                                                    }
+                                                                                }}
+                                                                                className="flex items-center gap-1 bg-white hover:bg-slate-50 text-slate-600 px-2.5 py-1 rounded-lg border border-slate-200 text-[11px] font-semibold transition-all cursor-pointer shadow-2xs"
+                                                                                title="คัดลอกผลการวิเคราะห์"
+                                                                            >
+                                                                                <Copy className="w-3 h-3 text-indigo-600" />
+                                                                                <span>คัดลอก</span>
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </summary>
+
+                                                            {/* Live Streaming Content Area with Typewriter Cursor */}
+                                                            <div className="px-3.5 pb-3.5 pt-0">
+                                                                <div className="bg-white/95 backdrop-blur-sm border border-indigo-100 p-4 rounded-xl text-xs text-slate-700 leading-relaxed font-sans whitespace-pre-wrap max-h-80 overflow-y-auto shadow-inner">
+                                                                    {(liveStreamingTexts[app.ID] || getStrengthsText(app))?.trim() ? (
+                                                                        <>
+                                                                            {getCleanStrengths(liveStreamingTexts[app.ID] || getStrengthsText(app))}
+                                                                            {Boolean(status === "ai") && (
+                                                                                <span className="inline-block w-2 h-4 ml-1 bg-[#4169E1] animate-pulse align-middle"></span>
+                                                                            )}
+                                                                        </>
+                                                                    ) : (
+                                                                        <div className="flex items-center gap-2 text-slate-400 italic py-2">
+                                                                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#4169E1]" />
+                                                                            <span>กำลังส่ง Prompt เข้า GPU และสตรีมผลวิเคราะห์แบบสดๆ (Real-time Token Streaming)...</span>
+                                                                        </div>
                                                                     )}
                                                                 </div>
                                                             </div>
-
-                                                            {/* Live Streaming Content Area with Typewriter Cursor */}
-                                                            <div className="mt-3 bg-white/95 backdrop-blur-sm border border-indigo-100 p-4 rounded-xl text-xs text-slate-700 leading-relaxed font-sans whitespace-pre-wrap max-h-80 overflow-y-auto shadow-inner">
-                                                                {(liveStreamingTexts[app.ID] || getStrengthsText(app))?.trim() ? (
-                                                                    <>
-                                                                        {getCleanStrengths(liveStreamingTexts[app.ID] || getStrengthsText(app))}
-                                                                        <span className="inline-block w-2 h-4 ml-1 bg-[#4169E1] animate-pulse align-middle"></span>
-                                                                    </>
-                                                                ) : (
-                                                                    <div className="flex items-center gap-2 text-slate-400 italic py-2">
-                                                                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#4169E1]" />
-                                                                        <span>กำลังส่ง Prompt เข้า GPU และสตรีมผลวิเคราะห์แบบสดๆ (Real-time Token Streaming)...</span>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
+                                                        </details>
                                                     )}
 
                                                     {/* ─── 4. Expandable Raw OCR Text Section (ส่วนขยาย: ข้อความดิบจากการสแกน OCR) ─── */}
