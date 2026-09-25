@@ -32,7 +32,11 @@ export default function EmployeeLayout() {
         const loadNotifs = () => setNotifications(notificationService.getNotifications("EMPLOYEE"));
         loadNotifs();
         const unsubscribe = notificationService.subscribe(loadNotifs);
-        return () => unsubscribe();
+        const stopPolling = notificationService.startPolling("EMPLOYEE", 12000);
+        return () => {
+            unsubscribe();
+            stopPolling();
+        };
     }, [firstName, lastName, location.pathname]);
 
     const unreadCount = notifications.filter(n => !n.isRead).length;

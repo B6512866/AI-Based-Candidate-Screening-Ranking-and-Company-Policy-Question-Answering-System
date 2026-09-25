@@ -40,6 +40,7 @@ export default function HRNotificationsPage() {
     };
 
     useEffect(() => {
+        notificationService.fetchNotifications("HR");
         loadNotifications();
         const unsubscribe = notificationService.subscribe(loadNotifications);
         return () => unsubscribe();

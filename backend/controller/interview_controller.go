@@ -125,6 +125,20 @@ func (c *InterviewController) Create(ctx *gin.Context) {
 		}
 		c.db.Model(&app).Update("status", "interview")
 		c.db.Preload("Application.Candidate").Preload("Application.JobPosition").Preload("CreatedBy").First(&existingInterview, existingInterview.ID)
+		
+		candName := fmt.Sprintf("%s %s", app.Candidate.FirstName, app.Candidate.LastName)
+		go services.CreateNotification(
+			c.db,
+			"อัปเดตวันเวลานัดสัมภาษณ์",
+			fmt.Sprintf("นัดสัมภาษณ์คุณ %s ตำแหน่ง %s กำหนดเวลาใหม่เป็น %s", candName, app.Position, datetimeStr),
+			"interview",
+			"นัดสัมภาษณ์",
+			"/hr/interviews",
+			"ดูตารางสัมภาษณ์",
+			"HR",
+			false,
+		)
+
 		ctx.JSON(http.StatusOK, gin.H{
 			"message": "อัปเดตนัดสัมภาษณ์สำเร็จ",
 			"data":    existingInterview,
@@ -150,6 +164,19 @@ func (c *InterviewController) Create(ctx *gin.Context) {
 
 	c.db.Model(&app).Update("status", "interview")
 	c.db.Preload("Application.Candidate").Preload("Application.JobPosition").Preload("CreatedBy").First(&interview, interview.ID)
+
+	candName := fmt.Sprintf("%s %s", app.Candidate.FirstName, app.Candidate.LastName)
+	go services.CreateNotification(
+		c.db,
+		"สร้างนัดหมายสัมภาษณ์ใหม่",
+		fmt.Sprintf("นัดสัมภาษณ์คุณ %s ตำแหน่ง %s ในวันที่ %s", candName, app.Position, datetimeStr),
+		"interview",
+		"นัดสัมภาษณ์",
+		"/hr/interviews",
+		"ดูตารางสัมภาษณ์",
+		"HR",
+		false,
+	)
 
 	ctx.JSON(http.StatusCreated, gin.H{
 		"message": "สร้างนัดสัมภาษณ์สำเร็จ",
@@ -405,6 +432,38 @@ func (c *InterviewController) Respond(ctx *gin.Context) {
 		return
 	}
 	fmt.Printf("[Interview Respond Success] Interview ID %d status changed to %s by candidate\n", interview.ID, newStatus)
+
+	// 🔔 แจ้งเตือน HR เมื่อผู้สมัครตอบกลับการสัมภาษณ์
+	var notifTitle, notifMsg, notifCatLabel string
+	var isPrio bool
+	switch action {
+	case "confirm":
+		notifTitle = "ผู้สมัครยืนยันการสัมภาษณ์แล้ว 🎉"
+		notifMsg = fmt.Sprintf("คุณ %s ยืนยันเข้าร่วมสัมภาษณ์ตำแหน่ง %s วันที่ %s (%s)", candName, jobTitle, dateStr, formatLabel)
+		notifCatLabel = "ยืนยันสัมภาษณ์"
+		isPrio = true
+	case "reschedule":
+		notifTitle = "ผู้สมัครขอเลื่อนเวลานัดสัมภาษณ์ ⚠️"
+		notifMsg = fmt.Sprintf("คุณ %s แจ้งขอเลื่อนนัดสัมภาษณ์ตำแหน่ง %s (นัดเดิม: %s) โปรดประสานวันเวลาใหม่", candName, jobTitle, dateStr)
+		notifCatLabel = "ขอเลื่อนนัด"
+		isPrio = true
+	case "reject":
+		notifTitle = "ผู้สมัครปฏิเสธการสัมภาษณ์"
+		notifMsg = fmt.Sprintf("คุณ %s แจ้งปฏิเสธการเข้าร่วมสัมภาษณ์ตำแหน่ง %s", candName, jobTitle)
+		notifCatLabel = "ยกเลิกสัมภาษณ์"
+		isPrio = false
+	}
+	go services.CreateNotification(
+		c.db,
+		notifTitle,
+		notifMsg,
+		"interview",
+		notifCatLabel,
+		"/hr/interviews",
+		"ดูตารางสัมภาษณ์",
+		"HR",
+		isPrio,
+	)
 
 	ctx.Data(http.StatusOK, "text/html; charset=utf-8", []byte(renderSuccessResponsePage("success", title, message, appCode, candName)))
 }
@@ -1064,6 +1123,22 @@ func (c *InterviewController) NotifyResult(ctx *gin.Context) {
 
 	fmt.Printf("[Notify Result Success] Interview ID %d result '%s' sent to %s\n", interview.ID, req.Result, candidateEmail)
 
+	resultLabel := "ผ่านการคัดเลือก"
+	if req.Result == "failed" {
+		resultLabel = "ไม่ผ่านการคัดเลือก"
+	}
+	go services.CreateNotification(
+		c.db,
+		"ส่งอีเมลแจ้งผลการสัมภาษณ์แล้ว",
+		fmt.Sprintf("แจ้งผลสัมภาษณ์คุณ %s ตำแหน่ง %s (ผล: %s) ทางอีเมลสำเร็จ", candName, jobTitle, resultLabel),
+		"interview",
+		"แจ้งผลสัมภาษณ์",
+		"/hr/interview-results",
+		"ดูผลการสัมภาษณ์",
+		"HR",
+		false,
+	)
+
 	ctx.JSON(http.StatusOK, gin.H{
 		"message": "ส่งอีเมลแจ้งผลสัมภาษณ์สำเร็จ",
 		"result":  req.Result,
@@ -1160,6 +1235,22 @@ func (c *InterviewController) AcknowledgeResult(ctx *gin.Context) {
 	}
 
 	fmt.Printf("[Acknowledge Success] Interview ID %d acknowledged by candidate %s\n", interview.ID, candName)
+
+	resText := "ผ่านการสัมภาษณ์"
+	if interview.InterviewResult == "failed" {
+		resText = "ไม่ผ่านการสัมภาษณ์"
+	}
+	go services.CreateNotification(
+		c.db,
+		"ผู้สมัครรับทราบผลการสัมภาษณ์แล้ว",
+		fmt.Sprintf("คุณ %s ได้กดยืนยันรับทราบผลการสัมภาษณ์ตำแหน่ง %s (ผล: %s)", candName, jobTitle, resText),
+		"interview",
+		"รับทราบผล",
+		"/hr/interview-results",
+		"ดูผลการสัมภาษณ์",
+		"HR",
+		false,
+	)
 
 	var title, message string
 	if interview.InterviewResult == "passed" {

@@ -33,7 +33,11 @@ export default function HRLayout() {
         const loadNotifs = () => setNotifications(notificationService.getNotifications("HR"));
         loadNotifs();
         const unsubscribe = notificationService.subscribe(loadNotifs);
-        return () => unsubscribe();
+        const stopPolling = notificationService.startPolling("HR", 10000);
+        return () => {
+            unsubscribe();
+            stopPolling();
+        };
     }, [firstName, lastName, location.pathname]);
 
     const unreadCount = notifications.filter(n => !n.isRead).length;

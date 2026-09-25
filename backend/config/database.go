@@ -48,6 +48,7 @@ func ConnectDatabase() {
 		&entity.JobPosition{},
 		&entity.MainCriterion{}, // 👈 เพิ่มตารางนี้
 		&entity.SubCriterion{},  // 👈 เพิ่มตารางนี้
+		&entity.Notification{},  // 👈 ระบบแจ้งเตือน
 	)
 	if err != nil {
 		panic("AutoMigrate failed: " + err.Error())

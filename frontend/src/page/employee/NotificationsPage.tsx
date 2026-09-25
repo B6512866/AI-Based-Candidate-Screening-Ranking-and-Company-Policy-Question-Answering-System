@@ -25,6 +25,7 @@ export default function NotificationsPage() {
     };
 
     useEffect(() => {
+        notificationService.fetchNotifications("EMPLOYEE");
         loadNotifications();
         const unsubscribe = notificationService.subscribe(loadNotifications);
         return () => unsubscribe();
