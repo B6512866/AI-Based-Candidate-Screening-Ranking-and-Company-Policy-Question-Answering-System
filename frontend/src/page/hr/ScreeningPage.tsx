@@ -764,7 +764,7 @@ ${tableRowsExample}
                 let errDetail = "";
                 try {
                     const errJson = await response.json();
-                    errDetail = errJson.detail || errJson.message || "";
+                    errDetail = errJson.error || errJson.detail || errJson.message || "";
                 } catch {
                     errDetail = await response.text().catch(() => "");
                 }

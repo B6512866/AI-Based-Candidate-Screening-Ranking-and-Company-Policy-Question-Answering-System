@@ -2,13 +2,10 @@ package main
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -133,57 +130,34 @@ func main() {
 			ctx.JSON(200, gin.H{"url": dataURI})
 		})
 
-		// ── Reverse Proxy for Typhoon AI Service ────────────────────────────────────
-		typhoonTarget := os.Getenv("TYPHOON_API_URL")
-		if typhoonTarget == "" {
-			typhoonTarget = "http://127.0.0.1:8000"
-		}
-		typhoonURL, errUrl := url.Parse(typhoonTarget)
-		if errUrl == nil {
-			proxy := httputil.NewSingleHostReverseProxy(typhoonURL)
-			originalDirector := proxy.Director
-			proxy.Director = func(req *http.Request) {
-				originalDirector(req)
-				req.Host = typhoonURL.Host
-				req.URL.Scheme = typhoonURL.Scheme
-				req.URL.Host = typhoonURL.Host
-				// Required for LocalTunnel to bypass browser reminder page
-				req.Header.Set("Bypass-Tunnel-Reminder", "true")
-			}
-			// Strip CORS headers from upstream to prevent duplicate headers conflict in browser
-			proxy.ModifyResponse = func(resp *http.Response) error {
-				resp.Header.Del("Access-Control-Allow-Origin")
-				resp.Header.Del("Access-Control-Allow-Methods")
-				resp.Header.Del("Access-Control-Allow-Headers")
-				resp.Header.Del("Access-Control-Allow-Credentials")
-				resp.Header.Del("Access-Control-Expose-Headers")
-				return nil
-			}
-			api.Any("/typhoon/*proxyPath", func(c *gin.Context) {
-				c.Request.URL.Path = c.Param("proxyPath")
-				proxy.ServeHTTP(c.Writer, c.Request)
-			})
-		}
+		// ── AI Service Routes (24/7 Cloud AI for Gemini & Claude + Local Proxy for Typhoon) ────
+		aiController := controller.NewAIController(config.DB)
+		api.GET("/typhoon-status", aiController.GetStatus)
+		api.GET("/typhoon/health", aiController.Health)
+		api.GET("/typhoon/api/roles", aiController.GetRoles)
+		api.POST("/typhoon/ocr", aiController.HandleOCR)
+		api.POST("/typhoon/chat", aiController.HandleChat)
 
-		// ── Dedicated Typhoon health check (no CORS issue) ───────────────────────────
-		api.GET("/typhoon-status", func(c *gin.Context) {
-			client := &http.Client{Timeout: 8 * time.Second}
-			req, _ := http.NewRequest("GET", typhoonTarget+"/health", nil)
-			req.Header.Set("Bypass-Tunnel-Reminder", "true")
-			resp, err := client.Do(req)
-			if err != nil || resp == nil {
-				c.JSON(200, gin.H{"online": false, "error": "unreachable"})
-				return
+		// Any other /typhoon/* routes proxy to local Typhoon or handle directly
+		api.Any("/typhoon/*proxyPath", func(c *gin.Context) {
+			path := c.Param("proxyPath")
+			switch path {
+			case "/chat":
+				aiController.HandleChat(c)
+			case "/ocr":
+				aiController.HandleOCR(c)
+			case "/health":
+				aiController.Health(c)
+			case "/api/roles":
+				aiController.GetRoles(c)
+			default:
+				if aiController.Proxy != nil {
+					c.Request.URL.Path = path
+					aiController.Proxy.ServeHTTP(c.Writer, c.Request)
+				} else {
+					c.JSON(http.StatusNotFound, gin.H{"error": "route not found"})
+				}
 			}
-			defer resp.Body.Close()
-			body, _ := io.ReadAll(resp.Body)
-			var result map[string]interface{}
-			if err := json.Unmarshal(body, &result); err != nil {
-				c.JSON(200, gin.H{"online": false, "error": "bad response"})
-				return
-			}
-			status, _ := result["status"].(string)
-			c.JSON(200, gin.H{"online": status == "ok", "details": result})
 		})
 
 
