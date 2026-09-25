@@ -576,10 +576,11 @@ export default function ScreeningPage() {
         }
 
         try {
-            if (!resumeText && app.resume_url) {
+            const targetResumeUrl = (app.resume_url || app.ResumeURL || app.resumeUrl || "").trim();
+            if (!resumeText && targetResumeUrl) {
                 setAnalyzingStates(prev => ({ ...prev, [app.ID]: "ocr" }));
 
-                let rawUrl = app.resume_url.replace(/\\/g, "/");
+                let rawUrl = targetResumeUrl.replace(/\\/g, "/");
                 let blob: Blob | null = null;
                 let lastErr = "";
 
@@ -617,11 +618,11 @@ export default function ScreeningPage() {
                     }
                 }
 
-                if (!blob) {
+                if (!blob || blob.size === 0) {
                     throw new Error(`ไม่พบไฟล์ PDF ของผู้สมัครคนนี้บนเซิร์ฟเวอร์ Cloud (${lastErr || "HTTP 404"}) เนื่องจากดิสก์ Render มีการรีสตาร์ทไฟล์\n\n💡 แนะนำ: กรุณากดลบผู้สมัครคนนี้ (ปุ่ม ❌ สีแดงด้านขวา) แล้วกดปุ่ม '📌 กรอก Resume / เพิ่มผู้สมัครด้วยตนเอง' เพื่อเพิ่มไฟล์ Resume ใหม่ครับ`);
                 }
 
-                const filename = app.resume_url.startsWith("data:") ? "resume.pdf" : (app.resume_url.split("/").pop() || "resume.pdf");
+                const filename = targetResumeUrl.startsWith("data:") ? "resume.pdf" : (targetResumeUrl.split("/").pop() || "resume.pdf");
                 const file = new File([blob], filename, { type: blob.type || "application/pdf" });
 
                 const formData = new FormData();
@@ -1821,10 +1822,10 @@ ${tableRowsExample}
                                                                     <h4 className="font-bold text-slate-800 text-sm truncate max-w-[180px]" title={candidateName}>
                                                                         {candidateName}
                                                                     </h4>
-                                                                    {app.resume_url && (
+                                                                    {(app.resume_url || app.ResumeURL || app.resumeUrl) && (
                                                                         <button
                                                                             type="button"
-                                                                            onClick={() => openFileInNewTab(app.resume_url, `${candidateName}_resume.pdf`)}
+                                                                            onClick={() => openFileInNewTab(app.resume_url || app.ResumeURL || app.resumeUrl, `${candidateName}_resume.pdf`)}
                                                                             className="text-[10px] text-[#4169E1] bg-blue-50 hover:bg-blue-100 font-bold px-2 py-0.5 rounded transition-all shrink-0 cursor-pointer"
                                                                         >
                                                                             Resume

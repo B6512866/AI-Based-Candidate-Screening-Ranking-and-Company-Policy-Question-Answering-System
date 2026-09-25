@@ -2592,10 +2592,10 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                                     </td>
 
                                                                     <td className="px-4 py-4 text-right space-x-2">
-                                                                        {app.resume_url && (
+                                                                        {(app.resume_url || app.ResumeURL || app.resumeUrl) && (
                                                                             <button
                                                                                 type="button"
-                                                                                onClick={() => openFileInNewTab(app.resume_url, "resume.pdf")}
+                                                                                onClick={() => openFileInNewTab(app.resume_url || app.ResumeURL || app.resumeUrl, "resume.pdf")}
                                                                                 className="inline-flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-600 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
                                                                             >
                                                                                 <Download className="w-3.5 h-3.5" />
