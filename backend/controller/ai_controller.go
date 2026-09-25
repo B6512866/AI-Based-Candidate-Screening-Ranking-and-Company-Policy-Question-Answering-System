@@ -186,6 +186,38 @@ func (c *AIController) GetRoles(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, defaultRoles)
 }
 
+// forwardToLocalTyphoonOCR forwards OCR multipart request directly using clean http.Client
+func (c *AIController) forwardToLocalTyphoonOCR(ctx *gin.Context, bodyBytes []byte) bool {
+	if !c.isLocalTyphoonOnline() {
+		return false
+	}
+	targetURL := c.typhoonTarget + "/ocr"
+	forwardReq, err := http.NewRequestWithContext(ctx.Request.Context(), "POST", targetURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return false
+	}
+	forwardReq.Header.Set("Content-Type", ctx.Request.Header.Get("Content-Type"))
+	forwardReq.Header.Set("Bypass-Tunnel-Reminder", "true")
+	forwardReq.ContentLength = int64(len(bodyBytes))
+
+	client := &http.Client{Timeout: 180 * time.Second}
+	resp, err := client.Do(forwardReq)
+	if err != nil || resp == nil {
+		log.Printf("⚠️ Local Typhoon OCR forward error: %v", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	respBytes, readErr := io.ReadAll(resp.Body)
+	if readErr != nil || resp.StatusCode != http.StatusOK {
+		log.Printf("⚠️ Local Typhoon OCR non-200 (status %d): %s", resp.StatusCode, string(respBytes))
+		return false
+	}
+
+	ctx.Data(resp.StatusCode, resp.Header.Get("Content-Type"), respBytes)
+	return true
+}
+
 // POST /api/typhoon/ocr
 func (c *AIController) HandleOCR(ctx *gin.Context) {
 	bodyBytes, err := io.ReadAll(ctx.Request.Body)
@@ -205,29 +237,13 @@ func (c *AIController) HandleOCR(ctx *gin.Context) {
 	modelParam := strings.ToLower(ctx.DefaultPostForm("model", ""))
 	isTyphoonRequested := strings.Contains(modelParam, "typhoon")
 
-	// If Typhoon is specifically requested AND local model is running, forward directly
-	if isTyphoonRequested && c.isLocalTyphoonOnline() {
-		targetURL := c.typhoonTarget + "/ocr"
-		forwardReq, err := http.NewRequestWithContext(ctx.Request.Context(), "POST", targetURL, bytes.NewReader(bodyBytes))
-		if err == nil {
-			forwardReq.Header.Set("Content-Type", ctx.Request.Header.Get("Content-Type"))
-			forwardReq.Header.Set("Bypass-Tunnel-Reminder", "true")
-			forwardReq.ContentLength = int64(len(bodyBytes))
-
-			client := &http.Client{Timeout: 180 * time.Second}
-			resp, err := client.Do(forwardReq)
-			if err == nil && resp != nil {
-				defer resp.Body.Close()
-				respBytes, readErr := io.ReadAll(resp.Body)
-				if readErr == nil && resp.StatusCode == http.StatusOK {
-					ctx.Data(resp.StatusCode, resp.Header.Get("Content-Type"), respBytes)
-					return
-				}
-				log.Printf("⚠️ Local Typhoon OCR error (status %d): %s, falling back to Gemini Cloud OCR", resp.StatusCode, string(respBytes))
-			} else {
-				log.Printf("⚠️ Local Typhoon OCR forward connection error: %v, falling back to Gemini Cloud OCR", err)
-			}
+	// 1. If Typhoon is specifically requested AND local model is running, forward directly
+	if isTyphoonRequested {
+		if c.forwardToLocalTyphoonOCR(ctx, bodyBytes) {
+			return
 		}
+		// If local Typhoon is offline or returned an error, log and fall through to Gemini Cloud OCR as resilient fallback
+		log.Println("⚠️ Local Typhoon OCR not available, attempting Gemini Cloud OCR fallback...")
 	}
 
 	file, err := fileHeader.Open()
@@ -260,14 +276,11 @@ func (c *AIController) HandleOCR(ctx *gin.Context) {
 	if geminiKey == "" {
 		geminiKey = strings.TrimSpace(os.Getenv("GOOGLE_API_KEY"))
 	}
-
 	if geminiKey == "" {
-		// If no gemini key but local typhoon is online, forward
-		if c.isLocalTyphoonOnline() && c.Proxy != nil {
-			c.Proxy.ServeHTTP(ctx.Writer, ctx.Request)
+		if c.forwardToLocalTyphoonOCR(ctx, bodyBytes) {
 			return
 		}
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "⚠️ ไม่พบ GEMINI_API_KEY สำหรับรัน Cloud Vision OCR"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "⚠️ ไม่พบ GEMINI_API_KEY สำหรับรัน Cloud Vision OCR และ Local Typhoon ยังไม่ได้เชื่อมต่อ"})
 		return
 	}
 
@@ -276,12 +289,11 @@ func (c *AIController) HandleOCR(ctx *gin.Context) {
 	extractedText, err := extractTextViaGemini(geminiKey, fileBytes, mimeType)
 	if err != nil {
 		log.Printf("⚠️ Gemini Vision OCR error: %v", err)
-		// Fallback to local typhoon if online
-		if c.isLocalTyphoonOnline() && c.Proxy != nil {
-			c.Proxy.ServeHTTP(ctx.Writer, ctx.Request)
+		// Try local Typhoon as final fallback if not already tried
+		if !isTyphoonRequested && c.forwardToLocalTyphoonOCR(ctx, bodyBytes) {
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Gemini Vision OCR ล้มเหลว: " + err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "การสกัดข้อความ OCR ล้มเหลว: " + err.Error()})
 		return
 	}
 
@@ -335,7 +347,7 @@ func (c *AIController) HandleChat(ctx *gin.Context) {
 	if isClaude {
 		claudeKey := strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY"))
 		if claudeKey == "" {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "⚠️ ไม่พบ ANTHROPIC_API_KEY ในระบบ กรุณาตรวจสอบไฟล์ .env"})
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "⚠️ ไม่พบ ANTHROPIC_API_KEY ในระบบ กรุณาตรวจสอบไฟล์ .env หรือตั้งค่าในระบบ"})
 			return
 		}
 

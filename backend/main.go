@@ -132,6 +132,7 @@ func main() {
 
 		// ── AI Service Routes (24/7 Cloud AI for Gemini & Claude + Local Proxy for Typhoon) ────
 		aiController := controller.NewAIController(config.DB)
+		api.GET("/version", func(c *gin.Context) { c.JSON(200, gin.H{"version": "v1.2-clean-ocr"}) })
 		api.GET("/typhoon-status", aiController.GetStatus)
 		api.GET("/typhoon/health", aiController.Health)
 		api.GET("/typhoon/api/roles", aiController.GetRoles)
