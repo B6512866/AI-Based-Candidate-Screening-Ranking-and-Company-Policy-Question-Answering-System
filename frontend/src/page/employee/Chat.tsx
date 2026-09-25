@@ -255,7 +255,18 @@ ${knowledgeContext || "(ขณะนี้ยังไม่มีเอกส�
                 signal,
             });
 
-            if (!response.ok) throw new Error("AI ไม่ตอบสนอง กรุณาลองใหม่");
+            if (!response.ok) {
+                let errMsg = "AI ไม่ตอบสนอง กรุณาลองใหม่";
+                try {
+                    const errJson = await response.json();
+                    if (errJson && errJson.error) {
+                        errMsg = errJson.error;
+                    }
+                } catch {
+                    // ignore
+                }
+                throw new Error(errMsg);
+            }
 
             const reader = response.body!.getReader();
             const decoder = new TextDecoder();

@@ -31,8 +31,10 @@ export const getWsUrl = () => {
 };
 
 export const getTyphoonApiUrl = () => {
+  // Always route to Go backend (/api/typhoon) so Gemini and Claude run 24/7 on Cloud (Render)
+  // without needing local GPU or localtunnel, while Typhoon is proxied seamlessly.
   const envTyphoon = import.meta.env.VITE_TYPHOON_API_URL;
-  if (envTyphoon && envTyphoon.startsWith("http")) {
+  if (envTyphoon && envTyphoon.startsWith("http") && !envTyphoon.includes("loca.lt")) {
     return envTyphoon;
   }
   return `${getApiUrl()}/typhoon`;

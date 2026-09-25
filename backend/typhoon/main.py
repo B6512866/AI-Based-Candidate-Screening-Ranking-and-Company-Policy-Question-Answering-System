@@ -261,9 +261,8 @@ async def lifespan(app: FastAPI):
         return
     # ────────────────────────────────────────────────────────────────────────
 
-    # โหลด models ผ่าน helper functions
-    _load_ocr_model()
-    _load_chat_model()
+    # Lazy loading mode: models are loaded on-demand when Typhoon is specifically requested
+    logger.info("⚡ Typhoon AI Platform ready in Lazy-Loading mode (0% GPU/VRAM on startup). Local models load only when requested.")
 
     # เริ่ม background watchdog thread (daemon ดับเมื่อ server ปิด)
     watchdog = threading.Thread(target=_auto_unload_watchdog, daemon=True, name="model-idle-watchdog")
