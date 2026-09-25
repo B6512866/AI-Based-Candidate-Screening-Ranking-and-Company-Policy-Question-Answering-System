@@ -68,8 +68,8 @@ LOAD_MODELS = True
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ─── VRAM Auto-Unload Settings ────────────────────────────────────────────────
-# จำนวนวินาทีที่ไม่มีการใช้งาน local model แล้วจะปล่อย VRAM (default 5 นาที)
-MODEL_IDLE_TIMEOUT = 300  # seconds
+# จำนวนวินาทีที่ไม่มีการใช้งาน local model แล้วจะปล่อย VRAM (default 4 ชั่วโมง เพื่อความเสถียร ไม่ reload บ่อย)
+MODEL_IDLE_TIMEOUT = 14400  # seconds (4 hours)
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ─── Global holders ───────────────────────────────────────────────────────────
@@ -821,11 +821,10 @@ async def chat_endpoint(req: ChatRequest):
         thread.start()
 
         def generate_and_stream():
-            # Send initial space token immediately to establish stream and prevent proxy timeout
-            yield " "
             try:
                 for new_text in streamer:
-                    yield new_text
+                    if new_text:
+                        yield new_text
             except Exception as stream_err:
                 logger.warning(f"⚠️ Stream exception / client disconnected: {stream_err}")
 

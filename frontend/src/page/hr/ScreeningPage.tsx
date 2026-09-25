@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { Upload, FileText, Briefcase, Sparkles, X, ChevronDown, ChevronUp, Wifi, WifiOff, RefreshCw, Copy, Check, Search, Trash2, Square } from "lucide-react";
+import { Upload, FileText, Briefcase, Sparkles, X, ChevronDown, ChevronUp, Wifi, WifiOff, RefreshCw, Copy, Check, Search, Trash2, Square, AlertCircle } from "lucide-react";
 import { getalljobs, getapplications, updateApplicationScreening, deleteapplication, applyjob } from "../../services/jobPositionService";
 import apiClient, { getTyphoonApiUrl, getApiUrl, getBackendBaseUrl } from "../../services/apiClient";
 import { openFileInNewTab, base64ToBlob } from "../../utils/fileViewer";
@@ -571,6 +571,7 @@ export default function ScreeningPage() {
     };
 
     const runSingleAnalysis = async (app: any, forceReOcr = false, isBatch = false) => {
+        let hasError = false;
         let resumeText = forceReOcr ? "" : (app.ResumeText || app.resume_text || "");
         if (resumeText && (resumeText.trim().startsWith("ข้อมูลประวัติย่อ") || resumeText.includes("/api/upload/"))) {
             resumeText = "";
@@ -806,6 +807,14 @@ ${tableRowsExample}
 
             // Instantly render final full text
             setLiveStreamingTexts(prev => ({ ...prev, [app.ID]: fullText }));
+
+            // 🛡️ Guard against empty or truncated stream: NEVER save 0 PTS on broken stream!
+            const cleanCheck = fullText.replace(/^\[SCORES:\s*.*?\]\s*/, "").trim();
+            if (!fullText || fullText.trim().length < 40 || (cleanCheck.length < 20 && !fullText.includes("|"))) {
+                console.error("[Screening Error] Stream returned incomplete text:", fullText);
+                throw new Error("AI ส่งผลวิเคราะห์กลับมาไม่สมบูรณ์ หรือการเชื่อมต่อขาดหายกลางคัน กรุณากด 'วิเคราะห์เดี่ยว' ใหม่อีกครั้ง");
+            }
+
             setApplicants(prev => prev.map(a => {
                 if (a.ID === app.ID) {
                     return {
@@ -950,18 +959,21 @@ ${tableRowsExample}
 
             setAnalyzingStates(prev => ({ ...prev, [app.ID]: "done" }));
         } catch (err: any) {
+            hasError = true;
             console.error(`Error screening application ${app.ID}:`, err);
             setAnalyzingStates(prev => ({ ...prev, [app.ID]: "error" }));
             if (!isBatch) {
                 alert(`เกิดข้อผิดพลาดในการวิเคราะห์ Resume ของ ${app.Candidate?.first_name || 'ผู้สมัคร'}: ${err.message || 'ไม่สามารถวิเคราะห์ได้'}`);
             }
         } finally {
-            setAnalyzingStates(prev => {
-                if (prev[app.ID] === "ai" || prev[app.ID] === "saving" || prev[app.ID] === "ocr") {
-                    return { ...prev, [app.ID]: "done" };
-                }
-                return prev;
-            });
+            if (!hasError) {
+                setAnalyzingStates(prev => {
+                    if (prev[app.ID] === "ai" || prev[app.ID] === "saving" || prev[app.ID] === "ocr") {
+                        return { ...prev, [app.ID]: "done" };
+                    }
+                    return prev;
+                });
+            }
         }
     };
 
@@ -1897,6 +1909,11 @@ ${tableRowsExample}
                                                             {status === "saving" && (
                                                                 <span className="text-xs text-emerald-600 font-bold flex items-center gap-1.5 animate-pulse bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
                                                                     <RefreshCw className="w-3.5 h-3.5 animate-spin" /> 💾 กำลังบันทึกผลลง Database...
+                                                                </span>
+                                                            )}
+                                                            {status === "error" && (
+                                                                <span className="text-xs text-rose-600 font-bold flex items-center gap-1.5 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
+                                                                    <AlertCircle className="w-3.5 h-3.5 shrink-0" /> วิเคราะห์ไม่สำเร็จ (กรุณากด 'วิเคราะห์เดี่ยว' ใหม่)
                                                                 </span>
                                                             )}
                                                             {status === "idle" && (

@@ -980,10 +980,15 @@ func (c *JobPositionController) UpdateApplicationScreening(ctx *gin.Context) {
 		}
 	}
 
-	// ถ้าเป็นการบันทึกเฉพาะข้อความ OCR (ยังไม่ได้วิเคราะห์ AI) ให้บันทึกเฉพาะ ResumeText และออกได้เลย
-	if strings.TrimSpace(req.Strengths) == "" && strings.TrimSpace(req.AnalysisData) == "" && req.Score == 0 {
+	cleanStrengths := strings.TrimSpace(req.Strengths)
+	if idx := strings.Index(cleanStrengths, "]"); idx != -1 && strings.HasPrefix(cleanStrengths, "[SCORES:") {
+		cleanStrengths = strings.TrimSpace(cleanStrengths[idx+1:])
+	}
+
+	// ถ้าเป็นการบันทึกเฉพาะข้อความ OCR หรือการวิเคราะห์ว่างเปล่า (ไม่มีเนื้อหาผลประเมินจริงและคะแนน 0) ให้บันทึกเฉพาะ ResumeText และไม่อัปเดตสถานะ/คะแนน
+	if (strings.TrimSpace(req.Strengths) == "" || cleanStrengths == "") && req.Score == 0 {
 		c.db.Save(&app)
-		ctx.JSON(http.StatusOK, gin.H{"message": "บันทึกข้อความ OCR สำเร็จ", "data": nil})
+		ctx.JSON(http.StatusOK, gin.H{"message": "บันทึกข้อความ OCR สำเร็จ (ยังไม่ได้ทำการประเมินคะแนน)", "data": nil})
 		return
 	}
 
