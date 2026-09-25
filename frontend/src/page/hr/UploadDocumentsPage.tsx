@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { deleteApplicationDocument, getalljobs, getJobPositionDocuments, uploadApplicationDocument } from "../../services/jobPositionService";
 import { Upload, Link as LinkIcon, BriefcaseBusiness, ClipboardCheck, NotebookText, Trash2 } from "lucide-react";
 import { openFileInNewTab } from "../../utils/fileViewer";
+import rules from "../../components/rules/rule";
 
 interface JobPosition {
   ID: number;
@@ -85,6 +86,15 @@ export default function UploadDocumentsPage() {
     if (!title.trim() && selectedFiles.length === 1) {
       setError("กรุณาใส่ชื่อเอกสาร");
       return;
+    }
+
+    // ตรวจสอบความถูกต้องของขนาดและนามสกุลไฟล์
+    for (const f of selectedFiles) {
+      const val = rules.file.validate(f, { maxSizeMB: 25 });
+      if (!val.isValid) {
+        setError(`ไฟล์ "${f.name}": ${val.error}`);
+        return;
+      }
     }
 
     try {

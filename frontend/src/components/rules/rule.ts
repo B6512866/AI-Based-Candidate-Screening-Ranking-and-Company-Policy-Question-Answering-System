@@ -267,10 +267,77 @@ export function isValidCitizenId(id: string): boolean {
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// 5. รวมออบเจกต์กฎสำหรับการนำไปใช้ใน Form Validation (Rules Object)
+// 5. หมวดชื่อและข้อความ (Name & Text Rules)
+// ═════════════════════════════════════════════════════════════════════════
+
+export function isValidName(name: string): boolean {
+    if (!name) return false;
+    const trimmed = name.trim();
+    if (trimmed.length < 2) return false;
+    // อนุญาตตัวอักษรไทย อังกฤษ สระ วรรณยุกต์ ช่องว่าง ขีดกลาง
+    const nameRegex = /^[a-zA-Z\u0E00-\u0E7F\s\-'.]+$/;
+    return nameRegex.test(trimmed);
+}
+
+export function isValidPassword(password: string): boolean {
+    if (!password) return false;
+    return password.trim().length >= 6;
+}
+
+export interface FileValidationResult {
+    isValid: boolean;
+    error?: string;
+}
+
+export function validateFile(
+    file: File | null | undefined,
+    options?: {
+        maxSizeMB?: number;
+        allowedExtensions?: string[];
+    }
+): FileValidationResult {
+    if (!file) {
+        return { isValid: false, error: "กรุณาเลือกไฟล์" };
+    }
+
+    const maxSize = (options?.maxSizeMB || 10) * 1024 * 1024;
+    if (file.size > maxSize) {
+        return {
+            isValid: false,
+            error: `ขนาดไฟล์ (${(file.size / (1024 * 1024)).toFixed(1)} MB) เกินกว่าที่กำหนด (${options?.maxSizeMB || 10} MB)`
+        };
+    }
+
+    const defaultExtensions = [".pdf", ".doc", ".docx", ".txt", ".jpg", ".jpeg", ".png"];
+    const allowed = options?.allowedExtensions || defaultExtensions;
+    const ext = "." + (file.name.split(".").pop()?.toLowerCase() || "");
+    if (!allowed.includes(ext)) {
+        return {
+            isValid: false,
+            error: `นามสกุลไฟล์ ${ext} ไม่รองรับ (รองรับเฉพาะ ${allowed.join(", ")})`
+        };
+    }
+
+    return { isValid: true };
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// 6. รวมออบเจกต์กฎสำหรับการนำไปใช้ใน Form Validation (Rules Object)
 // ═════════════════════════════════════════════════════════════════════════
 
 export const rules = {
+    name: {
+        validate: isValidName,
+        errorMessage: "กรุณาระบุชื่อ-นามสกุลให้ถูกต้อง (อย่างน้อย 2 ตัวอักษร และไม่มีตัวเลขหรือสัญลักษณ์พิเศษ)"
+    },
+    password: {
+        validate: isValidPassword,
+        errorMessage: "รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร"
+    },
+    file: {
+        validate: validateFile,
+        errorMessage: "ไฟล์ไม่ถูกต้องตามเงื่อนไขที่กำหนด"
+    },
     phone: {
         format: formatPhoneNumber,
         clean: cleanPhoneNumber,
@@ -301,3 +368,4 @@ export const rules = {
 };
 
 export default rules;
+

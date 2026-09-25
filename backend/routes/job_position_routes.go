@@ -31,5 +31,6 @@ func JobPositionRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	api.PUT("/applications/:appId/screening", jobPositionController.UpdateApplicationScreening)
 	api.PATCH("/applications/:appId/status", jobPositionController.UpdateApplicationStatus)
 	api.DELETE("/applications/:appId", jobPositionController.DeleteApplication)
+	api.PUT("/applications/:appId/candidate-info", jobPositionController.UpdateCandidateApplicationInfo)
 	api.GET("/applications/status/:appCode", jobPositionController.GetApplicationStatus)
 }
