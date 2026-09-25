@@ -24,16 +24,14 @@ export const AVAILABLE_AI_MODELS: AIModelOption[] = [
         name: "Gemini 3.5 Flash (Resume Extraction Prompt)",
         badge: "💎 Gemini 3.5 Flash 🔑 ใช้ GEMINI_API_KEY",
         provider: "gemini",
-        description: "โมเดล Google Gemini 3.5 Flash Cloud API (ใช้ GEMINI_API_KEY ในไฟล์ .env)",
-        isFineTuned: true
+        description: "โมเดล Google Gemini 3.5 Flash Cloud API (ใช้ GEMINI_API_KEY ในไฟล์ .env)"
     },
     {
         id: "claude-sonnet-5",
         name: "Claude Sonnet 5 (Cloud API)",
         badge: "🧠 Claude Sonnet 5 🔑 ใช้ ANTHROPIC_API_KEY",
         provider: "claude",
-        description: "โมเดล Anthropic Claude Sonnet 5 Cloud API ประสิทธิภาพระดับท็อป (ใช้ ANTHROPIC_API_KEY ในไฟล์ .env)",
-        isFineTuned: true
+        description: "โมเดล Anthropic Claude Sonnet 5 Cloud API ประสิทธิภาพระดับท็อป (ใช้ ANTHROPIC_API_KEY ในไฟล์ .env)"
     }
 ];
 
