@@ -5,10 +5,23 @@ import { getBackendBaseUrl } from "../services/apiClient";
  */
 export function base64ToBlob(dataUri: string): Blob {
   try {
-    const parts = dataUri.split(",");
+    const trimmed = dataUri.trim();
+    const parts = trimmed.split(",");
     const mimeMatch = parts[0].match(/:(.*?);/);
     const mime = mimeMatch ? mimeMatch[1] : "application/pdf";
-    const b64 = parts.length > 1 ? parts[1] : parts[0];
+    let b64 = (parts.length > 1 ? parts[1] : parts[0]).replace(/\s/g, "");
+    if (b64.includes("%")) {
+      try {
+        b64 = decodeURIComponent(b64);
+      } catch {
+        // ignore
+      }
+    }
+    // Handle URL-safe Base64 and padding
+    b64 = b64.replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4 !== 0) {
+      b64 += "=";
+    }
     const byteCharacters = atob(b64);
     const byteArrays = new Uint8Array(byteCharacters.length);
     for (let i = 0; i < byteCharacters.length; i++) {
