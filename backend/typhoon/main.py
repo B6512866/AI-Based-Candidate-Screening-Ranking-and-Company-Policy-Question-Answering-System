@@ -261,8 +261,10 @@ async def lifespan(app: FastAPI):
         return
     # ────────────────────────────────────────────────────────────────────────
 
-    # Lazy loading mode: models are loaded on-demand when Typhoon is specifically requested
-    logger.info("⚡ Typhoon AI Platform ready in Lazy-Loading mode (0% GPU/VRAM on startup). Local models load only when requested.")
+    # Pre-warm chat model in background thread on startup so first request has 0s wait time!
+    logger.info("⚡ Typhoon AI Platform ready: starting background pre-warm of Typhoon 2.5 on GPU...")
+    prewarm_thread = threading.Thread(target=_load_chat_model, daemon=True, name="chat-prewarm")
+    prewarm_thread.start()
 
     # เริ่ม background watchdog thread (daemon ดับเมื่อ server ปิด)
     watchdog = threading.Thread(target=_auto_unload_watchdog, daemon=True, name="model-idle-watchdog")
@@ -799,10 +801,20 @@ async def chat_endpoint(req: ChatRequest):
         thread.start()
 
         def generate_and_stream():
+            # Send initial space token immediately to establish stream and prevent proxy timeout
+            yield " "
             for new_text in streamer:
                 yield new_text
 
-        return StreamingResponse(generate_and_stream(), media_type="text/plain")
+        return StreamingResponse(
+            generate_and_stream(),
+            media_type="text/plain; charset=utf-8",
+            headers={
+                "X-Accel-Buffering": "no",
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive"
+            }
+        )
 
     except Exception as e:
         logger.exception("Chat failed")

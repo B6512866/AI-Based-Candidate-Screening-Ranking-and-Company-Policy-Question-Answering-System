@@ -315,6 +315,60 @@ func (c *AIController) HandleOCR(ctx *gin.Context) {
 	})
 }
 
+// streamLocalTyphoon streams chat response from local Typhoon server directly with immediate flushing
+func (c *AIController) streamLocalTyphoon(ctx *gin.Context, bodyBytes []byte) bool {
+	if !c.isLocalTyphoonOnline() {
+		return false
+	}
+	targetURL := c.typhoonTarget + "/chat"
+	forwardReq, err := http.NewRequestWithContext(ctx.Request.Context(), "POST", targetURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return false
+	}
+	forwardReq.Header.Set("Content-Type", "application/json")
+	forwardReq.Header.Set("Bypass-Tunnel-Reminder", "true")
+
+	client := &http.Client{Timeout: 300 * time.Second}
+	resp, err := client.Do(forwardReq)
+	if err != nil || resp == nil {
+		log.Printf("⚠️ Local Typhoon Chat forward error: %v", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBytes, _ := io.ReadAll(resp.Body)
+		log.Printf("⚠️ Local Typhoon Chat non-200 (status %d): %s", resp.StatusCode, string(respBytes))
+		return false
+	}
+
+	ctx.Header("Content-Type", "text/plain; charset=utf-8")
+	ctx.Header("Transfer-Encoding", "chunked")
+	ctx.Header("X-Accel-Buffering", "no")
+	ctx.Header("Cache-Control", "no-cache")
+	ctx.Writer.WriteHeader(http.StatusOK)
+
+	flusher, ok := ctx.Writer.(http.Flusher)
+	buf := make([]byte, 1024)
+	bytesWritten := 0
+
+	for {
+		n, readErr := resp.Body.Read(buf)
+		if n > 0 {
+			ctx.Writer.Write(buf[:n])
+			bytesWritten += n
+			if ok {
+				flusher.Flush()
+			}
+		}
+		if readErr != nil {
+			break
+		}
+	}
+
+	return bytesWritten > 0
+}
+
 // POST /api/typhoon/chat
 func (c *AIController) HandleChat(ctx *gin.Context) {
 	bodyBytes, err := io.ReadAll(ctx.Request.Body)
@@ -366,20 +420,32 @@ func (c *AIController) HandleChat(ctx *gin.Context) {
 		return
 	}
 
-	// 3. If Typhoon is selected -> must run local model
+	// 3. If Typhoon is selected -> try local typhoon streaming first
 	if isTyphoon {
-		if !c.isLocalTyphoonOnline() {
-			ctx.JSON(http.StatusServiceUnavailable, gin.H{
-				"error": "⚠️ โมเดล Typhoon 2.5 เป็นโมเดลภาษาไทยในเครื่อง (Local Model) จำเป็นต้องรันโมเดลก่อนใช้งาน\n\n💻 วิธีเปิดใช้งาน: เปิด Terminal รันคำสั่ง:\ncd backend/typhoon\npython main.py\n\n💡 คำแนะนำ: หากไม่ต้องการรันโมเดลในเครื่อง สามารถคลิกดรอปดาวน์สลับไปใช้ 'Gemini 3.5 Flash' หรือ 'Claude Sonnet 5' เพื่อประมวลผลผ่าน Cloud API ได้ตลอดเวลา 24 ชม. ทันทีครับ",
-			})
+		if c.isLocalTyphoonOnline() {
+			if c.streamLocalTyphoon(ctx, bodyBytes) {
+				return
+			}
+			log.Println("⚠️ Local Typhoon chat failed or timed out, falling back to Gemini Cloud for seamless candidate screening...")
+		}
+
+		// Resilient fallback to Gemini Cloud so user NEVER gets HTTP 502!
+		geminiKey := strings.TrimSpace(config.Env.GeminiAPIKey)
+		if geminiKey == "" {
+			geminiKey = strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
+		}
+		if geminiKey == "" {
+			geminiKey = strings.TrimSpace(os.Getenv("GOOGLE_API_KEY"))
+		}
+		if geminiKey != "" {
+			c.streamGemini(ctx, geminiKey, req)
 			return
 		}
 
-		// Proxy to local typhoon
-		if c.Proxy != nil {
-			c.Proxy.ServeHTTP(ctx.Writer, ctx.Request)
-			return
-		}
+		ctx.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "⚠️ โมเดล Typhoon 2.5 เป็นโมเดลภาษาไทยในเครื่อง (Local Model) จำเป็นต้องรันโมเดลก่อนใช้งาน\n\n💻 วิธีเปิดใช้งาน: เปิด Terminal รันคำสั่ง:\ncd backend/typhoon\npython main.py",
+		})
+		return
 	}
 
 	ctx.JSON(http.StatusBadRequest, gin.H{"error": "ไม่พบโมเดล AI ที่ระบุ"})
