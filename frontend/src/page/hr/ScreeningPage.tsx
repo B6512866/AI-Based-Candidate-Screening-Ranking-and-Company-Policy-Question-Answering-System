@@ -2053,34 +2053,6 @@ ${tableRowsExample}
                                                             </div>
                                                         </details>
                                                     )}
-
-                                                    {/* ─── 4. Expandable Raw OCR Text Section (ส่วนขยาย: ข้อความดิบจากการสแกน OCR) ─── */}
-                                                    <details 
-                                                        className="group border-t border-slate-100 text-xs bg-slate-50/50 rounded-b-2xl cursor-pointer"
-                                                    >
-                                                        <summary className="font-bold text-slate-600 hover:text-[#4169E1] select-none px-4 py-2 hover:bg-indigo-50/40 transition-all flex items-center justify-between">
-                                                            <span className="flex items-center gap-1.5">
-                                                                <ChevronDown className="w-4 h-4 group-open:rotate-180 transition-transform" />
-                                                                📄 ดูข้อความดิบจากการสแกน OCR (OCR Raw Text)
-                                                            </span>
-                                                            <span className="text-[10px] font-semibold text-slate-400">คลิกเพื่อขยาย/ซ่อน</span>
-                                                        </summary>
-
-                                                        <div className="p-4 border-t border-slate-200/60 bg-white space-y-2 rounded-b-2xl">
-                                                            <textarea
-                                                                readOnly
-                                                                value={(() => {
-                                                                    const txt = app.ResumeText || app.resume_text || "";
-                                                                    if (txt.trim().startsWith("ข้อมูลประวัติย่อ") || txt.includes("/api/upload/")) {
-                                                                        return "ยังไม่ได้ทำการสแกนข้อความ OCR (กรุณากด 'วิเคราะห์เดี่ยว' เพื่อเริ่มสแกนรูปภาพและถอดข้อความ)";
-                                                                    }
-                                                                    return txt;
-                                                                })()}
-                                                                rows={4}
-                                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono text-[10px] resize-none outline-none leading-normal text-slate-600"
-                                                            />
-                                                        </div>
-                                                    </details>
                                                 </div>
                                             );
                                         })}
