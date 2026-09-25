@@ -205,12 +205,29 @@ func (c *AIController) HandleOCR(ctx *gin.Context) {
 	modelParam := strings.ToLower(ctx.DefaultPostForm("model", ""))
 	isTyphoonRequested := strings.Contains(modelParam, "typhoon")
 
-	// If Typhoon is specifically requested AND local model is running, forward to it
-	if isTyphoonRequested && c.isLocalTyphoonOnline() && c.Proxy != nil {
-		// Restore body for ReverseProxy
-		ctx.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-		c.Proxy.ServeHTTP(ctx.Writer, ctx.Request)
-		return
+	// If Typhoon is specifically requested AND local model is running, forward directly
+	if isTyphoonRequested && c.isLocalTyphoonOnline() {
+		targetURL := c.typhoonTarget + "/ocr"
+		forwardReq, err := http.NewRequestWithContext(ctx.Request.Context(), "POST", targetURL, bytes.NewReader(bodyBytes))
+		if err == nil {
+			forwardReq.Header.Set("Content-Type", ctx.Request.Header.Get("Content-Type"))
+			forwardReq.Header.Set("Bypass-Tunnel-Reminder", "true")
+			forwardReq.ContentLength = int64(len(bodyBytes))
+
+			client := &http.Client{Timeout: 180 * time.Second}
+			resp, err := client.Do(forwardReq)
+			if err == nil && resp != nil {
+				defer resp.Body.Close()
+				respBytes, readErr := io.ReadAll(resp.Body)
+				if readErr == nil && resp.StatusCode == http.StatusOK {
+					ctx.Data(resp.StatusCode, resp.Header.Get("Content-Type"), respBytes)
+					return
+				}
+				log.Printf("⚠️ Local Typhoon OCR error (status %d): %s, falling back to Gemini Cloud OCR", resp.StatusCode, string(respBytes))
+			} else {
+				log.Printf("⚠️ Local Typhoon OCR forward connection error: %v, falling back to Gemini Cloud OCR", err)
+			}
+		}
 	}
 
 	file, err := fileHeader.Open()
