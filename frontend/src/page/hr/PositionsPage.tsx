@@ -1344,7 +1344,7 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
     ===================================================== */
 
     return (
-        <div className="p-8 space-y-6 h-[calc(100vh-5.5rem)] flex flex-col min-h-0">
+        <div className="space-y-6 pb-12 flex flex-col">
             {/* =================================================
                 HEADER
             ================================================= */}
@@ -1423,7 +1423,7 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                     LEFT - JOB LIST
                 ================================================= */}
 
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-full min-h-0 overflow-hidden">
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[520px] lg:h-[750px] min-h-0 overflow-hidden">
                     <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                         <div className="flex items-center gap-2">
                             <Briefcase className="w-4 h-4 text-slate-400" />

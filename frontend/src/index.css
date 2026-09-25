@@ -1,5 +1,32 @@
 @import "tailwindcss";
 
+@layer base {
+  :root {
+    --font-sans: 'Prompt', 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --brand-primary: #4169E1;
+    --brand-primary-hover: #3154c4;
+    --brand-primary-light: #eef2ff;
+  }
+
+  * {
+    font-family: var(--font-sans);
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #f8fafc;
+    color: #1e293b;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.01em;
+  }
+
+  /* Make sure inputs, buttons, and selects use the modern font */
+  input, button, select, textarea {
+    font-family: inherit;
+  }
+}
+
 @keyframes marquee {
   0% { transform: translateX(0); }
   100% { transform: translateX(-50%); }
