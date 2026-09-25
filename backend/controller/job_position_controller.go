@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/config"
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/entity"
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/services"
 	"encoding/json"
@@ -797,11 +798,23 @@ func (c *JobPositionController) UploadDocument(ctx *gin.Context) {
 		}
 	}
 
+	supStorage := services.NewSupabaseStorageService(
+		config.Env.SupabaseURL,
+		config.Env.SupabaseServiceKey,
+		config.Env.SupabaseBucket,
+	)
+
 	for _, fileHeader := range files {
-		filePath := filepath.Join("./upload/documents", fmt.Sprintf("%d_%s", time.Now().UnixNano(), filepath.Base(fileHeader.Filename)))
-		if err := ctx.SaveUploadedFile(fileHeader, filePath); err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกไฟล์ได้"})
-			return
+		var fileURL string
+		if publicURL, err := supStorage.UploadFileHeader(fileHeader); err == nil && publicURL != "" {
+			fileURL = publicURL
+		} else {
+			filePath := filepath.Join("./upload/documents", fmt.Sprintf("%d_%s", time.Now().UnixNano(), filepath.Base(fileHeader.Filename)))
+			if err := ctx.SaveUploadedFile(fileHeader, filePath); err != nil {
+				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกไฟล์ได้"})
+				return
+			}
+			fileURL = fmt.Sprintf("/api/upload/documents/%s", filepath.Base(filePath))
 		}
 
 		title := strings.TrimSpace(ctx.PostForm("title"))
@@ -814,7 +827,7 @@ func (c *JobPositionController) UploadDocument(ctx *gin.Context) {
 			DocumentType:     documentType,
 			Title:            title,
 			FileName:         fileHeader.Filename,
-			FileURL:          fmt.Sprintf("/api/upload/documents/%s", filepath.Base(filePath)),
+			FileURL:          fileURL,
 			Description:      description,
 			UploadedByUserID: userID,
 		}
@@ -845,9 +858,18 @@ func (c *JobPositionController) DeleteDocument(ctx *gin.Context) {
 	}
 
 	if doc.FileURL != "" {
-		fileName := strings.TrimPrefix(doc.FileURL, "/api/upload/documents/")
-		if fileName != "" {
-			_ = os.Remove(filepath.Join("./upload/documents", fileName))
+		supStorage := services.NewSupabaseStorageService(
+			config.Env.SupabaseURL,
+			config.Env.SupabaseServiceKey,
+			config.Env.SupabaseBucket,
+		)
+		if supStorage.IsSupabaseURL(doc.FileURL) {
+			_ = supStorage.DeleteFile(doc.FileURL)
+		} else {
+			fileName := strings.TrimPrefix(doc.FileURL, "/api/upload/documents/")
+			if fileName != "" {
+				_ = os.Remove(filepath.Join("./upload/documents", fileName))
+			}
 		}
 	}
 

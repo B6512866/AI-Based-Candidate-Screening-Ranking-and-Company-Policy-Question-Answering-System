@@ -2592,7 +2592,7 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                                     <td className="px-4 py-4 text-right space-x-2">
                                                                         {app.resume_url && (
                                                                             <a
-                                                                                href={`${getBackendBaseUrl()}${app.resume_url}`}
+                                                                                href={app.resume_url.startsWith("http://") || app.resume_url.startsWith("https://") ? app.resume_url : `${getBackendBaseUrl()}${app.resume_url.startsWith("/") ? "" : "/"}${app.resume_url}`}
                                                                                 target="_blank"
                                                                                 rel="noreferrer"
                                                                                 className="inline-flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-600 px-3 py-1.5 rounded-lg text-xs font-bold"

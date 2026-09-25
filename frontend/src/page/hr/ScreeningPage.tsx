@@ -1818,7 +1818,7 @@ ${tableRowsExample}
                                                                     </h4>
                                                                     {app.resume_url && (
                                                                         <a
-                                                                            href={(apiClient.defaults.baseURL || "").replace("/api", "") + app.resume_url}
+                                                                            href={app.resume_url.startsWith("http://") || app.resume_url.startsWith("https://") ? app.resume_url : (apiClient.defaults.baseURL || "").replace("/api", "") + (app.resume_url.startsWith("/") ? "" : "/") + app.resume_url}
                                                                             target="_blank"
                                                                             rel="noreferrer"
                                                                             className="text-[10px] text-[#4169E1] bg-blue-50 hover:bg-blue-100 font-bold px-2 py-0.5 rounded transition-all shrink-0"
