@@ -10,9 +10,11 @@ import (
 func InterviewRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	interviewController := controller.NewInterviewController(db)
 
-	// Route สำหรับผู้สมัครกดจากอีเมล — ไม่ต้อง login
+	// Route สำหรับผู้สมัครกดจากอีเมล — ไม่ต้อง login (รองรับทั้ง GET จากลิงก์อีเมล และ POST จากฟอร์มบนเว็บ)
 	api.GET("/interviews/respond", interviewController.Respond)
+	api.POST("/interviews/respond", interviewController.Respond)
 	api.GET("/interviews/acknowledge-result", interviewController.AcknowledgeResult)
+	api.POST("/interviews/acknowledge-result", interviewController.AcknowledgeResult)
 
 	i := api.Group("/interviews")
 	i.Use(middleware.AuthMiddleware())

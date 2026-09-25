@@ -1,4 +1,4 @@
-import apiClient from "./apiClient";
+import apiClient, { getBackendBaseUrl } from "./apiClient";
 
 // ── ดึงนัดสัมภาษณ์ทั้งหมด
 export async function getAllInterviews() {
@@ -64,6 +64,7 @@ export async function sendInterviewEmail(
 ) {
   const res = await apiClient.post(`/interviews/${interviewId}/send-email`, {
     email_content: emailContent,
+    base_url: getBackendBaseUrl(),
   });
   return res.data;
 }
@@ -80,6 +81,7 @@ export async function notifyInterviewResult(
     result,
     result_notes: resultNotes || "",
     email_content: emailContent || "",
+    base_url: getBackendBaseUrl(),
   };
   if (interviewerScore !== undefined && interviewerScore !== null) {
     payload.interviewer_score = interviewerScore;
