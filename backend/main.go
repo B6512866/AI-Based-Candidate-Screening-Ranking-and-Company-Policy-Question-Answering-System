@@ -195,6 +195,7 @@ func main() {
 		routes.ChatRoutes(api, config.DB)
 		routes.InterviewRoutes(api, config.DB)
 		routes.UserRoutes(api, config.DB)
+		routes.NotificationRoutes(api, config.DB)
 
 		api.GET("/test-email", func(c *gin.Context) {
 			to := c.DefaultQuery("to", "guymini02479@gmail.com")

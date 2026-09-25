@@ -710,6 +710,19 @@ func (c *JobPositionController) Apply(ctx *gin.Context) {
 	// 📧 ส่งอีเมลจริงไปยัง Gmail ของผู้สมัครผ่าน Background Goroutine
 	go services.SendApplicationEmail(candidate.Email, candidateFullName, job.Title, app.ApplicationCode)
 
+	// 🔔 แจ้งเตือน HR: มีผู้สมัครใหม่ในระบบ
+	go services.CreateNotification(
+		c.db,
+		"มีผู้สมัครใหม่ในระบบ",
+		fmt.Sprintf("คุณ %s ได้สมัครตำแหน่ง %s (รหัสใบสมัคร %s)", candidateFullName, job.Title, app.ApplicationCode),
+		"candidate",
+		"ผู้สมัครใหม่",
+		"/hr/candidates",
+		"ดูรายชื่อผู้สมัคร",
+		"HR",
+		true,
+	)
+
 	ctx.JSON(http.StatusOK, gin.H{
 		"message":          "ส่งใบสมัครสำเร็จ!",
 		"application_id":   app.ID,
@@ -1013,6 +1026,24 @@ func (c *JobPositionController) UpdateApplicationScreening(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถเชื่อมโยงผลประเมิน AI กับใบสมัครได้"})
 		return
 	}
+
+	// 🔔 แจ้งเตือน HR: AI คัดกรองและประเมินผลสำเร็จ
+	var candidateName string
+	var cand entity.Candidate
+	if err := c.db.First(&cand, app.CandidateID).Error; err == nil {
+		candidateName = cand.FirstName + " " + cand.LastName
+	}
+	go services.CreateNotification(
+		c.db,
+		"ระบบ Typhoon AI คัดกรอง Resume สำเร็จ",
+		fmt.Sprintf("ผู้สมัครคุณ %s ตำแหน่ง %s ได้คะแนน PTS %.1f/100 (รอนัดสัมภาษณ์)", candidateName, app.Position, req.Score),
+		"candidate",
+		"คัดกรอง AI",
+		"/hr/candidates",
+		"ดูผลจัดลำดับผู้สมัคร",
+		"HR",
+		false,
+	)
 
 	ctx.JSON(http.StatusOK, gin.H{"message": "วิเคราะห์ผู้สมัครและบันทึกคะแนน AI สำเร็จ", "data": scr})
 }
