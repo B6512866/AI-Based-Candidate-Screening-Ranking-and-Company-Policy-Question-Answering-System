@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { login as loginService } from "../../services/authService";
+import { rules } from "../../components/rules/rule";
 
 interface LoginModalProps {
   open: boolean;
@@ -14,11 +15,38 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const validateForm = () => {
+    let isValid = true;
+    setEmailError("");
+    setPasswordError("");
+    setError("");
+
+    const cleanEmail = rules.email.sanitize(email);
+    if (!cleanEmail) {
+      setEmailError("กรุณากรอกอีเมล");
+      isValid = false;
+    } else if (!rules.email.validate(cleanEmail)) {
+      setEmailError(rules.email.errorMessage);
+      isValid = false;
+    }
+
+    if (!password) {
+      setPasswordError("กรุณากรอกรหัสผ่าน");
+      isValid = false;
+    } else if (!rules.password.validate(password)) {
+      setPasswordError(rules.password.errorMessage);
+      isValid = false;
+    }
+
+    return isValid;
+  };
+
   const handleLogin = async () => {
-    if (!email || !password) {
-      setError("กรุณากรอกอีเมลและรหัสผ่าน");
+    if (!validateForm()) {
       return;
     }
 
@@ -26,19 +54,16 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
     setError("");
 
     try {
-      // 1. เรียกใช้งาน Service (ซึ่งใช้พอร์ตตาม .env หรือพอร์ตจริงเวลา Deploy อัตโนมัติ)
-      const data = await loginService({ email, password });
-      // 2. ใช้ login จาก context เพื่อบันทึก Session
+      const cleanEmail = rules.email.sanitize(email);
+      const data = await loginService({ email: cleanEmail, password });
       login(data.token, data.role, data.first_name, data.last_name);
       onOpenChange(false);
-      // Redirect ตาม Role
       if (data.role === "HRManager") {
         navigate("/hr/dashboard");
       } else {
         navigate("/employee/chat");
       }
     } catch (err: any) {
-      // ดึงข้อความ Error ที่ส่งมาจาก Backend ผ่าน Axios
       const errMsg = err.response?.data?.error || "ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่ภายหลัง";
       setError(errMsg);
     } finally {
@@ -85,9 +110,17 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
                 type="email"
                 placeholder="example@company.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/30 focus:bg-white transition-all font-sans"
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (emailError) setEmailError("");
+                }}
+                className={`w-full bg-slate-50 border rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:bg-white transition-all font-sans ${
+                  emailError ? "border-rose-400 focus:ring-rose-200" : "border-slate-100 focus:ring-[#4169E1]/30"
+                }`}
               />
+              {emailError && (
+                <p className="text-rose-500 text-xs font-semibold mt-1.5 ml-1">{emailError}</p>
+              )}
             </div>
             <div>
               <label className="block text-slate-700 font-bold mb-2 ml-1 text-sm font-sans underline decoration-indigo-200 underline-offset-4">รหัสผ่าน</label>
@@ -95,10 +128,18 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
                 type="password"
                 placeholder="••••••••"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (passwordError) setPasswordError("");
+                }}
                 onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-[#4169E1]/30 focus:bg-white transition-all font-sans"
+                className={`w-full bg-slate-50 border rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:bg-white transition-all font-sans ${
+                  passwordError ? "border-rose-400 focus:ring-rose-200" : "border-slate-100 focus:ring-[#4169E1]/30"
+                }`}
               />
+              {passwordError && (
+                <p className="text-rose-500 text-xs font-semibold mt-1.5 ml-1">{passwordError}</p>
+              )}
             </div>
           </div>
 

@@ -406,6 +406,19 @@ export async function checkApplicationStatus(
     return res.data;
 }
 
+export async function updateCandidateApplicationInfo(
+    appId: number,
+    data: {
+        first_name?: string;
+        last_name?: string;
+        phone?: string;
+        email?: string;
+    }
+) {
+    const res = await apiClient.put(`/applications/${appId}/candidate-info`, data);
+    return res.data;
+}
+
 export async function getJobPositionDocuments(
     jobId: number
 ) {

@@ -1148,10 +1148,14 @@ func (c *JobPositionController) GetApplicationStatus(ctx *gin.Context) {
 		displayCode = fmt.Sprintf("APP-%d", app.ID+10000)
 	}
 
-	// ปิดบังนามสกุลบางส่วนเพื่อความเป็นส่วนตัวในการค้นหาแบบสาธารณะ
 	maskedLastName := ""
 	if len(app.Candidate.LastName) > 0 {
 		maskedLastName = string([]rune(app.Candidate.LastName)[0]) + "..."
+	}
+
+	dept := ""
+	if app.JobPosition.ID != 0 {
+		dept = app.JobPosition.Department
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
@@ -1159,10 +1163,94 @@ func (c *JobPositionController) GetApplicationStatus(ctx *gin.Context) {
 			"id":             app.ID,
 			"code":           displayCode,
 			"first_name":     app.Candidate.FirstName,
-			"last_name":      maskedLastName,
+			"last_name":      app.Candidate.LastName,
+			"masked_last_name": maskedLastName,
+			"phone":          app.Candidate.Phone,
+			"email":          app.Candidate.Email,
 			"position_title": app.Position,
+			"department":     dept,
 			"status":         app.Status,
 			"created_at":     app.CreatedAt,
+			"resume_url":     app.ResumeURL,
+			"transcript_url": app.TranscriptURL,
+		},
+	})
+}
+
+// PUT /api/applications/:appId/candidate-info
+func (c *JobPositionController) UpdateCandidateApplicationInfo(ctx *gin.Context) {
+	idStr := ctx.Param("appId")
+	appID, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ID ใบสมัครไม่ถูกต้อง"})
+		return
+	}
+
+	var req struct {
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
+		Phone     string `json:"phone"`
+		Email     string `json:"email"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
+		return
+	}
+
+	var app entity.Application
+	if err := c.db.Preload("Candidate").Preload("JobPosition").First(&app, appID).Error; err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบใบสมัครนี้"})
+		return
+	}
+
+	candUpdates := map[string]interface{}{}
+	if strings.TrimSpace(req.FirstName) != "" {
+		candUpdates["first_name"] = strings.TrimSpace(req.FirstName)
+	}
+	if strings.TrimSpace(req.LastName) != "" {
+		candUpdates["last_name"] = strings.TrimSpace(req.LastName)
+	}
+	if strings.TrimSpace(req.Phone) != "" {
+		candUpdates["phone"] = strings.TrimSpace(req.Phone)
+	}
+	if strings.TrimSpace(req.Email) != "" {
+		candUpdates["email"] = strings.TrimSpace(req.Email)
+	}
+
+	if len(candUpdates) > 0 {
+		if err := c.db.Model(&entity.Candidate{}).Where("id = ?", app.CandidateID).Updates(candUpdates).Error; err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอัปเดตข้อมูลผู้สมัครได้"})
+			return
+		}
+	}
+
+	c.db.Preload("Candidate").Preload("JobPosition").First(&app, appID)
+
+	displayCode := app.ApplicationCode
+	if displayCode == "" {
+		displayCode = fmt.Sprintf("APP-%d", app.ID+10000)
+	}
+
+	dept := ""
+	if app.JobPosition.ID != 0 {
+		dept = app.JobPosition.Department
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "อัปเดตข้อมูลผู้สมัครสำเร็จ",
+		"data": gin.H{
+			"id":             app.ID,
+			"code":           displayCode,
+			"first_name":     app.Candidate.FirstName,
+			"last_name":      app.Candidate.LastName,
+			"phone":          app.Candidate.Phone,
+			"email":          app.Candidate.Email,
+			"position_title": app.Position,
+			"department":     dept,
+			"status":         app.Status,
+			"created_at":     app.CreatedAt,
+			"resume_url":     app.ResumeURL,
+			"transcript_url": app.TranscriptURL,
 		},
 	})
 }
