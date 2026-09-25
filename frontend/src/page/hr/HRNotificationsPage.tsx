@@ -177,7 +177,7 @@ export default function HRNotificationsPage() {
     };
 
     return (
-        <div className="p-6 sm:p-8 space-y-8 max-w-7xl mx-auto font-sans">
+        <div className="space-y-6 pb-12 max-w-7xl mx-auto font-sans">
             {/* Header Banner */}
             <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-8 text-white shadow-xl">
                 <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />

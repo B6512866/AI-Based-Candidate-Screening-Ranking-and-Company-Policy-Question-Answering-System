@@ -125,7 +125,7 @@ export default function UploadDocumentsPage() {
   };
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="space-y-6 pb-12">
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-800">เอกสารประกอบสัมภาษณ์และคัดเลือก</h1>

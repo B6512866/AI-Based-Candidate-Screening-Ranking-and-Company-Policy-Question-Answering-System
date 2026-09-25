@@ -55,7 +55,7 @@ export default function NotificationsPage() {
     });
 
     return (
-        <div className="p-6 sm:p-8 space-y-8 max-w-7xl mx-auto">
+        <div className="space-y-6 pb-12 max-w-7xl mx-auto">
             {/* Header Banner */}
             <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-teal-900 via-slate-900 to-emerald-950 p-8 text-white shadow-xl">
                 <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-teal-400/10 rounded-full blur-3xl pointer-events-none" />

@@ -1341,11 +1341,11 @@ ${tableRowsExample}
     };
 
     return (
-        <div className="p-8 space-y-6">
+        <div className="space-y-6 pb-12">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-black text-slate-800"></h1>
+                    <h1 className="text-2xl font-black text-slate-800">คัดกรองและประเมินผู้สมัคร</h1>
                     <p className="text-slate-400 text-sm mt-1">วิเคราะห์ Resume ด้วย AI (Cloud & Fine-Tuned)</p>
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">

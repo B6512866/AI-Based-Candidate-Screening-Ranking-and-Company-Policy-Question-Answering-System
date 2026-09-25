@@ -513,7 +513,7 @@ export default function InterviewsPage() {
     };
 
     return (
-        <div className="p-6 md:p-8 space-y-6 font-sans">
+        <div className="space-y-6 pb-12 font-sans">
             {/* ── Statistics Cards (Large & Clickable - matching InterviewResultsPage) ── */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5 sm:gap-4">
                 {/* 1. All */}

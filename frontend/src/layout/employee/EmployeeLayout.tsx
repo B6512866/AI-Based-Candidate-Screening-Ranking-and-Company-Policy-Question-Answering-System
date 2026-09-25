@@ -15,6 +15,8 @@ import {
     UserCheck,
     Bot,
     CheckCheck,
+    Menu,
+    X,
 } from "lucide-react";
 
 export default function EmployeeLayout() {
@@ -23,6 +25,7 @@ export default function EmployeeLayout() {
     const location = useLocation();
 
     const [isCollapsed, setIsCollapsed] = useState(false);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -67,34 +70,50 @@ export default function EmployeeLayout() {
     ];
 
     return (
-        <div className="flex h-screen bg-[#f8fafc] font-sans antialiased text-slate-800 overflow-hidden ">
-            {/* Sidebar */}
+        <div className="flex h-screen bg-[#f8fafc] font-sans antialiased text-slate-800 overflow-hidden">
+            {/* Mobile Backdrop Overlay */}
+            {isMobileMenuOpen && (
+                <div
+                    className="fixed inset-0 bg-slate-950/50 backdrop-blur-xs z-40 lg:hidden transition-opacity"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                />
+            )}
+
+            {/* Sidebar (Desktop Collapsible + Mobile Drawer) */}
             <aside
-                className={`bg-white border-r border-slate-200/80 flex flex-col z-30 transition-all duration-300 ease-in-out shadow-xs relative ${
-                    isCollapsed ? "w-20" : "w-64"
-                }`}
+                className={`bg-white border-r border-slate-200/80 flex flex-col z-50 transition-all duration-300 ease-in-out shadow-xs
+                    fixed inset-y-0 left-0 lg:static
+                    ${isMobileMenuOpen ? "translate-x-0 w-68" : "-translate-x-full lg:translate-x-0"}
+                    ${isCollapsed ? "lg:w-20" : "lg:w-64"}
+                `}
             >
                 {/* Logo Header */}
                 <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between h-16">
-                    {!isCollapsed ? (
-                        <div className="flex items-center gap-3">
-                            <span className="text-xs font-bold px-10 py-1 rounded-full bg-teal-50 text-teal-700 border border-teal-100/60 ">
+                    <div className="flex items-center gap-3">
+                        <img src={logo} alt="HireAI Logo" className="h-8 w-auto object-contain" />
+                        {!isCollapsed && (
+                            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-100/60">
                                 Employee
                             </span>
-                        </div>
-                    ) : (
-                        <div className="mx-auto">
-                            <img src={logo} alt="HireAI Logo" className="h-9 w-auto object-contain" />
-                        </div>
-                    )}
+                        )}
+                    </div>
 
-                    <button
-                        onClick={() => setIsCollapsed(!isCollapsed)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors hidden sm:flex"
-                        title={isCollapsed ? "ขยายเมนู" : "ย่อเมนู"}
-                    >
-                        {isCollapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
-                    </button>
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={() => setIsCollapsed(!isCollapsed)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors hidden lg:flex cursor-pointer"
+                            title={isCollapsed ? "ขยายเมนู" : "ย่อเมนู"}
+                        >
+                            {isCollapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
+                        </button>
+                        <button
+                            onClick={() => setIsMobileMenuOpen(false)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors lg:hidden cursor-pointer"
+                            title="ปิดเมนู"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Employee AI Status Banner */}
@@ -131,6 +150,7 @@ export default function EmployeeLayout() {
                                         <Link
                                             key={item.id}
                                             to={item.path}
+                                            onClick={() => setIsMobileMenuOpen(false)}
                                             title={isCollapsed ? item.label : undefined}
                                             className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all group relative ${
                                                 isActive
@@ -159,7 +179,7 @@ export default function EmployeeLayout() {
                 <div className="p-3 border-t border-slate-100 bg-slate-50/60">
                     {!isCollapsed ? (
                         <div className="space-y-2">
-                            <Link to="/employee/profile" className="flex items-center gap-3 p-2 rounded-xl bg-white border border-slate-200/60 shadow-2xs hover:border-teal-300 hover:bg-teal-50/30 transition-all group">
+                            <Link to="/employee/profile" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 p-2 rounded-xl bg-white border border-slate-200/60 shadow-2xs hover:border-teal-300 hover:bg-teal-50/30 transition-all group">
                                 {avatarUrl ? (
                                     <img
                                         src={avatarUrl}
@@ -201,8 +221,16 @@ export default function EmployeeLayout() {
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                 {/* Header */}
-                <header className="h-16 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-6 sm:px-8 flex items-center justify-between sticky top-0 z-20 shadow-2xs">
+                <header className="h-16 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-6 lg:px-8 flex items-center justify-between sticky top-0 z-20 shadow-2xs">
                     <div className="flex items-center gap-2">
+                        {/* Mobile Hamburger Button */}
+                        <button
+                            onClick={() => setIsMobileMenuOpen(true)}
+                            className="p-2 -ml-1 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 lg:hidden cursor-pointer"
+                            title="เปิดเมนู"
+                        >
+                            <Menu className="w-5 h-5" />
+                        </button>
                         <span className="text-xs font-medium text-slate-400 hidden sm:inline">พนักงาน</span>
                         <ChevronRight className="w-3.5 h-3.5 text-slate-300 hidden sm:inline" />
                         <h1 className="text-slate-800 font-bold text-base flex items-center gap-2">
@@ -319,7 +347,7 @@ export default function EmployeeLayout() {
                     const isChatPage = location.pathname === "/employee" || location.pathname === "/employee/" || location.pathname.startsWith("/employee/chat");
                     return (
                         <main className={`flex-1 min-h-0 bg-[#f8fafc] animate-fadeIn ${
-                            isChatPage ? "overflow-hidden p-2 sm:p-3 flex flex-col" : "overflow-y-auto p-6 sm:p-8"
+                            isChatPage ? "overflow-hidden p-2 sm:p-3 flex flex-col" : "overflow-y-auto p-4 sm:p-6 lg:p-8"
                         }`}>
                             <div className={isChatPage ? "w-full h-full flex-1 flex flex-col min-h-0" : "max-w-7xl mx-auto"}>
                                 <Outlet />

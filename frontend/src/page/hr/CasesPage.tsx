@@ -22,7 +22,7 @@ export default function CasesPage() {
     const [cases] = useState<HRCase[]>(mockCases);
 
     return (
-        <div className="p-8 space-y-6">
+        <div className="space-y-6 pb-12">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
