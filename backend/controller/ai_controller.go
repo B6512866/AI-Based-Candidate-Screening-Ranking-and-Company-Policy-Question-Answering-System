@@ -45,6 +45,21 @@ func NewAIController(db *gorm.DB) *AIController {
 			req.URL.Scheme = tURL.Scheme
 			req.URL.Host = tURL.Host
 			req.Header.Set("Bypass-Tunnel-Reminder", "true")
+
+			// Strip /api/typhoon prefix so upstream FastAPI receives clean path (/api/roles, /ocr, /chat, etc.)
+			cleanPath := strings.TrimPrefix(req.URL.Path, "/api/typhoon")
+			if !strings.HasPrefix(cleanPath, "/") {
+				cleanPath = "/" + cleanPath
+			}
+			req.URL.Path = cleanPath
+		}
+		proxy.ErrorHandler = func(rw http.ResponseWriter, req *http.Request, err error) {
+			log.Printf("⚠️ Typhoon Proxy Error: %v", err)
+			rw.Header().Set("Content-Type", "application/json")
+			rw.WriteHeader(http.StatusBadGateway)
+			json.NewEncoder(rw).Encode(map[string]interface{}{
+				"error": fmt.Sprintf("ไม่สามารถเชื่อมต่อ Local Typhoon AI ได้ (%v) กรุณาตรวจสอบว่า 'python main.py' และ LocalTunnel กำลังรันอยู่", err),
+			})
 		}
 		proxy.ModifyResponse = func(resp *http.Response) error {
 			resp.Header.Del("Access-Control-Allow-Origin")
