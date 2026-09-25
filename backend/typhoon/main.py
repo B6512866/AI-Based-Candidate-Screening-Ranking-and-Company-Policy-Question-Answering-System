@@ -271,6 +271,25 @@ async def lifespan(app: FastAPI):
     watchdog.start()
     logger.info(f"⏱️ Model idle-unload watchdog started (timeout={MODEL_IDLE_TIMEOUT}s)")
 
+    def _tunnel_keepalive():
+        """Keep localtunnel connection active so it never freezes or drops."""
+        time.sleep(15)
+        while True:
+            try:
+                import urllib.request
+                req = urllib.request.Request(
+                    "https://hireai-typhoon.loca.lt/health",
+                    headers={"Bypass-Tunnel-Reminder": "true"}
+                )
+                with urllib.request.urlopen(req, timeout=5) as r:
+                    r.read()
+            except Exception:
+                pass
+            time.sleep(45)
+
+    keepalive_thread = threading.Thread(target=_tunnel_keepalive, daemon=True, name="tunnel-keepalive")
+    keepalive_thread.start()
+
     yield
     models.clear()
 
