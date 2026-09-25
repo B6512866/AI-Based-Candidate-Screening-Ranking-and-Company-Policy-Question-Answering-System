@@ -59,7 +59,7 @@ export const uploadAvatar = async (file: File): Promise<string> => {
   });
 
   const url: string = res.data.url;
-  if (url.startsWith("http://") || url.startsWith("https://")) {
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) {
     return url;
   }
   return `${getBackendBaseUrl()}${url}`;
@@ -67,6 +67,6 @@ export const uploadAvatar = async (file: File): Promise<string> => {
 
 export const getFullImageUrl = (path?: string) => {
   if (!path) return "";
-  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:")) return path;
   return `${getBackendBaseUrl()}${path.startsWith("/") ? "" : "/"}${path}`;
 };

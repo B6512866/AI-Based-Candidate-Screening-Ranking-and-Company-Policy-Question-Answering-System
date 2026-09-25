@@ -43,6 +43,7 @@ import {
 } from "../../services/jobPositionService";
 
 import apiClient, { getTyphoonApiUrl } from "../../services/apiClient";
+import { openFileInNewTab } from "../../utils/fileViewer";
 
 interface SubCriterion {
     ID?: number;
@@ -333,7 +334,8 @@ export default function PositionsPage() {
 
         if (
             url.startsWith("http://") ||
-            url.startsWith("https://")
+            url.startsWith("https://") ||
+            url.startsWith("data:")
         ) {
             return url;
         }
@@ -2591,16 +2593,14 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
 
                                                                     <td className="px-4 py-4 text-right space-x-2">
                                                                         {app.resume_url && (
-                                                                            <a
-                                                                                href={app.resume_url.startsWith("http://") || app.resume_url.startsWith("https://") ? app.resume_url : `${getBackendBaseUrl()}${app.resume_url.startsWith("/") ? "" : "/"}${app.resume_url}`}
-                                                                                target="_blank"
-                                                                                rel="noreferrer"
-                                                                                className="inline-flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-600 px-3 py-1.5 rounded-lg text-xs font-bold"
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => openFileInNewTab(app.resume_url, "resume.pdf")}
+                                                                                className="inline-flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-600 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
                                                                             >
                                                                                 <Download className="w-3.5 h-3.5" />
-
                                                                                 เปิดไฟล์ Resume
-                                                                            </a>
+                                                                            </button>
                                                                         )}
 
                                                                         <button

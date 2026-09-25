@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Search, Sparkles, Eye, RefreshCw, ChevronDown, ChevronUp, X, Award, FileText, BarChart3, Check, Briefcase, ExternalLink, Download, Edit3, GraduationCap } from "lucide-react";
 import { Link } from "react-router-dom";
 import apiClient, { getBackendBaseUrl } from "../../services/apiClient";
+import { openFileInNewTab, downloadFile, isPdf, isImage } from "../../utils/fileViewer";
 import { getalljobs, updateApplicationStatus, updateApplicationScreening } from "../../services/jobPositionService";
 import rules from "../../components/rules/rule";
 
@@ -146,6 +147,7 @@ export default function CandidatesPage() {
 
     const getCleanFileUrl = (url: string) => {
         if (!url) return "";
+        if (url.startsWith("data:")) return url;
         let clean = url.replace(/\\/g, "/");
         if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
             if (!clean.startsWith("/")) clean = "/" + clean;
@@ -1353,15 +1355,14 @@ export default function CandidatesPage() {
                                 </div>
 
                                 {((activeDocTab === "resume" && viewingResumeModal.resumeUrl) || (activeDocTab === "transcript" && viewingResumeModal.transcriptUrl)) && (
-                                    <a
-                                        href={getCleanFileUrl(activeDocTab === "resume" ? viewingResumeModal.resumeUrl : viewingResumeModal.transcriptUrl)}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#4169E1] hover:bg-[#3152c4] text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-indigo-100"
+                                    <button
+                                        type="button"
+                                        onClick={() => openFileInNewTab(activeDocTab === "resume" ? viewingResumeModal.resumeUrl : viewingResumeModal.transcriptUrl, `${viewingResumeModal.name || "candidate"}_${activeDocTab}.pdf`)}
+                                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#4169E1] hover:bg-[#3152c4] text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-indigo-100 cursor-pointer"
                                     >
                                         <ExternalLink className="w-3.5 h-3.5" />
                                         เปิดไฟล์เต็มในแท็บใหม่
-                                    </a>
+                                    </button>
                                 )}
                                 <button
                                     onClick={() => setViewingResumeModal(null)}
@@ -1384,20 +1385,18 @@ export default function CandidatesPage() {
                                                     <FileText className="w-4 h-4 text-amber-500" />
                                                     เอกสาร Resume ผู้สมัคร ({viewingResumeModal.resumeUrl.split("/").pop() || "เอกสารแนบ"})
                                                 </h3>
-                                                <a
-                                                    href={getCleanFileUrl(viewingResumeModal.resumeUrl)}
-                                                    download
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    className="text-xs font-bold text-[#4169E1] hover:underline flex items-center gap-1"
+                                                <button
+                                                    type="button"
+                                                    onClick={() => downloadFile(viewingResumeModal.resumeUrl, `${viewingResumeModal.name || "candidate"}_resume.pdf`)}
+                                                    className="text-xs font-bold text-[#4169E1] hover:underline flex items-center gap-1 cursor-pointer"
                                                 >
                                                     <Download className="w-3.5 h-3.5" />
                                                     ดาวน์โหลดไฟล์
-                                                </a>
+                                                </button>
                                             </div>
 
                                             {/* Embed viewer if PDF or Image */}
-                                            {getCleanFileUrl(viewingResumeModal.resumeUrl).toLowerCase().endsWith(".pdf") ? (
+                                            {isPdf(viewingResumeModal.resumeUrl) ? (
                                                 <div className="w-full h-[550px] rounded-2xl border border-slate-200 overflow-hidden shadow-inner bg-slate-100">
                                                     <iframe
                                                         src={getCleanFileUrl(viewingResumeModal.resumeUrl)}
@@ -1405,7 +1404,7 @@ export default function CandidatesPage() {
                                                         title="Resume PDF Preview"
                                                     />
                                                 </div>
-                                            ) : getCleanFileUrl(viewingResumeModal.resumeUrl).match(/\.(png|jpg|jpeg|webp|gif)$/i) ? (
+                                            ) : isImage(viewingResumeModal.resumeUrl) ? (
                                                 <div className="w-full flex justify-center p-4 bg-slate-100 rounded-2xl border border-slate-200">
                                                     <img
                                                         src={getCleanFileUrl(viewingResumeModal.resumeUrl)}
@@ -1461,20 +1460,18 @@ export default function CandidatesPage() {
                                                     <GraduationCap className="w-4 h-4 text-[#4169E1]" />
                                                     เอกสาร Transcript (ใบแสดงผลการเรียน) ({viewingResumeModal.transcriptUrl.split("/").pop() || "เอกสารแนบ"})
                                                 </h3>
-                                                <a
-                                                    href={getCleanFileUrl(viewingResumeModal.transcriptUrl)}
-                                                    download
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    className="text-xs font-bold text-[#4169E1] hover:underline flex items-center gap-1"
+                                                <button
+                                                    type="button"
+                                                    onClick={() => downloadFile(viewingResumeModal.transcriptUrl, `${viewingResumeModal.name || "candidate"}_transcript.pdf`)}
+                                                    className="text-xs font-bold text-[#4169E1] hover:underline flex items-center gap-1 cursor-pointer"
                                                 >
                                                     <Download className="w-3.5 h-3.5" />
                                                     ดาวน์โหลดไฟล์
-                                                </a>
+                                                </button>
                                             </div>
 
                                             {/* Embed viewer if PDF or Image */}
-                                            {getCleanFileUrl(viewingResumeModal.transcriptUrl).toLowerCase().endsWith(".pdf") ? (
+                                            {isPdf(viewingResumeModal.transcriptUrl) ? (
                                                 <div className="w-full h-[550px] rounded-2xl border border-slate-200 overflow-hidden shadow-inner bg-slate-100">
                                                     <iframe
                                                         src={getCleanFileUrl(viewingResumeModal.transcriptUrl)}
@@ -1482,7 +1479,7 @@ export default function CandidatesPage() {
                                                         title="Transcript PDF Preview"
                                                     />
                                                 </div>
-                                            ) : getCleanFileUrl(viewingResumeModal.transcriptUrl).match(/\.(png|jpg|jpeg|webp|gif)$/i) ? (
+                                            ) : isImage(viewingResumeModal.transcriptUrl) ? (
                                                 <div className="w-full flex justify-center p-4 bg-slate-100 rounded-2xl border border-slate-200">
                                                     <img
                                                         src={getCleanFileUrl(viewingResumeModal.transcriptUrl)}

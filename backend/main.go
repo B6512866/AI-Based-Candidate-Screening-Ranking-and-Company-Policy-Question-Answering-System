@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"AI-Based-Recruitment-Screening-and-Employee-Advisory-System/backend/config"
@@ -84,14 +86,7 @@ func main() {
 		api.Static("/upload", "./upload")
 		api.Static("/uploads/jobs", "./uploads/jobs")
 
-		// ── Initialize Supabase Storage service ──────────────────────────────────────
-		supStorage := services.NewSupabaseStorageService(
-			config.Env.SupabaseURL,
-			config.Env.SupabaseServiceKey,
-			config.Env.SupabaseBucket,
-		)
-
-		// ── Resume / document upload → Supabase Storage (persistent) ────────────────
+		// ── Base64 File Upload (Persistent in DB, zero cloud disk loss) ────────────
 		api.POST("/upload", func(ctx *gin.Context) {
 			file, err := ctx.FormFile("file")
 			if err != nil {
@@ -99,24 +94,43 @@ func main() {
 				return
 			}
 
-			publicURL, err := supStorage.UploadFileHeader(file)
+			f, err := file.Open()
 			if err != nil {
-				// Fallback to local disk if Supabase is unavailable
-				log.Printf("⚠️ Supabase upload failed (%v), falling back to local disk", err)
-				_ = os.MkdirAll("./upload", os.ModePerm)
-				ext := filepath.Ext(file.Filename)
-				newFilename := fmt.Sprintf("%d%s", time.Now().UnixNano(), ext)
-				filePath := filepath.Join("./upload", newFilename)
-				if err2 := ctx.SaveUploadedFile(file, filePath); err2 != nil {
-					ctx.JSON(500, gin.H{"error": "ไม่สามารถบันทึกไฟล์ได้"})
-					return
-				}
-				ctx.JSON(200, gin.H{"url": fmt.Sprintf("/api/upload/%s", newFilename)})
+				ctx.JSON(500, gin.H{"error": "ไม่สามารถเปิดไฟล์ได้"})
+				return
+			}
+			defer f.Close()
+
+			fileBytes, err := io.ReadAll(f)
+			if err != nil {
+				ctx.JSON(500, gin.H{"error": "ไม่สามารถอ่านไฟล์ได้"})
 				return
 			}
 
-			log.Printf("✅ Resume uploaded to Supabase Storage: %s", publicURL)
-			ctx.JSON(200, gin.H{"url": publicURL})
+			contentType := file.Header.Get("Content-Type")
+			ext := strings.ToLower(filepath.Ext(file.Filename))
+			switch ext {
+			case ".pdf":
+				contentType = "application/pdf"
+			case ".jpg", ".jpeg":
+				contentType = "image/jpeg"
+			case ".png":
+				contentType = "image/png"
+			case ".webp":
+				contentType = "image/webp"
+			case ".txt":
+				contentType = "text/plain"
+			default:
+				if contentType == "" || contentType == "application/octet-stream" {
+					contentType = http.DetectContentType(fileBytes)
+				}
+			}
+
+			encoded := base64.StdEncoding.EncodeToString(fileBytes)
+			dataURI := fmt.Sprintf("data:%s;base64,%s", contentType, encoded)
+
+			log.Printf("✅ File uploaded as Base64 (mime: %s, size: %d bytes)", contentType, len(fileBytes))
+			ctx.JSON(200, gin.H{"url": dataURI})
 		})
 
 		// ── Reverse Proxy for Typhoon AI Service ────────────────────────────────────
