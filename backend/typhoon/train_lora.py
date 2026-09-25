@@ -11,6 +11,11 @@ import sys
 import torch
 import logging
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("TrainLoRA")
 
