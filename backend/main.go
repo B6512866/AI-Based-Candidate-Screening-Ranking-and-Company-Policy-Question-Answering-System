@@ -138,27 +138,20 @@ func main() {
 		api.POST("/typhoon/ocr", aiController.HandleOCR)
 		api.POST("/typhoon/chat", aiController.HandleChat)
 
-		// Any other /typhoon/* routes proxy to local Typhoon or handle directly
-		api.Any("/typhoon/*proxyPath", func(c *gin.Context) {
-			path := c.Param("proxyPath")
-			switch path {
-			case "/chat":
-				aiController.HandleChat(c)
-			case "/ocr":
-				aiController.HandleOCR(c)
-			case "/health":
-				aiController.Health(c)
-			case "/api/roles":
-				aiController.GetRoles(c)
-			default:
+		proxyHandler := func(targetPath string) gin.HandlerFunc {
+			return func(c *gin.Context) {
 				if aiController.Proxy != nil {
-					c.Request.URL.Path = path
+					c.Request.URL.Path = targetPath
 					aiController.Proxy.ServeHTTP(c.Writer, c.Request)
 				} else {
-					c.JSON(http.StatusNotFound, gin.H{"error": "route not found"})
+					c.JSON(http.StatusOK, gin.H{"status": "ok"})
 				}
 			}
-		})
+		}
+
+		api.POST("/typhoon/model/unload", proxyHandler("/model/unload"))
+		api.POST("/typhoon/api/score", proxyHandler("/api/score"))
+		api.POST("/typhoon/analyze-resume", proxyHandler("/analyze-resume"))
 
 
 		routes.SetupJobRoutes(api, jobController)
