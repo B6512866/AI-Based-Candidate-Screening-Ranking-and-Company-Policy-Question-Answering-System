@@ -342,10 +342,11 @@ func (c *AIController) streamLocalTyphoon(ctx *gin.Context, bodyBytes []byte) bo
 		return false
 	}
 
+	log.Printf("🌀 [Local Typhoon Chat] Streaming tokens from %s directly to client...", targetURL)
 	ctx.Header("Content-Type", "text/plain; charset=utf-8")
-	ctx.Header("Transfer-Encoding", "chunked")
 	ctx.Header("X-Accel-Buffering", "no")
-	ctx.Header("Cache-Control", "no-cache")
+	ctx.Header("Cache-Control", "no-cache, no-transform")
+	ctx.Header("Connection", "keep-alive")
 	ctx.Writer.WriteHeader(http.StatusOK)
 
 	flusher, ok := ctx.Writer.(http.Flusher)
@@ -366,6 +367,7 @@ func (c *AIController) streamLocalTyphoon(ctx *gin.Context, bodyBytes []byte) bo
 		}
 	}
 
+	log.Printf("✅ [Local Typhoon Chat Done] Streamed %d bytes to client.", bytesWritten)
 	return bytesWritten > 0
 }
 
