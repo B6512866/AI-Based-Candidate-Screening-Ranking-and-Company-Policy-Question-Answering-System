@@ -87,6 +87,7 @@ export default function ScreeningPage() {
     const [loadingApplicants, setLoadingApplicants] = useState(false);
     const [batchAnalyzing, setBatchAnalyzing] = useState(false);
     const [analyzingStates, setAnalyzingStates] = useState<{ [key: number]: "idle" | "ocr" | "ai" | "saving" | "done" | "error" }>({});
+    const [liveStreamingTexts, setLiveStreamingTexts] = useState<{ [key: number]: string }>({});
 
     const toggleSelectApplicant = (appId: number) => {
         setSelectedAppIds(prev =>
@@ -675,6 +676,7 @@ export default function ScreeningPage() {
             // Normalize spaced letters from OCR e.g. "A I S S A R A P A B" -> "AISSARAPAB"
             resumeText = resumeText.replace(/\b([A-Za-z])(?:\s+([A-Za-z]))+\b/g, (match: string) => match.replace(/\s+/g, ''));
 
+            setLiveStreamingTexts(prev => ({ ...prev, [app.ID]: "" }));
             setAnalyzingStates(prev => ({ ...prev, [app.ID]: "ai" }));
 
             const matchedJob = jobs.find(j => j.ID.toString() === selectedJobId);
@@ -754,7 +756,7 @@ ${tableRowsExample}
                 body: JSON.stringify({
                     messages: [{ role: "user", content: userContent }],
                     system_prompt: SYSTEM_PROMPT,
-                    max_new_tokens: 8192,
+                    max_new_tokens: 2048,
                     temperature: 0,
                     model: selectedModel,
                 }),
@@ -783,8 +785,9 @@ ${tableRowsExample}
                 fullText += decoder.decode(value, { stream: true });
 
                 const now = Date.now();
-                if (now - lastUpdate > 80) {
+                if (now - lastUpdate > 40) {
                     lastUpdate = now;
+                    setLiveStreamingTexts(prev => ({ ...prev, [app.ID]: fullText }));
                     setApplicants(prev => prev.map(a => {
                         if (a.ID === app.ID) {
                             return {
@@ -802,6 +805,7 @@ ${tableRowsExample}
             }
 
             // Instantly render final full text
+            setLiveStreamingTexts(prev => ({ ...prev, [app.ID]: fullText }));
             setApplicants(prev => prev.map(a => {
                 if (a.ID === app.ID) {
                     return {
@@ -1945,8 +1949,54 @@ ${tableRowsExample}
                                                         </div>
                                                     </div>
 
+                                                    {/* ─── 3.5 Real-Time Live AI Streaming Preview (แสดงสดขณะ AI กำลังคิด & พิมพ์) ─── */}
+                                                    {(status === "ai" || status === "saving") && (
+                                                        <div className="mx-4 mb-4 p-4 rounded-2xl bg-gradient-to-br from-indigo-50/90 via-blue-50/70 to-purple-50/50 border border-indigo-200/90 shadow-sm animate-fadeIn">
+                                                            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-indigo-100/90">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="relative flex h-2.5 w-2.5">
+                                                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4169E1] opacity-75"></span>
+                                                                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#4169E1]"></span>
+                                                                    </span>
+                                                                    <span className="font-extrabold text-xs text-[#4169E1] flex items-center gap-1.5">
+                                                                        <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                                                                        {status === "saving"
+                                                                            ? "💾 ได้คำตอบครบแล้ว! กำลังประมวลผลคะแนนสรุปและบันทึกข้อมูล..."
+                                                                            : `🌀 กำลังวิเคราะห์แบบ Real-Time ด้วย ${AVAILABLE_AI_MODELS.find(m => m.id === selectedModel)?.name || selectedModel}`}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex items-center gap-2 text-[11px] font-mono">
+                                                                    <span className="bg-white/90 px-2.5 py-0.5 rounded-lg border border-indigo-100 font-bold text-indigo-600 shadow-2xs">
+                                                                        ⚡ {(liveStreamingTexts[app.ID] || getStrengthsText(app)).length} ตัวอักษร
+                                                                    </span>
+                                                                    <span className="bg-white/90 px-2.5 py-0.5 rounded-lg border border-indigo-100 font-bold text-slate-600 shadow-2xs">
+                                                                        📝 {(liveStreamingTexts[app.ID] || getStrengthsText(app)).trim() ? (liveStreamingTexts[app.ID] || getStrengthsText(app)).trim().split(/\s+/).length : 0} คำ
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Live Streaming Content Area with Typewriter Cursor */}
+                                                            <div className="mt-3 bg-white/95 backdrop-blur-sm border border-indigo-100 p-4 rounded-xl text-xs text-slate-700 leading-relaxed font-sans whitespace-pre-wrap max-h-80 overflow-y-auto shadow-inner">
+                                                                {(liveStreamingTexts[app.ID] || getStrengthsText(app))?.trim() ? (
+                                                                    <>
+                                                                        {getCleanStrengths(liveStreamingTexts[app.ID] || getStrengthsText(app))}
+                                                                        <span className="inline-block w-2 h-4 ml-1 bg-[#4169E1] animate-pulse align-middle"></span>
+                                                                    </>
+                                                                ) : (
+                                                                    <div className="flex items-center gap-2 text-slate-400 italic py-2">
+                                                                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#4169E1]" />
+                                                                        <span>กำลังส่ง Prompt เข้า GPU และสตรีมผลวิเคราะห์แบบสดๆ (Real-time Token Streaming)...</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
                                                     {/* ─── 4. Expandable Details Section (ส่วนขยาย: รายละเอียดวิเคราะห์เดี่ยว & ข้อความดิบ) ─── */}
-                                                    <details className="group border-t border-slate-100 text-xs bg-slate-50/50 rounded-b-2xl cursor-pointer">
+                                                    <details 
+                                                        open={status === "ai" || status === "saving" ? true : undefined}
+                                                        className="group border-t border-slate-100 text-xs bg-slate-50/50 rounded-b-2xl cursor-pointer"
+                                                    >
                                                         <summary className="font-bold text-[#4169E1] select-none px-4 py-2 hover:bg-indigo-50/40 transition-all flex items-center justify-between">
                                                             <span className="flex items-center gap-1.5">
                                                                 <ChevronDown className="w-4 h-4 group-open:rotate-180 transition-transform" />
@@ -1957,13 +2007,16 @@ ${tableRowsExample}
 
                                                         <div className="p-4 border-t border-slate-200/60 bg-white space-y-4 rounded-b-2xl">
                                                             {/* AI Detailed Analysis Report */}
-                                                            {getCleanStrengths(getStrengthsText(app)).trim() ? (
+                                                            {getCleanStrengths(liveStreamingTexts[app.ID] || getStrengthsText(app)).trim() ? (
                                                                 <div className="space-y-2">
                                                                     <h5 className="font-extrabold text-[#4169E1] text-xs uppercase tracking-wider flex items-center gap-1.5">
                                                                         <Sparkles className="w-3.5 h-3.5" /> รายละเอียดผลการวิเคราะห์เดี่ยวจาก AI
                                                                     </h5>
                                                                     <div className="bg-indigo-50/30 border border-indigo-100 p-3.5 rounded-xl text-xs text-slate-700 leading-relaxed font-sans whitespace-pre-wrap">
-                                                                        {getCleanStrengths(getStrengthsText(app))}
+                                                                        {getCleanStrengths(liveStreamingTexts[app.ID] || getStrengthsText(app))}
+                                                                        {(status === "ai" || status === "saving") && (
+                                                                            <span className="inline-block w-2 h-4 ml-1 bg-[#4169E1] animate-pulse align-middle"></span>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             ) : status === "ai" || status === "ocr" || status === "saving" ? (

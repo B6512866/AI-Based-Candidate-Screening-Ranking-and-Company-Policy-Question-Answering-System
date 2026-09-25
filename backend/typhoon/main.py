@@ -803,8 +803,11 @@ async def chat_endpoint(req: ChatRequest):
         def generate_and_stream():
             # Send initial space token immediately to establish stream and prevent proxy timeout
             yield " "
-            for new_text in streamer:
-                yield new_text
+            try:
+                for new_text in streamer:
+                    yield new_text
+            except Exception as stream_err:
+                logger.warning(f"⚠️ Stream exception / client disconnected: {stream_err}")
 
         return StreamingResponse(
             generate_and_stream(),
@@ -1395,6 +1398,12 @@ async def api_analyze(role: str = "fullstack"):
 
 
 if __name__ == "__main__":
+    import sys, asyncio
+    if sys.platform == "win32":
+        try:
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        except Exception:
+            pass
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
