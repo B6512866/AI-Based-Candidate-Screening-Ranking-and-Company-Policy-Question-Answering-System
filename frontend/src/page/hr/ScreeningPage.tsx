@@ -1966,29 +1966,61 @@ ${tableRowsExample}
                                                         </div>
                                                     </div>
 
-                                                    {/* ─── 3.5 Real-Time Live AI Streaming Preview (แสดงสดขณะ AI กำลังคิด & พิมพ์) ─── */}
-                                                    {(status === "ai" || status === "saving") && (
+                                                    {/* ─── 3.5 Real-Time Live AI Streaming & Analysis Report (กล่องวิเคราะห์เดี่ยว AI กล่องเดียวจบ) ─── */}
+                                                    {Boolean(
+                                                        status === "ai" ||
+                                                        status === "saving" ||
+                                                        getCleanStrengths(liveStreamingTexts[app.ID] || getStrengthsText(app)).trim()
+                                                    ) && (
                                                         <div className="mx-4 mb-4 p-4 rounded-2xl bg-gradient-to-br from-indigo-50/90 via-blue-50/70 to-purple-50/50 border border-indigo-200/90 shadow-sm animate-fadeIn">
                                                             <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-indigo-100/90">
                                                                 <div className="flex items-center gap-2">
-                                                                    <span className="relative flex h-2.5 w-2.5">
-                                                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4169E1] opacity-75"></span>
-                                                                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#4169E1]"></span>
-                                                                    </span>
-                                                                    <span className="font-extrabold text-xs text-[#4169E1] flex items-center gap-1.5">
-                                                                        <Sparkles className="w-3.5 h-3.5 animate-spin" />
-                                                                        {status === "saving"
-                                                                            ? "💾 ได้คำตอบครบแล้ว! กำลังประมวลผลคะแนนสรุปและบันทึกข้อมูล..."
-                                                                            : `🌀 กำลังวิเคราะห์แบบ Real-Time ด้วย ${AVAILABLE_AI_MODELS.find(m => m.id === selectedModel)?.name || selectedModel}`}
-                                                                    </span>
+                                                                    {status === "ai" || status === "saving" ? (
+                                                                        <>
+                                                                            <span className="relative flex h-2.5 w-2.5">
+                                                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4169E1] opacity-75"></span>
+                                                                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#4169E1]"></span>
+                                                                            </span>
+                                                                            <span className="font-extrabold text-xs text-[#4169E1] flex items-center gap-1.5">
+                                                                                <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                                                                                {status === "saving"
+                                                                                    ? "💾 ได้คำตอบครบแล้ว! กำลังประมวลผลคะแนนสรุปและบันทึกข้อมูล..."
+                                                                                    : `🌀 กำลังวิเคราะห์แบบ Real-Time ด้วย ${AVAILABLE_AI_MODELS.find(m => m.id === selectedModel)?.name || selectedModel}`}
+                                                                            </span>
+                                                                        </>
+                                                                    ) : (
+                                                                        <span className="font-extrabold text-xs text-[#4169E1] flex items-center gap-1.5">
+                                                                            <Sparkles className="w-3.5 h-3.5" />
+                                                                            รายละเอียดผลการวิเคราะห์เดี่ยวจาก AI ({app.AIScreening?.model_used || AVAILABLE_AI_MODELS.find(m => m.id === selectedModel)?.name || selectedModel})
+                                                                        </span>
+                                                                    )}
                                                                 </div>
                                                                 <div className="flex items-center gap-2 text-[11px] font-mono">
-                                                                    <span className="bg-white/90 px-2.5 py-0.5 rounded-lg border border-indigo-100 font-bold text-indigo-600 shadow-2xs">
-                                                                        ⚡ {(liveStreamingTexts[app.ID] || getStrengthsText(app)).length} ตัวอักษร
-                                                                    </span>
-                                                                    <span className="bg-white/90 px-2.5 py-0.5 rounded-lg border border-indigo-100 font-bold text-slate-600 shadow-2xs">
-                                                                        📝 {(liveStreamingTexts[app.ID] || getStrengthsText(app)).trim() ? (liveStreamingTexts[app.ID] || getStrengthsText(app)).trim().split(/\s+/).length : 0} คำ
-                                                                    </span>
+                                                                    {status === "ai" || status === "saving" ? (
+                                                                        <>
+                                                                            <span className="bg-white/90 px-2.5 py-0.5 rounded-lg border border-indigo-100 font-bold text-indigo-600 shadow-2xs">
+                                                                                ⚡ {(liveStreamingTexts[app.ID] || getStrengthsText(app)).length} ตัวอักษร
+                                                                            </span>
+                                                                            <span className="bg-white/90 px-2.5 py-0.5 rounded-lg border border-indigo-100 font-bold text-slate-600 shadow-2xs">
+                                                                                📝 {(liveStreamingTexts[app.ID] || getStrengthsText(app)).trim() ? (liveStreamingTexts[app.ID] || getStrengthsText(app)).trim().split(/\s+/).length : 0} คำ
+                                                                            </span>
+                                                                        </>
+                                                                    ) : (
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                const text = getCleanStrengths(liveStreamingTexts[app.ID] || getStrengthsText(app));
+                                                                                if (text) {
+                                                                                    navigator.clipboard.writeText(text);
+                                                                                    alert("คัดลอกผลการวิเคราะห์เรียบร้อยแล้ว");
+                                                                                }
+                                                                            }}
+                                                                            className="flex items-center gap-1 bg-white hover:bg-slate-50 text-slate-600 px-2.5 py-1 rounded-lg border border-slate-200 text-[11px] font-semibold transition-all cursor-pointer shadow-2xs"
+                                                                            title="คัดลอกผลการวิเคราะห์"
+                                                                        >
+                                                                            <Copy className="w-3 h-3 text-indigo-600" />
+                                                                            <span>คัดลอก</span>
+                                                                        </button>
+                                                                    )}
                                                                 </div>
                                                             </div>
 
@@ -2009,62 +2041,31 @@ ${tableRowsExample}
                                                         </div>
                                                     )}
 
-                                                    {/* ─── 4. Expandable Details Section (ส่วนขยาย: รายละเอียดวิเคราะห์เดี่ยว & ข้อความดิบ) ─── */}
+                                                    {/* ─── 4. Expandable Raw OCR Text Section (ส่วนขยาย: ข้อความดิบจากการสแกน OCR) ─── */}
                                                     <details 
-                                                        open={status === "ai" || status === "saving" ? true : undefined}
                                                         className="group border-t border-slate-100 text-xs bg-slate-50/50 rounded-b-2xl cursor-pointer"
                                                     >
-                                                        <summary className="font-bold text-[#4169E1] select-none px-4 py-2 hover:bg-indigo-50/40 transition-all flex items-center justify-between">
+                                                        <summary className="font-bold text-slate-600 hover:text-[#4169E1] select-none px-4 py-2 hover:bg-indigo-50/40 transition-all flex items-center justify-between">
                                                             <span className="flex items-center gap-1.5">
                                                                 <ChevronDown className="w-4 h-4 group-open:rotate-180 transition-transform" />
-                                                                ดูรายละเอียดผลวิเคราะห์และข้อความ OCR ฉบับเต็ม
+                                                                📄 ดูข้อความดิบจากการสแกน OCR (OCR Raw Text)
                                                             </span>
                                                             <span className="text-[10px] font-semibold text-slate-400">คลิกเพื่อขยาย/ซ่อน</span>
                                                         </summary>
 
-                                                        <div className="p-4 border-t border-slate-200/60 bg-white space-y-4 rounded-b-2xl">
-                                                            {/* AI Detailed Analysis Report */}
-                                                            {getCleanStrengths(liveStreamingTexts[app.ID] || getStrengthsText(app)).trim() ? (
-                                                                <div className="space-y-2">
-                                                                    <h5 className="font-extrabold text-[#4169E1] text-xs uppercase tracking-wider flex items-center gap-1.5">
-                                                                        <Sparkles className="w-3.5 h-3.5" /> รายละเอียดผลการวิเคราะห์เดี่ยวจาก AI
-                                                                    </h5>
-                                                                    <div className="bg-indigo-50/30 border border-indigo-100 p-3.5 rounded-xl text-xs text-slate-700 leading-relaxed font-sans whitespace-pre-wrap">
-                                                                        {getCleanStrengths(liveStreamingTexts[app.ID] || getStrengthsText(app))}
-                                                                        {(status === "ai" || status === "saving") && (
-                                                                            <span className="inline-block w-2 h-4 ml-1 bg-[#4169E1] animate-pulse align-middle"></span>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            ) : status === "ai" || status === "ocr" || status === "saving" ? (
-                                                                <div className="text-[#4169E1] text-xs font-bold bg-blue-50/60 border border-blue-200 p-3.5 rounded-xl animate-pulse flex items-center gap-2">
-                                                                    <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
-                                                                    <span>กำลังวิเคราะห์และประมวลผลด้วย AI ({AVAILABLE_AI_MODELS.find(m => m.id === selectedModel)?.name || "Claude Sonnet 5"})...</span>
-                                                                </div>
-                                                            ) : (
-                                                                <div className="text-slate-400 text-xs italic bg-slate-50 border border-slate-200/60 p-3 rounded-xl">
-                                                                    ยังไม่มีผลการวิเคราะห์เดี่ยวจาก AI (กรุณากดปุ่ม "วิเคราะห์เดี่ยว" ด้านบนเพื่อเริ่มประมวลผล)
-                                                                </div>
-                                                            )}
-
-                                                            {/* Raw Text OCR display */}
-                                                            <div className="space-y-1.5 pt-2 border-t border-slate-100">
-                                                                <h5 className="font-bold text-slate-500 text-[11px] uppercase tracking-wider">
-                                                                    📄 ข้อความดิบจากการสแกนเอกสาร (OCR Raw Text)
-                                                                </h5>
-                                                                <textarea
-                                                                    readOnly
-                                                                    value={(() => {
-                                                                        const txt = app.ResumeText || app.resume_text || "";
-                                                                        if (txt.trim().startsWith("ข้อมูลประวัติย่อ") || txt.includes("/api/upload/")) {
-                                                                            return "ยังไม่ได้ทำการสแกนข้อความ OCR (กรุณากด 'วิเคราะห์เดี่ยว' เพื่อเริ่มสแกนรูปภาพและถอดข้อความ)";
-                                                                        }
-                                                                        return txt;
-                                                                    })()}
-                                                                    rows={4}
-                                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono text-[10px] resize-none outline-none leading-normal text-slate-600"
-                                                                />
-                                                            </div>
+                                                        <div className="p-4 border-t border-slate-200/60 bg-white space-y-2 rounded-b-2xl">
+                                                            <textarea
+                                                                readOnly
+                                                                value={(() => {
+                                                                    const txt = app.ResumeText || app.resume_text || "";
+                                                                    if (txt.trim().startsWith("ข้อมูลประวัติย่อ") || txt.includes("/api/upload/")) {
+                                                                        return "ยังไม่ได้ทำการสแกนข้อความ OCR (กรุณากด 'วิเคราะห์เดี่ยว' เพื่อเริ่มสแกนรูปภาพและถอดข้อความ)";
+                                                                    }
+                                                                    return txt;
+                                                                })()}
+                                                                rows={4}
+                                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono text-[10px] resize-none outline-none leading-normal text-slate-600"
+                                                            />
                                                         </div>
                                                     </details>
                                                 </div>
