@@ -146,22 +146,11 @@ func sendViaGmailWebhook(webhookURL string, toEmail string, subject string, html
 	return nil
 }
 
-// sendEmailUnified ส่งอีเมลแบบ Unified (ตรวจจับ Gmail Webhook -> Brevo API -> Resend API -> Gmail SMTP)
+// sendEmailUnified ส่งอีเมลแบบ Unified (ตรวจจับ Brevo API -> Gmail Webhook -> Resend API -> Gmail SMTP)
 func sendEmailUnified(toEmail string, subject string, htmlBody string) error {
 	fromEmail, appPassword := getSMTPConfig()
 
-	// 1. ลอง Google Apps Script Webhook (Port 443 — ส่งผ่าน Gmail จริงของแอดมิน ถึงทุกอีเมลผู้สมัคร 100%)
-	if config.Env.GmailWebhookURL != "" {
-		fmt.Printf("[Email Service] 🚀 Sending via Gmail Webhook to %s...\n", toEmail)
-		err := sendViaGmailWebhook(config.Env.GmailWebhookURL, toEmail, subject, htmlBody)
-		if err == nil {
-			fmt.Printf("[Email Service] ✅ Gmail Webhook sent successfully to %s\n", toEmail)
-			return nil
-		}
-		fmt.Printf("[Email Service] ⚠️ Gmail Webhook failed: %v, falling back...\n", err)
-	}
-
-	// 2. ลอง Brevo HTTP API (Port 443 — ส่งถึงทุกอีเมลปลายทาง ไม่จำกัดโดเมน)
+	// 1. ลอง Brevo HTTP API (Port 443 — บริการหลัก ส่งได้ทุกอีเมล ไม่จำกัดโดเมน)
 	if config.Env.BrevoAPIKey != "" {
 		fmt.Printf("[Email Service] 🚀 Sending via Brevo HTTP API to %s...\n", toEmail)
 		err := sendViaBrevo(config.Env.BrevoAPIKey, fromEmail, toEmail, subject, htmlBody)
@@ -170,6 +159,17 @@ func sendEmailUnified(toEmail string, subject string, htmlBody string) error {
 			return nil
 		}
 		fmt.Printf("[Email Service] ⚠️ Brevo failed: %v, falling back...\n", err)
+	}
+
+	// 2. ลอง Google Apps Script Webhook (Port 443 — ส่งผ่าน Gmail จริง)
+	if config.Env.GmailWebhookURL != "" {
+		fmt.Printf("[Email Service] 🚀 Sending via Gmail Webhook to %s...\n", toEmail)
+		err := sendViaGmailWebhook(config.Env.GmailWebhookURL, toEmail, subject, htmlBody)
+		if err == nil {
+			fmt.Printf("[Email Service] ✅ Gmail Webhook sent successfully to %s\n", toEmail)
+			return nil
+		}
+		fmt.Printf("[Email Service] ⚠️ Gmail Webhook failed: %v, falling back...\n", err)
 	}
 
 	// 3. ลอง Resend HTTP API (Port 443)
