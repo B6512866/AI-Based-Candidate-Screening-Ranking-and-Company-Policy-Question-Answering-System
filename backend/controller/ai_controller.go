@@ -95,9 +95,21 @@ func (c *AIController) isLocalTyphoonOnline() bool {
 
 // GET /api/typhoon-status
 func (c *AIController) GetStatus(ctx *gin.Context) {
+	modelParam := strings.ToLower(strings.TrimSpace(ctx.DefaultQuery("model", "")))
 	isLocal := c.isLocalTyphoonOnline()
+
+	// Default online status represents whether the local Typhoon model is online
+	isOnline := isLocal
+	if modelParam != "" {
+		if strings.Contains(modelParam, "gemini") || strings.Contains(modelParam, "claude") || strings.Contains(modelParam, "gpt") {
+			isOnline = true // Cloud AI is 24/7
+		} else {
+			isOnline = isLocal // Typhoon requires local model running
+		}
+	}
+
 	ctx.JSON(http.StatusOK, gin.H{
-		"online":        true, // Gemini & Claude are ALWAYS ready 24/7 on Cloud!
+		"online":        isOnline,
 		"status":        "ok",
 		"cloud_ai":      true,
 		"models":        []string{"gemini-3.5-flash", "claude-sonnet-5"},
@@ -108,8 +120,13 @@ func (c *AIController) GetStatus(ctx *gin.Context) {
 // GET /api/typhoon/health
 func (c *AIController) Health(ctx *gin.Context) {
 	isLocal := c.isLocalTyphoonOnline()
+	statusStr := "offline"
+	if isLocal {
+		statusStr = "ok"
+	}
 	ctx.JSON(http.StatusOK, gin.H{
-		"status":           "ok",
+		"status":           statusStr,
+		"online":           isLocal,
 		"cloud_ai":         true,
 		"gemini_ready":     true,
 		"claude_ready":     true,

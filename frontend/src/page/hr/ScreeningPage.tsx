@@ -496,10 +496,10 @@ export default function ScreeningPage() {
             return;
         }
         try {
-            // Use backend proxy endpoint to avoid browser CORS issues
-            const r = await fetch(`${getApiUrl()}/typhoon-status`, { signal: AbortSignal.timeout(12000) });
+            // Check local Typhoon status from backend
+            const r = await fetch(`${getApiUrl()}/typhoon-status?model=${encodeURIComponent(selectedModel)}`, { signal: AbortSignal.timeout(12000) });
             const d = await r.json();
-            setOnline(d.online === true);
+            setOnline(d.local_typhoon === true || (d.online === true && !d.cloud_ai));
         } catch {
             setOnline(false);
         }
@@ -1362,11 +1362,12 @@ ${tableRowsExample}
                                 ? "bg-red-50 text-red-500 border-red-100"
                                 : "bg-slate-50 text-slate-400 border-slate-100"
                             }`}
+                        title={selectedModel.includes("typhoon") && !online ? "โมเดล Typhoon จำเป็นต้องรัน python main.py ในเครื่องก่อนใช้งาน" : ""}
                     >
                         {online === true
-                            ? <><Wifi className="w-4 h-4" /> AI พร้อมใช้</>
+                            ? <><Wifi className="w-4 h-4" /> {selectedModel.includes("typhoon") ? "Typhoon พร้อมใช้" : "AI พร้อมใช้"}</>
                             : online === false
-                                ? <><WifiOff className="w-4 h-4" /> AI ออฟไลน์</>
+                                ? <><WifiOff className="w-4 h-4" /> {selectedModel.includes("typhoon") ? "Typhoon ออฟไลน์ (ยังไม่ได้รันโมเดล)" : "AI ออฟไลน์"}</>
                                 : <><Sparkles className="w-4 h-4" /> ตรวจสอบ...</>}
                     </button>
                 </div>
