@@ -705,9 +705,10 @@ async def chat_endpoint(req: ChatRequest):
                 if "haiku" in selected_model.lower():
                     claude_model_id = "claude-haiku-4-5-20251001"
                 
+                claude_max_tokens = 8192 if (not req.max_new_tokens or req.max_new_tokens < 4096) else min(req.max_new_tokens, 8192)
                 payload = {
                     "model": claude_model_id,
-                    "max_tokens": min(req.max_new_tokens, 8192),
+                    "max_tokens": claude_max_tokens,
                     "system": effective_system_prompt,
                     "messages": claude_messages,
                     "stream": True
@@ -737,12 +738,16 @@ async def chat_endpoint(req: ChatRequest):
                                             text_delta = obj.get("delta", {}).get("text")
                                             if text_delta:
                                                 yield text_delta
+                                        elif obj.get("type") == "message_delta":
+                                            stop_reason = obj.get("delta", {}).get("stop_reason")
+                                            if stop_reason == "max_tokens":
+                                                logger.warning("⚠️ [Claude] Stream stopped because max_tokens was reached!")
                                     except Exception:
                                         pass
                     except Exception as stream_err:
                         logger.error(f"❌ Claude Cloud Stream interrupted: {stream_err}")
 
-                logger.info(f"⚡ [Claude Cloud API SUCCESS] Executed {selected_model} (0% GPU Load)")
+                logger.info(f"⚡ [Claude Cloud API SUCCESS] Executed {selected_model} (0% GPU Load, max_tokens={claude_max_tokens})")
                 return StreamingResponse(generate_claude_rest_stream(resp), media_type="text/plain")
             except Exception as claude_err:
                 err_detail = str(claude_err)
