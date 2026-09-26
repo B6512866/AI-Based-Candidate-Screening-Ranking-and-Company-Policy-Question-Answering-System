@@ -584,7 +584,7 @@ func (c *AIController) streamClaude(ctx *gin.Context, apiKey string, req ChatReq
 	}
 
 	maxTokens := req.MaxNewTokens
-	if maxTokens <= 0 || maxTokens > 8192 {
+	if maxTokens < 4096 || maxTokens > 8192 {
 		maxTokens = 8192
 	}
 
@@ -631,6 +631,8 @@ func (c *AIController) streamClaude(ctx *gin.Context, apiKey string, req ChatReq
 
 	flusher, ok := ctx.Writer.(http.Flusher)
 	scanner := bufio.NewScanner(resp.Body)
+	buf := make([]byte, 1024*1024)
+	scanner.Buffer(buf, 1024*1024)
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())

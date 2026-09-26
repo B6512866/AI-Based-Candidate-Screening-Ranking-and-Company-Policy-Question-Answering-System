@@ -803,7 +803,7 @@ ${tableRowsExample}
                 body: JSON.stringify({
                     messages: [{ role: "user", content: userContent }],
                     system_prompt: SYSTEM_PROMPT,
-                    max_new_tokens: 2048,
+                    max_new_tokens: 8192,
                     temperature: 0,
                     model: selectedModel,
                 }),
