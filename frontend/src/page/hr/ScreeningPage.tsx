@@ -22,15 +22,15 @@ const SYSTEM_PROMPT = `คุณคือผู้เชี่ยวชาญด
 
 หลักการวิเคราะห์และการประเมินคะแนน (สไตล์ Typhoon HR Recruiter):
 1. ในช่อง "เหตุผล" ให้เขียนวิเคราะห์แบบ HR มืออาชีพอย่างละเอียด เปรียบเทียบทักษะ/ประสบการณ์ใน Resume กับความต้องการของประกาศงาน (JD)
-2. หากเกณฑ์หลักประเมินได้ระดับ "ดี (100%)" ให้เขียนเฉพาะจุดแข็ง ทักษะ และหลักฐานใน Resume ที่สนับสนุนคะแนนเต็ม 100% เท่านั้น (ห้ามใส่เกณฑ์ย่อยที่ไม่เกี่ยวข้อง หรือระบุว่าขาดทักษะย่อยอื่นที่ไม่ได้เลือกลงมาในช่องเหตุผลเด็ดขาด)
+2. หากเกณฑ์หลักประเมินได้ระดับ "ดี (ได้คะแนนเต็มเกณฑ์)" ให้เขียนเฉพาะจุดแข็ง ทักษะ และหลักฐานใน Resume ที่สนับสนุนคะแนนเต็มเท่านั้น
 3. สำหรับเกณฑ์หลักแต่ละข้อ (Main Criteria) AI จะต้องประเมินและเลือกระดับเพียง 1 ใน 3 ระดับนี้เท่านั้น:
-   - "ดี (100%)" : มีทักษะและประสบการณ์ตรงตามประกาศงานอย่างชัดเจน (ได้คะแนนเต็ม เช่น 35/35, 25/25, 20/20, 5/5)
-   - "ปานกลาง (50%)" : มีความรู้พื้นฐาน หรือมีประสบการณ์ใกล้เคียงแต่ยังขาดทักษะบางส่วน (ได้ครึ่งหนึ่ง เช่น 18/35, 13/25, 10/20, 3/5)
-   - "แย่ (0%)" : ไม่มีข้อมูลใน Resume หรือทักษะไม่ตรงตามประกาศงานอย่างชัดเจน (ได้ 0 คะแนน เช่น 0/35, 0/25, 0/20, 0/5)
+   - "ดี (ได้คะแนนเต็มเกณฑ์)" : มีทักษะและประสบการณ์ตรงตามประกาศงานอย่างชัดเจน (เช่น เกณฑ์เต็ม 35 ได้ 35/35, เต็ม 25 ได้ 25/25, เต็ม 20 ได้ 20/20)
+   - "ปานกลาง (ได้คะแนนครึ่งหนึ่ง)" : มีความรู้พื้นฐาน หรือมีประสบการณ์ใกล้เคียงแต่ยังขาดทักษะบางส่วน (เช่น เกณฑ์เต็ม 35 ได้ 18/35, เต็ม 25 ได้ 13/25, เต็ม 20 ได้ 10/20)
+   - "แย่ (ได้ 0 คะแนน)" : ไม่มีข้อมูลใน Resume หรือทักษะไม่ตรงตามประกาศงานอย่างชัดเจน (ได้ 0 คะแนน เช่น 0/35, 0/25, 0/20)
 4. ข้อห้ามเด็ดขาด (Strict Constraint):
+   - คะแนนที่ได้ของแต่ละเกณฑ์ต้องเป็นคะแนนจริง และต้องไม่เกินคะแนนเต็มของเกณฑ์นั้นๆ เช่น เกณฑ์เต็ม 20 คะแนน ตัวเลขต้องเป็น 20 หรือ 10 หรือ 0 เท่านั้น ห้ามใส่ตัวเลขเปอร์เซ็นต์อย่าง 100/20 เด็ดขาด! (ห้ามคิดว่าได้เกณฑ์นี้เต็มแล้วใส่ 100/20 เพราะคะแนนเต็มของเกณฑ์นี้คือ 20 ไม่ใช่ 100)
    - ห้ามคิดคะแนนเป็นเศษส่วนทศนิยม หรือเฉลี่ยเกณฑ์ย่อยเป็นเปอร์เซ็นต์มั่วๆ เช่น 83.33%, 66.66% หรือคิดคะแนนก้ำกึ่งอย่าง 21/25, 23/35, 8/25 เด็ดขาด!
-   - คะแนนของเกณฑ์หลักทุกข้อต้องเลือกเพียง 100%, 50%, หรือ 0% ของคะแนนเต็มเกณฑ์นั้นเท่านั้น!
-5. คะแนนรวมในบรรทัด "**รวมทั้งหมด**" ต้องเป็นผลรวมคะแนนของทุกเกณฑ์หลักบวกกันจริงๆ เสมอ (เป็นจำนวนเต็มเท่านั้น)
+5. คะแนนรวมในบรรทัด "**รวมทั้งหมด**" ต้องเป็นผลรวมคะแนนของทุกเกณฑ์หลักบวกกันจริงๆ เสมอ (บวกเลขตามความเป็นจริง เช่น 0 + 0 + 0 + 20 = 20/100 ห้ามใส่ 100/100 หากเกณฑ์อื่นได้ 0 คะแนน)
 
 กติกาการตอบกลับ (Strict Output Format):
 1. ต้องตอบกลับเฉพาะ 2 หัวข้อนี้เท่านั้นเรียงตามลำดับ ห้ามเพิ่มหัวข้ออื่นเด็ดขาด:
@@ -46,8 +46,8 @@ const SYSTEM_PROMPT = `คุณคือผู้เชี่ยวชาญด
 3. ในส่วน "## 2. คะแนนรวม (0–100)" ให้ประเมินและแสดงผลในรูปแบบตาราง Markdown เท่านั้น:
 | เกณฑ์ | คะแนน | เหตุผล |
 |---|---|---|
-| [ชื่อเกณฑ์หลัก] | [คะแนนเต็ม 100% / คะแนนครึ่งหนึ่ง 50% / หรือ 0]/[คะแนนเต็ม] | [บทวิเคราะห์ HR อย่างละเอียด สรุปสิ่งที่พบใน Resume เทียบกับ JD พร้อมระบุระดับประเมิน ดี (100%), ปานกลาง (50%), หรือ แย่ (0%) ให้ชัดเจน] |
-| **รวมทั้งหมด** | [ผลรวมคะแนนทุกเกณฑ์]/100 | [สรุปภาพรวมผู้สมัคร 1-2 บรรทัด] |
+| [ชื่อเกณฑ์หลัก] | [คะแนนเต็ม / คะแนนครึ่งหนึ่ง / หรือ 0]/[คะแนนเต็มของเกณฑ์] | [บทวิเคราะห์ HR อย่างละเอียด สรุปสิ่งที่พบใน Resume เทียบกับ JD พร้อมระบุระดับประเมิน ดี (ได้คะแนนเต็ม), ปานกลาง (ได้คะแนนครึ่งหนึ่ง), หรือ แย่ (ได้ 0) ให้ชัดเจน] |
+| **รวมทั้งหมด** | [ผลรวมคะแนนทุกเกณฑ์หลักรวมกันจริง]/100 | [สรุปภาพรวมผู้สมัคร 1-2 บรรทัด] |
 
 ข้อห้ามสำคัญ:
 - ห้ามย่อหรือเปลี่ยนชื่อเกณฑ์หลักในตารางเด็ดขาด
@@ -280,10 +280,44 @@ export default function ScreeningPage() {
     const formatCleanMarkdownScores = (content: string) => {
         if (!content) return "";
         return content.replace(/(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/g, (_match, scoreStr, maxStr) => {
-            const roundedScore = Math.round(parseFloat(scoreStr));
+            let roundedScore = Math.round(parseFloat(scoreStr));
             const roundedMax = Math.round(parseFloat(maxStr));
+            // Auto-correct if AI wrote 100/20 (meaning 100% of 20 = 20)
+            if (roundedScore > roundedMax && roundedMax > 0 && roundedMax < 100) {
+                if (roundedScore === 100) {
+                    roundedScore = roundedMax;
+                } else {
+                    roundedScore = Math.min(roundedScore, roundedMax);
+                }
+            }
             return `${roundedScore}/${roundedMax}`;
         });
+    };
+
+    const sanitizeMarkdownScoresTable = (content: string, breakdown: any[], calculatedTotal: number) => {
+        if (!content) return "";
+        let sanitized = content;
+
+        // Auto-fix criteria rows if AI hallucinated score > max (e.g. 100/20 -> 20/20)
+        breakdown.forEach(item => {
+            if (item.main_criterion_title && item.max_score) {
+                const escapedTitle = item.main_criterion_title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const rowRegex = new RegExp(`(\\|\\s*${escapedTitle}\\s*\\|\\s*)(\\d+)\\s*\\/\\s*(${item.max_score})(\\s*\\|)`, 'i');
+                sanitized = sanitized.replace(rowRegex, (_m: string, prefix: string, scoreVal: string, maxVal: string, suffix: string) => {
+                    const numScore = parseInt(scoreVal, 10);
+                    const fixedScore = (numScore > item.max_score) ? item.score : numScore;
+                    return `${prefix}${fixedScore}/${maxVal}${suffix}`;
+                });
+            }
+        });
+
+        // Auto-fix total row: | **รวมทั้งหมด** | X/100 |
+        const totalRowRegex = /(\|\s*\*{0,2}รวมทั้งหมด\*{0,2}\s*\|\s*)(\d+)\s*\/\s*(100)(\s*\|)/i;
+        sanitized = sanitized.replace(totalRowRegex, (_m: string, prefix: string, _scoreVal: string, maxVal: string, suffix: string) => {
+            return `${prefix}${calculatedTotal}/${maxVal}${suffix}`;
+        });
+
+        return sanitized;
     };
 
     const parseScoresFromMarkdown = (content: string) => {
@@ -381,7 +415,9 @@ export default function ScreeningPage() {
                 const key = criteriaKeys[idx];
                 const criteriaMax = criteriaMap[key].max;
                 let rawScore = row.score;
-                if (row.max !== criteriaMax && row.max > 0) {
+                if (rawScore > criteriaMax && row.max === criteriaMax) {
+                    rawScore = criteriaMax;
+                } else if (row.max !== criteriaMax && row.max > 0) {
                     rawScore = (row.score / row.max) * criteriaMax;
                 }
                 scores[key] = snapToDiscreteLevel(rawScore, criteriaMax);
@@ -430,7 +466,9 @@ export default function ScreeningPage() {
                 if (matchedKey) {
                     const criteriaMax = criteriaMap[matchedKey].max;
                     let rawScore = row.score;
-                    if (row.max !== criteriaMax && row.max > 0) {
+                    if (rawScore > criteriaMax && row.max === criteriaMax) {
+                        rawScore = criteriaMax;
+                    } else if (row.max !== criteriaMax && row.max > 0) {
                         rawScore = (row.score / row.max) * criteriaMax;
                     }
                     scores[matchedKey] = snapToDiscreteLevel(rawScore, criteriaMax);
@@ -461,9 +499,14 @@ export default function ScreeningPage() {
         const breakdown: { [key: string]: { score: number; max: number } } = {};
         Object.keys(criteriaMap).forEach(key => {
             const info = criteriaMap[key];
+            const maxVal = Math.round(info.max);
+            let scoreVal = scores[key] !== undefined ? Math.round(scores[key]) : 0;
+            if (scoreVal > maxVal) {
+                scoreVal = maxVal;
+            }
             breakdown[info.name] = {
-                score: scores[key] !== undefined ? Math.round(scores[key]) : 0,
-                max: Math.round(info.max)
+                score: scoreVal,
+                max: maxVal
             };
         });
         return breakdown;
@@ -723,12 +766,15 @@ ${resumeText}`;
                 userContent += `\n\n=== เกณฑ์ในการคัดเลือกและน้ำหนักคะแนน (Main & Sub-Criteria) ===\n${formattedCriteria}`;
 
                 const tableRowsExample = Object.values(criteriaMap)
-                    .map(info => `| ${info.name} | [คะแนนที่ได้]/${info.max} | [เหตุผลประเมินสั้นๆ ตาม Sub-Criteria] |`)
+                    .map(info => {
+                        const half = Math.round(info.max * 0.5);
+                        return `| ${info.name} | [เลือกได้แค่: ${info.max} หรือ ${half} หรือ 0]/${info.max} | [เหตุผลประเมินตาม Sub-Criteria โดยระบุระดับประเมิน] |`;
+                    })
                     .join("\n");
 
                 userContent += `\n\n=== ข้อกำหนดการตอบกลับ (ตอบกลับเฉพาะ 2 หัวข้อนี้เท่านั้น) ===
 
-โปรดวิเคราะห์คุณสมบัติใน Resume เทียบกับเกณฑ์หลักทั้ง 3 ระดับ (ระดับดี 100%, ระดับปานกลาง 50%, ระดับแย่ 0%) โดยเกณฑ์หลักแต่ละข้อต้องเลือกประเมินเพียง 1 ใน 3 ระดับนี้เท่านั้น: เต็ม 100%, ครึ่งหนึ่ง 50%, หรือ 0% (ห้ามคิดตัวเลขอื่นๆ หรือเฉลี่ยทศนิยม เช่น 21/25 หรือ 83.33% เด็ดขาด) และตอบกลับในรูปแบบเทมเพลตด้านล่างนี้เป๊ะๆ:
+โปรดวิเคราะห์คุณสมบัติใน Resume เทียบกับเกณฑ์หลักทั้ง 3 ระดับ (ระดับดี = คะแนนเต็มของเกณฑ์นั้น, ระดับปานกลาง = ครึ่งหนึ่ง, ระดับแย่ = 0) โดยเกณฑ์หลักแต่ละข้อต้องเลือกประเมินเพียง 1 ใน 3 ตัวเลขที่กำหนดไว้ในแต่ละแถวเท่านั้น: เต็มเกณฑ์, ครึ่งหนึ่ง, หรือ 0 (ห้ามนำตัวเลข 100 มาใส่ในเกณฑ์ที่คะแนนเต็มไม่ใช่ 100 เช่น เกณฑ์เต็ม 20 ต้องใส่ 20, 10, หรือ 0 เท่านั้น ห้ามใส่ 100/20 เด็ดขาด!) และตอบกลับในรูปแบบเทมเพลตด้านล่างนี้เป๊ะๆ:
 
 ## 1. ข้อมูลผู้สมัคร
 
@@ -742,12 +788,12 @@ ${resumeText}`;
 | เกณฑ์ | คะแนน | เหตุผล |
 |---|---|---|
 ${tableRowsExample}
-| **รวมทั้งหมด** | [ผลรวมคะแนนทุกเกณฑ์หลัก]/100 | [คำสรุปโดยรวมสั้นๆ] |
+| **รวมทั้งหมด** | [ผลรวมคะแนนทุกเกณฑ์หลักรวมกันจริงๆ]/100 | [คำสรุปโดยรวมสั้นๆ] |
 
 ข้อห้ามสำคัญ:
 - ในหัวข้อ "## 1. ข้อมูลผู้สมัคร" ให้แสดงเฉพาะ 2 บรรทัดคือ **ชื่อ-สกุล** และ **อีเมล** เท่านั้น ห้ามแสดงวันเกิด สถานภาพ ที่อยู่ เงินเดือน หรือวันเริ่มงาน เด็ดขาด
-- คะแนนของแต่ละเกณฑ์หลักต้องคำนวณตรงกับระดับ (100%, 50%, 0%) ของเกณฑ์ย่อยในช่องเหตุผลเสมอ ห้ามมโนตัวเลขเอง
-- ตัวเลขในบรรทัด "**รวมทั้งหมด**" ต้องเป็นผลรวมคะแนนของทุกเกณฑ์หลักรวมกันจริงๆ
+- คะแนนของแต่ละเกณฑ์หลักต้องไม่เกินคะแนนเต็มของเกณฑ์นั้นๆ และต้องคำนวณตรงกับระดับ (ดี/ปานกลาง/แย่) เสมอ (เช่น เกณฑ์เต็ม 20 ตัวเลขต้องเป็น 20, 10, หรือ 0 ห้ามใส่ 100/20 เด็ดขาด)
+- ตัวเลขในบรรทัด "**รวมทั้งหมด**" ต้องเป็นผลรวมคะแนนของทุกเกณฑ์หลักรวมกันจริงๆ เสมอ (เช่น 0 + 0 + 0 + 20 = 20/100 ห้ามใส่ 100/100 หากเกณฑ์อื่นๆ ได้ 0 คะแนน)
 - ห้ามย่อหรือเปลี่ยนชื่อเกณฑ์หลักในตาราง และห้ามเพิ่มหัวข้ออื่นเด็ดขาด`;
             }
 
@@ -843,9 +889,6 @@ ${tableRowsExample}
                 totalScore += Math.min(Math.round(finalScores[key]), criteriaMap[key].max);
             });
 
-            const scoresStr = `[SCORES: ${Object.keys(finalScores).map(k => `${k}=${Math.round(finalScores[k])}`).join(",")}]`;
-            const strengthsText = `${scoresStr}\n\n${fullText}`;
-
             const basicCandidateInfo = parseBasicInfoFromMarkdown(fullText);
 
             const breakdownDetails = Object.keys(criteriaMap).map((key, idx) => {
@@ -912,15 +955,21 @@ ${tableRowsExample}
                 };
             });
 
-            totalScore = finalParsed.total !== null && !isNaN(finalParsed.total)
-                ? Math.round(finalParsed.total)
-                : breakdownDetails.reduce((sum, item) => sum + item.score, 0);
+            // Always calculate totalScore from the actual validated breakdown!
+            // Never trust AI's hallucinated total from the table summary.
+            totalScore = breakdownDetails.reduce((sum, item) => sum + item.score, 0);
+
+            const sanitizedMarkdown = sanitizeMarkdownScoresTable(fullText, breakdownDetails, totalScore);
+            const scoresStr = `[SCORES: ${Object.keys(finalScores).map(k => `${k}=${Math.round(finalScores[k])}`).join(",")}]`;
+            const strengthsText = `${scoresStr}\n\n${sanitizedMarkdown}`;
+
+            setLiveStreamingTexts(prev => ({ ...prev, [app.ID]: sanitizedMarkdown }));
 
             const structuredJSON = JSON.stringify({
                 total_score: totalScore,
                 candidate_basic_info: basicCandidateInfo,
                 main_criteria_breakdown: breakdownDetails,
-                raw_markdown: fullText,
+                raw_markdown: sanitizedMarkdown,
                 analyzed_at: new Date().toISOString()
             });
 
@@ -1262,12 +1311,15 @@ ${resumeText}`;
 
             const parsedMap = parseCriteria(jobCriteria);
             const tableRowsExample = Object.values(parsedMap)
-                .map(info => `| ${info.name} | [คะแนนที่ได้]/${info.max} | [เหตุผลประเมินสั้นๆ ตาม Sub-Criteria] |`)
+                .map(info => {
+                    const half = Math.round(info.max * 0.5);
+                    return `| ${info.name} | [เลือกได้แค่: ${info.max} หรือ ${half} หรือ 0]/${info.max} | [เหตุผลประเมินตาม Sub-Criteria] |`;
+                })
                 .join("\n");
 
             userContent += `\n\n=== ข้อกำหนดการตอบกลับ (ตอบกลับเฉพาะ 2 หัวข้อนี้เท่านั้น) ===
 
-โปรดวิเคราะห์คุณสมบัติใน Resume เทียบกับเกณฑ์หลักทั้ง 3 ระดับ (ระดับดี 100%, ระดับปานกลาง 50%, ระดับแย่ 0%) โดยเกณฑ์หลักแต่ละข้อต้องเลือกประเมินเพียง 1 ใน 3 ระดับนี้เท่านั้น: เต็ม 100%, ครึ่งหนึ่ง 50%, หรือ 0% (ห้ามคิดตัวเลขอื่นๆ หรือเฉลี่ยทศนิยม เช่น 21/25 หรือ 83.33% เด็ดขาด) และตอบกลับในรูปแบบเทมเพลตด้านล่างนี้เป๊ะๆ:
+โปรดวิเคราะห์คุณสมบัติใน Resume เทียบกับเกณฑ์หลักทั้ง 3 ระดับ (ระดับดี = คะแนนเต็มของเกณฑ์นั้น, ระดับปานกลาง = ครึ่งหนึ่ง, ระดับแย่ = 0) โดยเกณฑ์หลักแต่ละข้อต้องเลือกประเมินเพียง 1 ใน 3 ตัวเลขที่กำหนดไว้ในแต่ละแถวเท่านั้น: เต็มเกณฑ์, ครึ่งหนึ่ง, หรือ 0 (ห้ามนำตัวเลข 100 มาใส่ในเกณฑ์ที่คะแนนเต็มไม่ใช่ 100 เช่น เกณฑ์เต็ม 20 ต้องใส่ 20, 10, หรือ 0 เท่านั้น ห้ามใส่ 100/20 เด็ดขาด!) และตอบกลับในรูปแบบเทมเพลตด้านล่างนี้เป๊ะๆ:
 
 ## 1. ข้อมูลผู้สมัคร
 
@@ -1281,11 +1333,13 @@ ${resumeText}`;
 | เกณฑ์ | คะแนน | เหตุผล |
 |---|---|---|
 ${tableRowsExample}
-| **รวมทั้งหมด** | [คะแนนรวมทั้งหมด]/100 | [คำสรุปโดยรวมสั้นๆ] |
+| **รวมทั้งหมด** | [ผลรวมคะแนนทุกเกณฑ์หลักรวมกันจริงๆ]/100 | [คำสรุปโดยรวมสั้นๆ] |
 
 ข้อห้ามสำคัญ:
 - ในหัวข้อ "## 1. ข้อมูลผู้สมัคร" ให้แสดงเฉพาะ 2 บรรทัดคือ **ชื่อ-สกุล** และ **อีเมล** เท่านั้น ห้ามแสดงวันเกิด สถานภาพ ที่อยู่ เงินเดือน หรือวันเริ่มงาน เด็ดขาด
 - หากชื่อผู้สมัครจากฐานข้อมูลระบบเป็นตัวเลข หรือเป็นชื่อมั่ว/ข้อมูลขยะ ให้ดึงชื่อจริงจาก Resume มาใช้แทนเด็ดขาด
+- คะแนนของแต่ละเกณฑ์หลักต้องไม่เกินคะแนนเต็มของเกณฑ์นั้นๆ และต้องคำนวณตรงกับระดับ (ดี/ปานกลาง/แย่) เสมอ (ห้ามใส่ 100/20 เด็ดขาด)
+- ตัวเลขในบรรทัด "**รวมทั้งหมด**" ต้องเป็นผลรวมคะแนนของทุกเกณฑ์หลักรวมกันจริงๆ เสมอ (เช่น 0 + 0 + 0 + 20 = 20/100 ห้ามใส่ 100/100 หากเกณฑ์อื่นๆ ได้ 0 คะแนน)
 - ห้ามย่อหรือเปลี่ยนชื่อเกณฑ์หลักในตาราง และห้ามเพิ่มหัวข้ออื่นเด็ดขาด`;
         }
 
@@ -1790,14 +1844,41 @@ ${tableRowsExample}
                                     </div>
 
                                     {[...applicants]
-                                        .sort((a, b) => (b.AIScreening?.skill_score || 0) - (a.AIScreening?.skill_score || 0))
+                                        .sort((a, b) => {
+                                            const getRealScore = (appObj: any) => {
+                                                const mJob = jobs.find(j => j.ID.toString() === selectedJobId);
+                                                const cMap = parseCriteria(mJob?.criteria || "");
+                                                const bd = parseBreakdownFromStrengths(appObj.AIScreening?.strengths, cMap);
+                                                const bEntries = Object.values(bd);
+                                                if (bEntries.length > 0) {
+                                                    const s = bEntries.reduce((sum, item) => sum + item.score, 0);
+                                                    if (s > 0) return s;
+                                                }
+                                                return appObj.AIScreening?.skill_score || 0;
+                                            };
+                                            return getRealScore(b) - getRealScore(a);
+                                        })
                                         .map((app, idx) => {
                                             const candidateName = app.Candidate
                                                 ? `${app.Candidate.first_name} ${app.Candidate.last_name}`
                                                 : "ไม่ระบุชื่อผู้สมัคร";
 
+                                            // Parse criteria
+                                            const matchedJob = jobs.find(j => j.ID.toString() === selectedJobId);
+                                            const criteriaMap = parseCriteria(matchedJob?.criteria || "");
+                                            const breakdown = parseBreakdownFromStrengths(app.AIScreening?.strengths, criteriaMap);
+
+                                            const breakdownEntries = Object.values(breakdown);
+                                            const sumFromBreakdown = breakdownEntries.length > 0
+                                                ? breakdownEntries.reduce((sum, item) => sum + item.score, 0)
+                                                : 0;
+
+                                            // Auto-heal score display if recorded skill_score diverges from breakdown (e.g. 100 PTS vs sum 20 PTS)
                                             const hasScore = !!app.AIScreening;
-                                            const score = app.AIScreening?.skill_score || 0;
+                                            const score = (sumFromBreakdown > 0 && app.AIScreening?.skill_score && app.AIScreening.skill_score !== sumFromBreakdown)
+                                                ? sumFromBreakdown
+                                                : (app.AIScreening?.skill_score || sumFromBreakdown || 0);
+
                                             const status = analyzingStates[app.ID] || (hasScore ? "done" : "idle");
 
                                             const scoreColor = score >= 80
@@ -1807,11 +1888,6 @@ ${tableRowsExample}
                                                     : score > 0
                                                         ? "bg-rose-50 text-rose-600 border-rose-200"
                                                         : "bg-slate-100 text-slate-500 border-slate-200";
-
-                                            // Parse criteria
-                                            const matchedJob = jobs.find(j => j.ID.toString() === selectedJobId);
-                                            const criteriaMap = parseCriteria(matchedJob?.criteria || "");
-                                            const breakdown = parseBreakdownFromStrengths(app.AIScreening?.strengths, criteriaMap);
 
                                             return (
                                                 <div key={app.ID || idx} className={`rounded-2xl border transition-all flex flex-col font-sans ${

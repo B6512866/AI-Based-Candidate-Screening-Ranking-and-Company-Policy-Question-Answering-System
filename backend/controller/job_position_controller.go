@@ -744,6 +744,30 @@ func (c *JobPositionController) GetApplications(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลผู้สมัครได้"})
 		return
 	}
+
+	// 🛡️ Auto-heal: ตรวจสอบและซ่อมแซมคะแนนผู้สมัครที่มีข้อมูล breakdown ไม่ตรงกับ skill_score (เช่น AI สับสนให้ 100/20)
+	for i := range apps {
+		if apps[i].ScreeningID != nil && apps[i].AIScreening.ID != 0 && apps[i].AIScreening.AnalysisData != "" {
+			var analysisObj struct {
+				MainCriteriaBreakdown []struct {
+					Score float64 `json:"score"`
+				} `json:"main_criteria_breakdown"`
+			}
+			if err := json.Unmarshal([]byte(apps[i].AIScreening.AnalysisData), &analysisObj); err == nil && len(analysisObj.MainCriteriaBreakdown) > 0 {
+				var breakdownSum float64
+				for _, b := range analysisObj.MainCriteriaBreakdown {
+					breakdownSum += b.Score
+				}
+				if breakdownSum > 0 && breakdownSum != apps[i].AIScreening.SkillScore {
+					apps[i].AIScreening.SkillScore = breakdownSum
+					apps[i].AIScore = breakdownSum
+					c.db.Model(&apps[i].AIScreening).Update("skill_score", breakdownSum)
+					c.db.Model(&apps[i]).Update("ai_score", breakdownSum)
+				}
+			}
+		}
+	}
+
 	ctx.JSON(http.StatusOK, gin.H{"data": apps})
 }
 
@@ -916,6 +940,24 @@ func (c *JobPositionController) UpdateApplicationScreening(ctx *gin.Context) {
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
 		return
+	}
+
+	// 🛡️ ป้องกันกรณี AI สับสนคำนวณคะแนนรวมผิดเพี้ยน: บังคับให้ req.Score ตรงกับผลรวมของเกณฑ์จริงเสมอ
+	if req.AnalysisData != "" {
+		var analysisObj struct {
+			MainCriteriaBreakdown []struct {
+				Score float64 `json:"score"`
+			} `json:"main_criteria_breakdown"`
+		}
+		if err := json.Unmarshal([]byte(req.AnalysisData), &analysisObj); err == nil && len(analysisObj.MainCriteriaBreakdown) > 0 {
+			var breakdownSum float64
+			for _, b := range analysisObj.MainCriteriaBreakdown {
+				breakdownSum += b.Score
+			}
+			if breakdownSum > 0 && req.Score != breakdownSum {
+				req.Score = breakdownSum
+			}
+		}
 	}
 
 	var app entity.Application
