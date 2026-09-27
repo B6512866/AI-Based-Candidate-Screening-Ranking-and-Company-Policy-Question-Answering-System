@@ -770,18 +770,18 @@ export default function CandidatesPage() {
             </div>
 
             {/* Candidates Table */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden font-sans">
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden font-sans">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
+                    <table className="w-full text-left border-collapse min-w-[1100px]">
                         <thead>
-                            <tr className="bg-slate-50/80 border-b border-slate-100 text-slate-400 text-xs uppercase tracking-wider font-bold">
-                                <th className="py-3.5 px-4 w-12 text-center">#</th>
-                                <th className="py-3.5 px-6">ผู้สมัคร</th>
-                                <th className="py-3.5 px-6">ตำแหน่งที่สมัคร</th>
-                                <th className="py-3.5 px-6">คะแนน PTS (0-100)</th>
-                                <th className="py-3.5 px-6">สถานะ</th>
-                                <th className="py-3.5 px-6">วันที่ยื่นสมัคร</th>
-                                <th className="py-3.5 px-6 text-right">การจัดการและเอกสาร</th>
+                            <tr className="bg-slate-50/90 border-b border-slate-200/80 text-slate-500 text-xs uppercase tracking-wider font-bold">
+                                <th className="py-4 px-4 w-12 text-center">#</th>
+                                <th className="py-4 px-5 min-w-[210px]">ผู้สมัคร</th>
+                                <th className="py-4 px-4 min-w-[170px]">ตำแหน่งที่สมัคร</th>
+                                <th className="py-4 px-4 min-w-[140px]">คะแนน PTS</th>
+                                <th className="py-4 px-4 min-w-[150px]">สถานะ</th>
+                                <th className="py-4 px-4 min-w-[110px] whitespace-nowrap">วันที่ยื่นสมัคร</th>
+                                <th className="py-4 px-5 text-right min-w-[340px] whitespace-nowrap">เอกสารและการจัดการ</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-sm text-slate-700 font-medium">
@@ -806,30 +806,38 @@ export default function CandidatesPage() {
                                                 key={c.id}
                                                 className={`transition-all hover:bg-slate-50/70 ${isExpanded ? "bg-indigo-50/20" : ""}`}
                                             >
-                                                <td className="py-4 px-4 text-center font-mono font-bold text-slate-400">
+                                                <td className="py-4 px-4 text-center font-mono font-bold text-slate-400 text-xs">
                                                     #{index + 1}
                                                 </td>
-                                                <td className="py-4 px-6">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setIsEditingCandidate(false);
-                                                            setSelectedCandidateModal(c);
-                                                        }}
-                                                        className="text-left group cursor-pointer block"
-                                                        title="คลิกเพื่อเปิดดูโปรไฟล์และแก้ไขข้อมูลผู้สมัคร"
-                                                    >
-                                                        <p className="font-bold text-slate-800 text-base group-hover:text-[#4169E1] transition-colors flex items-center gap-1.5">
-                                                            <span>{c.name}</span>
-                                                            <span className="opacity-0 group-hover:opacity-100 text-[10px] font-bold text-[#4169E1] bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded transition-opacity">
-                                                                ดูโปรไฟล์
-                                                            </span>
-                                                        </p>
-                                                        <p className="text-slate-400 text-xs mt-0.5">{c.email} • {c.phone}</p>
-                                                    </button>
+                                                <td className="py-4 px-5 min-w-[210px]">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-100 text-[#4169E1] font-black text-sm flex items-center justify-center shrink-0 shadow-2xs">
+                                                            {c.name.charAt(0)}
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setIsEditingCandidate(false);
+                                                                    setSelectedCandidateModal(c);
+                                                                }}
+                                                                className="text-left font-bold text-slate-800 text-sm hover:text-[#4169E1] transition-colors truncate block group"
+                                                                title="คลิกเพื่อดูโปรไฟล์และแก้ไขข้อมูลผู้สมัคร"
+                                                            >
+                                                                <span className="group-hover:underline">{c.name}</span>
+                                                            </button>
+                                                            <p className="text-slate-400 text-xs truncate mt-0.5" title={`${c.email} • ${c.phone}`}>
+                                                                {c.email}
+                                                            </p>
+                                                        </div>
+                                                    </div>
                                                 </td>
-                                                <td className="py-4 px-6 text-slate-600 font-semibold">{c.position}</td>
-                                                <td className="py-4 px-6">
+                                                <td className="py-4 px-4 min-w-[170px]">
+                                                    <span className="text-xs font-semibold text-slate-700 bg-slate-100/90 px-2.5 py-1 rounded-lg border border-slate-200/70 inline-block leading-relaxed">
+                                                        {c.position}
+                                                    </span>
+                                                </td>
+                                                <td className="py-4 px-4 min-w-[140px] whitespace-nowrap">
                                                     {editingScoreId === c.id ? (
                                                         <div className="flex items-center gap-1.5">
                                                             <input
@@ -871,7 +879,7 @@ export default function CandidatesPage() {
                                                         </div>
                                                     ) : (
                                                         <div className="flex items-center gap-2 group">
-                                                            <div className="w-20 bg-slate-100 rounded-full h-3 overflow-hidden p-0.5 border border-slate-100 shrink-0">
+                                                            <div className="w-14 bg-slate-100 rounded-full h-2.5 overflow-hidden p-0.5 border border-slate-200 shrink-0">
                                                                 <div
                                                                     className={`h-full rounded-full transition-all ${c.aiScore >= 80
                                                                             ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
@@ -884,8 +892,8 @@ export default function CandidatesPage() {
                                                                     style={{ width: `${c.aiScore}%` }}
                                                                 />
                                                             </div>
-                                                            <div className="flex items-center gap-1">
-                                                                <span className={`font-extrabold text-sm font-mono ${c.aiScore >= 80
+                                                            <div className="flex items-center gap-1 shrink-0">
+                                                                <span className={`font-extrabold text-xs font-mono whitespace-nowrap ${c.aiScore >= 80
                                                                         ? "text-emerald-600"
                                                                         : c.aiScore >= 50
                                                                             ? "text-amber-600"
@@ -903,13 +911,13 @@ export default function CandidatesPage() {
                                                                     className="opacity-0 group-hover:opacity-100 p-1 hover:bg-indigo-50 text-slate-400 hover:text-[#4169E1] rounded-md transition-all cursor-pointer"
                                                                     title="คลิกเพื่อปรับแก้ไขคะแนน PTS"
                                                                 >
-                                                                    <Edit3 className="w-3.5 h-3.5" />
+                                                                    <Edit3 className="w-3 h-3" />
                                                                 </button>
                                                             </div>
                                                         </div>
                                                     )}
                                                 </td>
-                                                <td className="py-4 px-6">
+                                                <td className="py-4 px-4 min-w-[150px] whitespace-nowrap">
                                                     <div className="flex flex-col items-start gap-1">
                                                         <div className="relative inline-block">
                                                             <select
@@ -920,7 +928,7 @@ export default function CandidatesPage() {
                                                                                 c.status === "interview" || c.status === "interviewed" ? "นัดสัมภาษณ์แล้ว" : c.status
                                                                 }
                                                                 onChange={e => handleStatusChange(c.id, e.target.value)}
-                                                                className={`appearance-none outline-none cursor-pointer pl-3 pr-7 py-1 rounded-full text-xs font-extrabold transition-all border shadow-2xs ${c.status === "ผ่าน" || c.status === "ผ่านการคัดเลือก" || c.status === "approved" || c.status === "accepted" || c.status === "passed" || c.status === "pass"
+                                                                className={`appearance-none outline-none cursor-pointer pl-3 pr-7 py-1 rounded-full text-xs font-extrabold transition-all border shadow-2xs whitespace-nowrap ${c.status === "ผ่าน" || c.status === "ผ่านการคัดเลือก" || c.status === "approved" || c.status === "accepted" || c.status === "passed" || c.status === "pass"
                                                                         ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
                                                                         : c.status === "รอพิจารณา" || c.status === "pending" || c.status === "waiting"
                                                                             ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
@@ -943,7 +951,7 @@ export default function CandidatesPage() {
                                                         {(c.status === "รอนัดสัมภาษณ์" || c.status === "shortlisted") && (
                                                             <Link
                                                                 to="/hr/interviews"
-                                                                className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-600 hover:text-purple-800 hover:underline pl-1"
+                                                                className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-600 hover:text-purple-800 hover:underline pl-1 whitespace-nowrap"
                                                                 title="ไปหน้านัดหมายสัมภาษณ์เพื่อระบุวันเวลา"
                                                             >
                                                                 <Sparkles className="w-3 h-3 text-purple-500" />
@@ -952,62 +960,70 @@ export default function CandidatesPage() {
                                                         )}
                                                     </div>
                                                 </td>
-                                                <td className="py-4 px-6 text-slate-400 text-xs">{c.appliedDate}</td>
-                                                <td className="py-4 px-6 text-right">
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        <button
-                                                            onClick={() => {
-                                                                setActiveDocTab("resume");
-                                                                setViewingResumeModal(c);
-                                                            }}
-                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/80 transition-all cursor-pointer shadow-2xs"
-                                                            title="เปิดดูเอกสาร Resume หรือเนื้อหาประวัติผู้สมัคร"
-                                                        >
-                                                            <FileText className="w-3.5 h-3.5 text-amber-600" />
-                                                            <span>ดู Resume</span>
-                                                        </button>
+                                                <td className="py-4 px-4 text-slate-500 text-xs min-w-[110px] whitespace-nowrap">
+                                                    {c.appliedDate}
+                                                </td>
+                                                <td className="py-4 px-5 text-right min-w-[340px] whitespace-nowrap">
+                                                    <div className="flex items-center justify-end gap-1.5">
+                                                        {/* Document group */}
+                                                        <div className="inline-flex items-center bg-slate-100/90 p-0.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setActiveDocTab("resume");
+                                                                    setViewingResumeModal(c);
+                                                                }}
+                                                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-amber-800 hover:bg-white hover:text-amber-900 transition-all cursor-pointer shadow-2xs"
+                                                                title="เปิดดูเอกสาร Resume"
+                                                            >
+                                                                <FileText className="w-3.5 h-3.5 text-amber-600" />
+                                                                <span>Resume</span>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setActiveDocTab("transcript");
+                                                                    setViewingResumeModal(c);
+                                                                }}
+                                                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs ${
+                                                                    c.transcriptUrl || c.transcriptText
+                                                                        ? "text-[#4169E1] hover:bg-white hover:text-indigo-900"
+                                                                        : "text-slate-400 opacity-60 hover:bg-white"
+                                                                }`}
+                                                                title="เปิดดูเอกสาร Transcript"
+                                                            >
+                                                                <GraduationCap className="w-3.5 h-3.5 text-[#4169E1]" />
+                                                                <span>Transcript</span>
+                                                            </button>
+                                                        </div>
 
-                                                        <button
-                                                            onClick={() => {
-                                                                setActiveDocTab("transcript");
-                                                                setViewingResumeModal(c);
-                                                            }}
-                                                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs border ${
-                                                                c.transcriptUrl || c.transcriptText
-                                                                    ? "bg-blue-50 hover:bg-blue-100 text-[#4169E1] border-blue-200/80"
-                                                                    : "bg-slate-50 text-slate-500 hover:bg-slate-100 border-slate-200 opacity-70"
-                                                            }`}
-                                                            title="เปิดดูเอกสาร Transcript / ใบแสดงผลการเรียน"
-                                                        >
-                                                            <GraduationCap className="w-3.5 h-3.5 text-[#4169E1]" />
-                                                            <span>ดู Transcript</span>
-                                                        </button>
-
+                                                        {/* Criteria Breakdown button */}
                                                         <button
                                                             onClick={() => toggleExpandRow(c.id)}
-                                                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${isExpanded
+                                                            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                                                                isExpanded
                                                                     ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-                                                                    : "bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200"
-                                                                }`}
-                                                            title="ดูคะแนน Criteria & Sub-Criteria"
+                                                                    : "bg-white text-slate-700 hover:bg-slate-50 border-slate-200/90 shadow-2xs"
+                                                            }`}
+                                                            title="ดูเกณฑ์ประเมิน Criteria"
                                                         >
                                                             <BarChart3 className="w-3.5 h-3.5" />
-                                                            <span>คะแนน Criteria</span>
-                                                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                                            <span>เกณฑ์</span>
+                                                            {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                                                         </button>
 
+                                                        {/* Edit button */}
                                                         <button
                                                             onClick={() => {
                                                                 setSelectedCandidateModal(c);
                                                                 startEditingCandidate(c);
                                                             }}
-                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white transition-all cursor-pointer shadow-xs"
+                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white transition-all cursor-pointer shadow-2xs"
                                                             title="แก้ไขข้อมูลผู้สมัครคนนี้"
                                                         >
                                                             <Edit3 className="w-3.5 h-3.5" />
                                                             <span>แก้ไข</span>
                                                         </button>
 
+                                                        {/* View Profile button */}
                                                         <button
                                                             onClick={() => {
                                                                 setIsEditingCandidate(false);
