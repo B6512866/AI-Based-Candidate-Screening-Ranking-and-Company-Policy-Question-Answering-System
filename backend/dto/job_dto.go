@@ -28,6 +28,12 @@ type GenerateCriteriaRequest struct {
 	JobDescription string `json:"job_description" binding:"required"`
 }
 
+type GenerateJobRequest struct {
+	Prompt     string `json:"prompt"`
+	JobTitle   string `json:"job_title"`
+	Department string `json:"department"`
+}
+
 type CreateOrUpdateJobRequest struct {
 	Title            string          `json:"title" binding:"required"`
 	Department       string          `json:"department"`

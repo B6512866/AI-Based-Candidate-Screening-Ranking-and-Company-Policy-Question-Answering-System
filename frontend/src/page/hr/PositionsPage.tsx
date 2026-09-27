@@ -37,6 +37,8 @@ import {
     getapplications,
     updateApplicationScreening,
     extractJobInfoFromImage,
+    generateJobFromPrompt,
+    generateCriteriaFromText,
     JOB_STATUS_OPEN,
     JOB_STATUS_CLOSED,
     type JobStatus,
@@ -281,6 +283,15 @@ export default function PositionsPage() {
     const [analyzingImage, setAnalyzingImage] =
         useState(false);
 
+    const [aiMode, setAiMode] =
+        useState<"image" | "prompt">("image");
+    const [aiPrompt, setAiPrompt] =
+        useState<string>("");
+    const [generatingWithAI, setGeneratingWithAI] =
+        useState<boolean>(false);
+    const [generatingCriteria, setGeneratingCriteria] =
+        useState<boolean>(false);
+
     const [jobImageUrl, setJobImageUrl] =
         useState<string>("");
     const [jobImageUrls, setJobImageUrls] =
@@ -511,6 +522,134 @@ export default function PositionsPage() {
     };
 
     /* =====================================================
+       AI HELPERS & PROMPT GENERATION
+    ===================================================== */
+
+    const appendSection = (
+        current: string,
+        heading: string,
+        items: string[] | undefined
+    ) => {
+        if (!Array.isArray(items) || items.length === 0) {
+            return current;
+        }
+
+        const section = `${heading}:\n${items
+            .map((item) => `- ${item}`)
+            .join("\n")}`;
+
+        return current
+            ? `${current}\n\n${section}`
+            : section;
+    };
+
+    const handleAIPromptGenerate = async () => {
+        const query = aiPrompt.trim() || editTitle.trim();
+        if (!query) {
+            setMessage({
+                text: "กรุณาระบุชื่อตำแหน่งงาน หรือคำอธิบายสั้นๆ เพื่อให้ AI ร่างข้อมูลให้",
+                type: "error",
+            });
+            return;
+        }
+
+        try {
+            setGeneratingWithAI(true);
+            setMessage(null);
+
+            const response = await generateJobFromPrompt(
+                aiPrompt,
+                editTitle,
+                editDepartment
+            );
+
+            if (response.status !== "success" || !response.data) {
+                throw new Error("AI ไม่สามารถร่างประกาศงานได้");
+            }
+
+            const ai = response.data;
+
+            if (ai.title) setEditTitle(ai.title);
+            if (ai.department) setEditDepartment(ai.department);
+            if (ai.location) setEditLocation(ai.location);
+            if (ai.salary) setEditSalary(ai.salary);
+            if (ai.type) setEditJobType(ai.type);
+
+            let description = ai.description || ai.job_description || "";
+            description = appendSection(description, "หน้าที่ความรับผิดชอบ", ai.responsibilities);
+            description = appendSection(description, "คุณสมบัติผู้สมัคร", ai.qualifications);
+            setEditDescription(description);
+
+            if (Array.isArray(ai.benefits) && ai.benefits.length > 0) {
+                setEditBenefits(ai.benefits.map((item) => `- ${item}`).join("\n"));
+            }
+
+            if (ai.contact_info) setEditContactInfo(ai.contact_info);
+
+            if (Array.isArray(ai.suggested_criteria) && ai.suggested_criteria.length > 0) {
+                setCriteriaList(ai.suggested_criteria);
+                const expanded: Record<string, boolean> = {};
+                ai.suggested_criteria.forEach((criterion) => {
+                    expanded[criterion.id] = true;
+                });
+                setExpandedCriteria(expanded);
+            }
+
+            setMessage({
+                text: `✨ AI ร่างตำแหน่งงาน "${ai.title || query}" พร้อมเกณฑ์ประเมินสำเร็จเรียบร้อย!`,
+                type: "success",
+            });
+        } catch (error) {
+            console.error("AI prompt generate error:", error);
+            setMessage({
+                text: error instanceof Error ? error.message : "ไม่สามารถร่างประกาศงานด้วย AI ได้",
+                type: "error",
+            });
+        } finally {
+            setGeneratingWithAI(false);
+        }
+    };
+
+    const handleAIGenerateCriteria = async () => {
+        if (!editTitle.trim()) {
+            setMessage({
+                text: "กรุณาระบุชื่อตำแหน่งงานก่อนให้ AI สร้าง Criteria",
+                type: "error",
+            });
+            return;
+        }
+
+        try {
+            setGeneratingCriteria(true);
+            setMessage(null);
+
+            const newCriteria = await generateCriteriaFromText(editTitle, editDescription);
+            if (Array.isArray(newCriteria) && newCriteria.length > 0) {
+                setCriteriaList(newCriteria);
+                const expanded: Record<string, boolean> = {};
+                newCriteria.forEach((criterion) => {
+                    expanded[criterion.id] = true;
+                });
+                setExpandedCriteria(expanded);
+                setMessage({
+                    text: "✨ AI สร้าง Criteria และระดับเกณฑ์ย่อยตามตำแหน่งงานสำเร็จแล้ว!",
+                    type: "success",
+                });
+            } else {
+                throw new Error("AI ไม่ได้ส่งรายการเกณฑ์ประเมินกลับมา");
+            }
+        } catch (error) {
+            console.error("AI generate criteria error:", error);
+            setMessage({
+                text: error instanceof Error ? error.message : "ไม่สามารถสร้าง Criteria ด้วย AI ได้",
+                type: "error",
+            });
+        } finally {
+            setGeneratingCriteria(false);
+        }
+    };
+
+    /* =====================================================
        IMAGE UPLOAD
     ===================================================== */
 
@@ -598,24 +737,6 @@ export default function PositionsPage() {
                 ai.description ||
                 ai.job_description ||
                 "";
-
-            const appendSection = (
-                current: string,
-                heading: string,
-                items: string[] | undefined
-            ) => {
-                if (!Array.isArray(items) || items.length === 0) {
-                    return current;
-                }
-
-                const section = `${heading}:\n${items
-                    .map((item) => `- ${item}`)
-                    .join("\n")}`;
-
-                return current
-                    ? `${current}\n\n${section}`
-                    : section;
-            };
 
             /*
              * ถ้า AI ส่ง responsibilities มา
@@ -951,7 +1072,7 @@ export default function PositionsPage() {
             const cleanedCriteria =
                 criteriaList.map(
                     (criterion) => ({
-                        ...(criterion.ID
+                        ...(!isCreating && criterion.ID
                             ? {
                                 ID:
                                     criterion.ID,
@@ -968,7 +1089,7 @@ export default function PositionsPage() {
                         sub_criteria:
                             criterion.sub_criteria.map(
                                 (sub) => ({
-                                    ...(sub.ID
+                                    ...(!isCreating && sub.ID
                                         ? {
                                             ID:
                                                 sub.ID,
@@ -1748,68 +1869,156 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                 "editor" ? (
                                     <div className="flex flex-col space-y-6">
                                         {/* =================================================
-                                            AI IMAGE UPLOAD
+                                            AI ASSISTANT (IMAGE UPLOAD & TEXT PROMPT)
                                         ================================================= */}
 
-                                        <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-5">
-                                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                                <div>
-                                                    <div className="flex items-center gap-2">
-                                                        <Sparkles className="w-5 h-5 text-[#4169E1]" />
-
-                                                        <h3 className="font-bold text-slate-800">
-                                                            วิเคราะห์ประกาศงานด้วย AI
-                                                        </h3>
+                                        <div className="rounded-2xl border border-blue-200/80 bg-gradient-to-br from-blue-50/70 via-indigo-50/40 to-white p-5 shadow-sm">
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-blue-100/80">
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className="p-2 rounded-xl bg-blue-600 text-white shadow-sm shadow-blue-200">
+                                                        <Sparkles className="w-4 h-4" />
                                                     </div>
-
-                                                    <p className="text-xs text-slate-500 mt-1">
-                                                        อัปโหลดรูปประกาศงาน
-                                                        แล้ว AI
-                                                        จะอ่านข้อมูลและเติมลงใน Form
-                                                        ให้อัตโนมัติ
-                                                    </p>
+                                                    <div>
+                                                        <h3 className="font-bold text-slate-800 text-sm">
+                                                            สร้างตำแหน่งงานด้วย AI (AI Job Assistant)
+                                                        </h3>
+                                                        <p className="text-xs text-slate-500">
+                                                            เลือกวิธี: อัปโหลดรูปภาพประกาศงาน หรือ พิมพ์ชื่อตำแหน่งให้ AI ช่วยร่างอัตโนมัติ
+                                                        </p>
+                                                    </div>
                                                 </div>
 
-                                                <div>
-                                                    <input
-                                                        ref={
-                                                            fileInputRef
-                                                        }
-                                                        type="file"
-                                                        accept="image/png,image/jpeg,image/jpg,image/webp"
-                                                        multiple
-                                                        onChange={
-                                                            handleAIImageAnalysis
-                                                        }
-                                                        className="hidden"
-                                                    />
-
+                                                <div className="flex items-center gap-1 bg-white/90 p-1 rounded-xl border border-blue-100 self-start sm:self-auto shadow-xs">
                                                     <button
                                                         type="button"
-                                                        onClick={
-                                                            handleImageButtonClick
-                                                        }
-                                                        disabled={
-                                                            analyzingImage
-                                                        }
-                                                        className="inline-flex items-center gap-2 bg-[#4169E1] hover:bg-[#3152c4] text-white px-4 py-2.5 rounded-xl text-xs font-bold disabled:opacity-50"
+                                                        onClick={() => setAiMode("image")}
+                                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                                            aiMode === "image"
+                                                                ? "bg-[#4169E1] text-white shadow-xs"
+                                                                : "text-slate-600 hover:text-slate-900"
+                                                        }`}
                                                     >
-                                                        {analyzingImage ? (
-                                                            <>
-                                                                <RefreshCw className="w-4 h-4 animate-spin" />
-
-                                                                กำลังวิเคราะห์...
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <Upload className="w-4 h-4" />
-
-                                                                อัปโหลดรูปภาพ
-                                                            </>
-                                                        )}
+                                                        📷 อัปโหลดรูปภาพ
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setAiMode("prompt")}
+                                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                                            aiMode === "prompt"
+                                                                ? "bg-[#4169E1] text-white shadow-xs"
+                                                                : "text-slate-600 hover:text-slate-900"
+                                                        }`}
+                                                    >
+                                                        ✍️ พิมพ์ร่างด้วย AI
                                                     </button>
                                                 </div>
                                             </div>
+
+                                            {aiMode === "image" ? (
+                                                <div className="mt-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                                    <div>
+                                                        <p className="text-xs font-semibold text-slate-700">
+                                                            อัปโหลดรูปภาพประกาศงาน (รองรับ JPG, PNG, WEBP)
+                                                        </p>
+                                                        <p className="text-xs text-slate-500 mt-0.5">
+                                                            AI จะอ่านข้อความจากทุกภาพ และแปลงเป็นฟอร์มตำแหน่งงาน พร้อมกำหนดเกณฑ์ประเมิน 3 ระดับ
+                                                        </p>
+                                                    </div>
+
+                                                    <div>
+                                                        <input
+                                                            ref={fileInputRef}
+                                                            type="file"
+                                                            accept="image/png,image/jpeg,image/jpg,image/webp"
+                                                            multiple
+                                                            onChange={handleAIImageAnalysis}
+                                                            className="hidden"
+                                                        />
+
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleImageButtonClick}
+                                                            disabled={analyzingImage}
+                                                            className="inline-flex items-center gap-2 bg-[#4169E1] hover:bg-[#3152c4] text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
+                                                        >
+                                                            {analyzingImage ? (
+                                                                <>
+                                                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                                                    กำลังวิเคราะห์รูปภาพ...
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <Upload className="w-4 h-4" />
+                                                                    เลือกรูปประกาศงาน
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="mt-4 space-y-3">
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                                                            ระบุชื่อตำแหน่งงานหรือความต้องการที่คุณต้องการรับสมัคร:
+                                                        </label>
+                                                        <div className="flex flex-col sm:flex-row gap-2">
+                                                            <input
+                                                                type="text"
+                                                                value={aiPrompt}
+                                                                onChange={(e) => setAiPrompt(e.target.value)}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === "Enter") {
+                                                                        e.preventDefault();
+                                                                        handleAIPromptGenerate();
+                                                                    }
+                                                                }}
+                                                                placeholder="เช่น Senior Frontend Developer (React / TS), ฝ่ายสรรหาบุคลากร, ผู้จัดการฝ่ายขาย..."
+                                                                className="flex-1 bg-white border border-blue-200 rounded-xl px-3.5 py-2 text-xs text-slate-800 placeholder-slate-400 outline-none focus:ring-2 focus:ring-[#4169E1]/30 focus:border-[#4169E1]"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleAIPromptGenerate}
+                                                                disabled={generatingWithAI}
+                                                                className="inline-flex items-center justify-center gap-2 bg-[#4169E1] hover:bg-[#3152c4] text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer"
+                                                            >
+                                                                {generatingWithAI ? (
+                                                                    <>
+                                                                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                                                        กำลังร่างข้อมูล...
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+                                                                        ให้ AI ร่างตำแหน่งงานทันที
+                                                                    </>
+                                                                )}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                                        <span className="text-[11px] text-slate-400 font-medium">ตัวอย่าง:</span>
+                                                        {[
+                                                            "Full Stack Developer (Go + React)",
+                                                            "HR Generalist ดูแลสรรหาและ PDPA",
+                                                            "Marketing Specialist (TikTok & Ads)",
+                                                            "Data Analyst เชี่ยวชาญ SQL & PowerBI",
+                                                        ].map((preset) => (
+                                                            <button
+                                                                key={preset}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setAiPrompt(preset);
+                                                                    setEditTitle(preset);
+                                                                }}
+                                                                className="text-[11px] bg-white border border-blue-100 hover:border-blue-300 text-blue-700 hover:bg-blue-50/50 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                                                            >
+                                                                + {preset}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
 
                                             {jobImageUrls.length > 0 && (
                                                 <div className="mt-4 pt-4 border-t border-blue-100">
@@ -2089,17 +2298,36 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                     </p>
                                                 </div>
 
-                                                <button
-                                                    type="button"
-                                                    onClick={
-                                                        addCriterion
-                                                    }
-                                                    className="inline-flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-[#4169E1] px-3 py-2 rounded-lg text-xs font-bold"
-                                                >
-                                                    <Plus className="w-3.5 h-3.5" />
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleAIGenerateCriteria}
+                                                        disabled={generatingCriteria || !editTitle.trim()}
+                                                        className="inline-flex items-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all shadow-xs disabled:opacity-50 cursor-pointer"
+                                                        title="ให้ AI ช่วยสร้าง Criteria จากชื่อตำแหน่งและลักษณะงาน"
+                                                    >
+                                                        {generatingCriteria ? (
+                                                            <>
+                                                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                                                กำลังสร้าง Criteria...
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+                                                                ให้ AI สร้าง Criteria
+                                                            </>
+                                                        )}
+                                                    </button>
 
-                                                    เพิ่ม Criteria
-                                                </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={addCriterion}
+                                                        className="inline-flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-[#4169E1] px-3 py-2 rounded-lg text-xs font-bold cursor-pointer"
+                                                    >
+                                                        <Plus className="w-3.5 h-3.5" />
+                                                        เพิ่ม Criteria
+                                                    </button>
+                                                </div>
                                             </div>
 
                                             {criteriaList.length ===
@@ -2108,27 +2336,42 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                     <Sparkles className="w-8 h-8 text-slate-300 mx-auto mb-2" />
 
                                                     <p className="text-sm font-bold text-slate-500">
-                                                        ยังไม่มี
-                                                        Criteria
+                                                        ยังไม่มี Criteria สำหรับตำแหน่งนี้
                                                     </p>
 
                                                     <p className="text-xs text-slate-400 mt-1">
-                                                        AI
-                                                        อาจไม่สามารถสกัดเกณฑ์จากรูปได้
-                                                        หรือคุณสามารถเพิ่มเองได้
+                                                        สามารถให้ AI สร้างชุดเกณฑ์ประเมิน 3 ระดับให้ทันที หรือกดเพิ่มเองได้
                                                     </p>
 
-                                                    <button
-                                                        type="button"
-                                                        onClick={
-                                                            addCriterion
-                                                        }
-                                                        className="mt-4 inline-flex items-center gap-2 bg-[#4169E1] text-white px-4 py-2 rounded-xl text-xs font-bold"
-                                                    >
-                                                        <Plus className="w-4 h-4" />
+                                                    <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleAIGenerateCriteria}
+                                                            disabled={generatingCriteria || !editTitle.trim()}
+                                                            className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs disabled:opacity-50 cursor-pointer"
+                                                        >
+                                                            {generatingCriteria ? (
+                                                                <>
+                                                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                                                    กำลังสร้าง Criteria...
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <Sparkles className="w-4 h-4 text-yellow-300" />
+                                                                    ให้ AI สร้าง Criteria อัตโนมัติ
+                                                                </>
+                                                            )}
+                                                        </button>
 
-                                                        เพิ่ม Criteria
-                                                    </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={addCriterion}
+                                                            className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
+                                                        >
+                                                            <Plus className="w-4 h-4" />
+                                                            เพิ่ม Criteria เอง
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             ) : (
                                                 <div className="space-y-4">

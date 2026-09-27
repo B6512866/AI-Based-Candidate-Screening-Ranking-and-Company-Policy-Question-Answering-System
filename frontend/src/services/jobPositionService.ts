@@ -487,3 +487,44 @@ export async function extractJobInfoFromImage(
 
     return res.data;
 }
+
+/* =========================================================
+   AI GENERATE JOB FROM PROMPT / TEXT
+========================================================= */
+
+export async function generateJobFromPrompt(
+    prompt: string,
+    jobTitle: string = "",
+    department: string = ""
+): Promise<ExtractJobResponse> {
+    const res = await apiClient.post<ExtractJobResponse>(
+        "/v1/jobs/generate-job",
+        {
+            prompt,
+            job_title: jobTitle,
+            department,
+        },
+        { timeout: 120000 }
+    );
+    return res.data;
+}
+
+/* =========================================================
+   AI GENERATE CRITERIA FROM TEXT
+========================================================= */
+
+export async function generateCriteriaFromText(
+    jobTitle: string,
+    jobDescription: string
+): Promise<Criterion[]> {
+    const res = await apiClient.post<{ status: string; criteria: Criterion[] }>(
+        "/v1/jobs/generate-criteria",
+        {
+            job_title: jobTitle,
+            job_description: jobDescription,
+        },
+        { timeout: 90000 }
+    );
+    return res.data.criteria;
+}
+

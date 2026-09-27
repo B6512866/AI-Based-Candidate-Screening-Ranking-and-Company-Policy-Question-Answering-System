@@ -21,6 +21,7 @@ type Config struct {
 	SMTPEmail           string
 	SMTPPassword        string
 	GeminiAPIKey        string
+	AnthropicAPIKey     string
 	ResendAPIKey        string
 	BrevoAPIKey         string
 	SupabaseURL         string
@@ -46,6 +47,7 @@ func LoadEnv() {
 		SMTPEmail:    getEnv("SMTP_EMAIL", "guymini02479@gmail.com"),
 		SMTPPassword: getEnv("SMTP_PASSWORD", "gjsrvsyeqsixfvlk"),
 		GeminiAPIKey:       getEnv("GEMINI_API_KEY", ""),
+		AnthropicAPIKey:    getEnv("ANTHROPIC_API_KEY", ""),
 		ResendAPIKey:       getEnv("RESEND_API_KEY", ""),
 		BrevoAPIKey:        getEnv("BREVO_API_KEY", ""),
 		SupabaseURL:        getEnv("SUPABASE_URL", "https://dtogkhbjrrwpvvlstpgf.supabase.co"),
