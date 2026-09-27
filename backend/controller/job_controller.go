@@ -130,6 +130,35 @@ func (c *JobController) GenerateCriteria(ctx *gin.Context) {
 	})
 }
 
+// GenerateJob: สร้างตำแหน่งงานและเกณฑ์ประเมินจาก Prompt หรือชื่อตำแหน่งงาน
+func (c *JobController) GenerateJob(ctx *gin.Context) {
+	if c.geminiService == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "AI Service ไม่ได้เปิดใช้งาน"})
+		return
+	}
+
+	var req dto.GenerateJobRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
+		return
+	}
+
+	aiCtx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	result, err := c.geminiService.GenerateJobFromPrompt(aiCtx, req.Prompt, req.JobTitle, req.Department)
+	if err != nil {
+		fmt.Printf("❌ GenerateJob Controller Error: %v\n", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("เกิดข้อผิดพลาดในการร่างตำแหน่งงานด้วย AI: %v", err)})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data":   result,
+	})
+}
+
 // CreateJob: รับข้อมูลที่ HR แก้ไขและยืนยันแล้ว บันทึกลง Database
 func (c *JobController) CreateJob(ctx *gin.Context) {
 	var jobReq entity.JobPosition

@@ -11,5 +11,6 @@ func SetupJobRoutes(router *gin.RouterGroup, jobController *controller.JobContro
 	{
 		jobs.POST("/extract-image", jobController.ExtractFromImage)
 		jobs.POST("/generate-criteria", jobController.GenerateCriteria)
+		jobs.POST("/generate-job", jobController.GenerateJob)
 	}
 }

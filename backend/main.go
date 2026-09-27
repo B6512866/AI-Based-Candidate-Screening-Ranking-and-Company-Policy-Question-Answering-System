@@ -56,11 +56,11 @@ func main() {
 	config.ConnectDatabase()
 	config.SeedAllData()
 
-	geminiService, err := services.NewGeminiService(config.Env.GeminiAPIKey)
+	geminiService, err := services.NewGeminiService(config.Env.GeminiAPIKey, config.Env.AnthropicAPIKey)
 	if err != nil {
-		log.Printf("⚠️ Warning: Gemini Service initialization failed: %v\n", err)
+		log.Printf("⚠️ Warning: AI Vision Service initialization failed: %v\n", err)
 	} else {
-		fmt.Println("✅ Gemini Vision Service initialized successfully!")
+		fmt.Println("✅ AI Vision Service (Gemini & Claude) initialized successfully!")
 	}
 
 	// 1. สร้าง JobService โดยส่ง config.DB เข้าไป
