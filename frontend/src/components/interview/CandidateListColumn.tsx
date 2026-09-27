@@ -39,18 +39,34 @@ export function CandidateListColumn({
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    // 1. กรองผู้สมัครเฉพาะที่มีสถานะ "รอนัดสัมภาษณ์" (หรือมีรายการสัมภาษณ์เดิมอยู่แล้ว)
+    // 1. กรองผู้สมัครเฉพาะที่มีสถานะ "รอนัดสัมภาษณ์" (คัดผู้ที่ผ่านแล้ว หรือไม่ผ่าน/สละสิทธิ์ออก)
     const eligibleCandidates = candidates.filter((app) => {
-        const appStatus = app.status || app.Status || "";
+        const rawStatus = (app.status || app.Status || "").toLowerCase();
+        // ถ้าผู้สมัครผ่านแล้ว หรือปฏิเสธ/ไม่ผ่าน ให้ไม่แสดงในคิวรอนัดสัมภาษณ์
+        if (
+            rawStatus === "ไม่ผ่าน" ||
+            rawStatus === "rejected" ||
+            rawStatus === "failed" ||
+            rawStatus === "fail" ||
+            rawStatus === "ปฏิเสธ" ||
+            rawStatus === "ผ่าน" ||
+            rawStatus === "passed" ||
+            rawStatus === "approved" ||
+            rawStatus === "accepted" ||
+            rawStatus === "ผ่านการคัดเลือก"
+        ) {
+            return false;
+        }
+
         const hasInterview = interviews.some((iv) => {
             const ivAppId = iv.application_id || iv.ApplicationID || iv.Application?.ID;
-            return ivAppId === app.ID;
+            return ivAppId === app.ID && iv.interview_status !== "cancelled" && iv.interview_status !== "completed";
         });
         return (
-            appStatus === "รอนัดสัมภาษณ์" ||
-            appStatus === "interview" ||
-            appStatus === "นัดสัมภาษณ์แล้ว" ||
-            appStatus === "shortlisted" ||
+            rawStatus === "รอนัดสัมภาษณ์" ||
+            rawStatus === "interview" ||
+            rawStatus === "นัดสัมภาษณ์แล้ว" ||
+            rawStatus === "shortlisted" ||
             hasInterview
         );
     });

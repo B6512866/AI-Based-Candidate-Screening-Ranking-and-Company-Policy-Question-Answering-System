@@ -228,6 +228,14 @@ func (c *InterviewController) Update(ctx *gin.Context) {
 	}
 	if req.InterviewStatus != "" {
 		interview.Interview_Status = req.InterviewStatus
+		// 🔄 ซิงค์สถานะ Application ให้สอดคล้องกับสถานะการสัมภาษณ์
+		if req.InterviewStatus == "cancelled" {
+			c.db.Model(&entity.Application{}).Where("id = ?", interview.ApplicationID).Update("status", "ไม่ผ่าน")
+		} else if req.InterviewStatus == "confirmed" {
+			c.db.Model(&entity.Application{}).Where("id = ?", interview.ApplicationID).Update("status", "นัดสัมภาษณ์แล้ว")
+		} else if req.InterviewStatus == "rescheduled" {
+			c.db.Model(&entity.Application{}).Where("id = ?", interview.ApplicationID).Update("status", "รอนัดสัมภาษณ์")
+		}
 	}
 
 	if err := c.db.Save(&interview).Error; err != nil {
@@ -534,6 +542,18 @@ func (c *InterviewController) Respond(ctx *gin.Context) {
 		return
 	}
 	fmt.Printf("[Interview Respond Success] Interview ID %d status changed to %s by candidate (notes: %s)\n", interview.ID, newStatus, notes)
+
+	// 🔄 ซิงค์สถานะของผู้สมัคร (Application.Status) ให้สอดคล้องกับการตอบกลับ
+	if action == "reject" {
+		c.db.Model(&entity.Application{}).Where("id = ?", interview.ApplicationID).Update("status", "ไม่ผ่าน")
+		fmt.Printf("[Application Status Synced] Application ID %d changed to 'ไม่ผ่าน' (ผู้สมัครปฏิเสธการสัมภาษณ์)\n", interview.ApplicationID)
+	} else if action == "confirm" {
+		c.db.Model(&entity.Application{}).Where("id = ?", interview.ApplicationID).Update("status", "นัดสัมภาษณ์แล้ว")
+		fmt.Printf("[Application Status Synced] Application ID %d changed to 'นัดสัมภาษณ์แล้ว' (ผู้สมัครยืนยันการสัมภาษณ์)\n", interview.ApplicationID)
+	} else if action == "reschedule" {
+		c.db.Model(&entity.Application{}).Where("id = ?", interview.ApplicationID).Update("status", "รอนัดสัมภาษณ์")
+		fmt.Printf("[Application Status Synced] Application ID %d changed to 'รอนัดสัมภาษณ์' (ผู้สมัครขอเลื่อนนัด)\n", interview.ApplicationID)
+	}
 
 	// 🔔 แจ้งเตือน HR เมื่อผู้สมัครตอบกลับการสัมภาษณ์
 	var notifTitle, notifMsg, notifCatLabel string
@@ -1317,11 +1337,12 @@ func (c *InterviewController) NotifyResult(ctx *gin.Context) {
 	// อัปเดต application.status ตามผล
 	var newAppStatus string
 	if req.Result == "passed" {
-		newAppStatus = "accepted"
+		newAppStatus = "ผ่าน"
 	} else {
-		newAppStatus = "rejected"
+		newAppStatus = "ไม่ผ่าน"
 	}
 	c.db.Model(&entity.Application{}).Where("id = ?", interview.ApplicationID).Update("status", newAppStatus)
+	fmt.Printf("[Application Status Synced] Application ID %d changed to '%s' (แจ้งผลสัมภาษณ์)\n", interview.ApplicationID, newAppStatus)
 
 	// ส่งอีเมลแจ้งผล
 	candName := fmt.Sprintf("%s %s", interview.Application.Candidate.FirstName, interview.Application.Candidate.LastName)
@@ -1399,6 +1420,18 @@ func (c *InterviewController) UpdateScore(ctx *gin.Context) {
 	}
 	if req.InterviewResult != nil && (*req.InterviewResult == "passed" || *req.InterviewResult == "failed" || *req.InterviewResult == "") {
 		updates["interview_result"] = *req.InterviewResult
+		// 🔄 ซิงค์สถานะ Application และสถานะสัมภาษณ์ตามผล
+		if *req.InterviewResult == "passed" {
+			updates["interview_status"] = "completed"
+			c.db.Model(&entity.Application{}).Where("id = ?", interview.ApplicationID).Update("status", "ผ่าน")
+			fmt.Printf("[Application Status Synced] Application ID %d changed to 'ผ่าน' (สัมภาษณ์ผ่าน)\n", interview.ApplicationID)
+		} else if *req.InterviewResult == "failed" {
+			updates["interview_status"] = "completed"
+			c.db.Model(&entity.Application{}).Where("id = ?", interview.ApplicationID).Update("status", "ไม่ผ่าน")
+			fmt.Printf("[Application Status Synced] Application ID %d changed to 'ไม่ผ่าน' (สัมภาษณ์ไม่ผ่าน)\n", interview.ApplicationID)
+		} else if *req.InterviewResult == "" {
+			c.db.Model(&entity.Application{}).Where("id = ?", interview.ApplicationID).Update("status", "นัดสัมภาษณ์แล้ว")
+		}
 	}
 
 	if len(updates) > 0 {

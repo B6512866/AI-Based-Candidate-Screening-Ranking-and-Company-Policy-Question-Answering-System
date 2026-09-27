@@ -3,7 +3,7 @@ import {
     Award, CheckCircle2, XCircle, Search, Clock, Sparkles,
     Mail, Calendar, Video, MapPin, Phone,
     Edit3, Send, Loader2, X, Eye,
-    RefreshCw, UserCheck, Check,
+    RefreshCw, UserCheck, Check, ChevronDown,
 } from "lucide-react";
 import {
     getAllInterviews, notifyInterviewResult, updateInterviewScore
@@ -329,6 +329,30 @@ export default function InterviewResultsPage() {
             alert(err.response?.data?.error || "ไม่สามารถบันทึกคะแนนได้");
         } finally {
             setSavingScoreId(null);
+        }
+    };
+
+    // ── Quick Result Change directly from table ──
+    const handleQuickResultChange = async (id: number, newResult: "passed" | "failed") => {
+        if (!newResult) return;
+        try {
+            await updateInterviewScore(id, { interview_result: newResult });
+            setInterviews(prev => prev.map(iv => {
+                if (iv.ID === id) {
+                    const updatedApp = iv.Application || iv.application;
+                    const newStatus = newResult === "passed" ? "ผ่าน" : "ไม่ผ่าน";
+                    return {
+                        ...iv,
+                        interview_result: newResult,
+                        interview_status: "completed",
+                        Application: updatedApp ? { ...updatedApp, status: newStatus, Status: newStatus } : undefined,
+                        application: updatedApp ? { ...updatedApp, status: newStatus, Status: newStatus } : undefined,
+                    };
+                }
+                return iv;
+            }));
+        } catch (err: any) {
+            alert(err.response?.data?.error || "ไม่สามารถเปลี่ยนผลการสัมภาษณ์ได้");
         }
     };
 
@@ -784,48 +808,50 @@ export default function InterviewResultsPage() {
                                                 </div>
                                             </td>
 
-                                            {/* Result Status */}
+                                            {/* Result Status & Quick Decision Selector */}
                                             <td className="px-5 py-4.5 text-center">
-                                                {iv.interview_result === "passed" ? (
-                                                    <div className="flex flex-col items-center gap-1.5">
-                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-2xl text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs">
-                                                            <CheckCircle2 className="w-3.5 h-3.5" />
-                                                            ผ่านการสัมภาษณ์
-                                                        </span>
-                                                        {iv.result_acknowledged ? (
-                                                            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-bold bg-emerald-100/60 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                                                <div className="flex flex-col items-center gap-1.5">
+                                                    <div className="relative inline-block">
+                                                        <select
+                                                            value={iv.interview_result || ""}
+                                                            onChange={(e) => handleQuickResultChange(iv.ID, e.target.value as "passed" | "failed")}
+                                                            className={`appearance-none outline-none cursor-pointer pl-3 pr-7 py-1.5 rounded-2xl text-xs font-black transition-all border shadow-2xs ${
+                                                                iv.interview_result === "passed"
+                                                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                                                    : iv.interview_result === "failed"
+                                                                        ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                                                                        : "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+                                                            }`}
+                                                            title="คลิกเพื่อเลือกผลการตัดสินสัมภาษณ์ (ผ่าน/ไม่ผ่าน)"
+                                                        >
+                                                            <option value="" disabled hidden>⏳ รอแจ้งผล</option>
+                                                            <option value="passed">🟢 ผ่านการสัมภาษณ์</option>
+                                                            <option value="failed">🔴 ไม่ผ่านการสัมภาษณ์</option>
+                                                        </select>
+                                                        <ChevronDown className="w-3 h-3 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
+                                                    </div>
+
+                                                    {iv.interview_result ? (
+                                                        iv.result_acknowledged ? (
+                                                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                                                                iv.interview_result === "passed"
+                                                                    ? "text-emerald-700 bg-emerald-100/60 border-emerald-200/60"
+                                                                    : "text-rose-600 bg-rose-100/60 border-rose-200/60"
+                                                            }`}>
                                                                 <Check className="w-3 h-3" />
                                                                 ผู้สมัครรับทราบแล้ว
                                                             </span>
                                                         ) : (
                                                             <span className="text-[10px] text-slate-400 font-medium">
-                                                                รอผู้สมัครรับทราบ
+                                                                รอส่งอีเมลแจ้งผล
                                                             </span>
-                                                        )}
-                                                    </div>
-                                                ) : iv.interview_result === "failed" ? (
-                                                    <div className="flex flex-col items-center gap-1.5">
-                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-2xl text-xs font-black bg-rose-50 text-rose-600 border border-rose-200 shadow-xs">
-                                                            <XCircle className="w-3.5 h-3.5" />
-                                                            ไม่ผ่านการสัมภาษณ์
+                                                        )
+                                                    ) : (
+                                                        <span className="text-[10px] text-slate-400 font-medium">
+                                                            รอผลการตัดสิน
                                                         </span>
-                                                        {iv.result_acknowledged ? (
-                                                            <span className="inline-flex items-center gap-1 text-[10px] text-rose-600 font-bold bg-rose-100/60 px-2 py-0.5 rounded-md border border-rose-200/60">
-                                                                <Check className="w-3 h-3" />
-                                                                ผู้สมัครรับทราบแล้ว
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-[10px] text-slate-400 font-medium">
-                                                                รอผู้สมัครรับทราบ
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-2xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                                        <Clock className="w-3.5 h-3.5" />
-                                                        รอแจ้งผล
-                                                    </span>
-                                                )}
+                                                    )}
+                                                </div>
                                             </td>
 
                                             {/* Action Button */}
