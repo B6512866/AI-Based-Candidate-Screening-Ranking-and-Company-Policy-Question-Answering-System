@@ -138,7 +138,7 @@ func (s *GeminiService) ExtractJobInfoFromImages(ctx context.Context, images []J
 
 	// 1. ลองใช้ Gemini ก่อน
 	if s.client != nil {
-		candidateModels := []string{"gemini-2.5-flash", "gemini-flash-latest", "gemini-3.5-flash", "gemini-3-flash-preview"}
+		candidateModels := []string{"gemini-3-flash-preview", "gemini-3.1-flash-lite-preview", "gemini-flash-latest"}
 		for _, modelName := range candidateModels {
 			model := s.client.GenerativeModel(modelName)
 			model.ResponseMIMEType = "application/json"
@@ -191,6 +191,89 @@ func (s *GeminiService) ExtractJobInfoFromImages(ctx context.Context, images []J
 	return nil, fmt.Errorf("ไม่สามารถวิเคราะห์ข้อมูลรูปภาพได้")
 }
 
+// callClaude sends a request to Anthropic Claude models (claude-sonnet-5 with claude-haiku fallback)
+func (s *GeminiService) callClaude(ctx context.Context, content interface{}, maxTokens int) (string, error) {
+	if s.anthropicKey == "" {
+		return "", fmt.Errorf("anthropic key not configured")
+	}
+
+	candidateModels := []string{"claude-sonnet-5", "claude-haiku-4-5-20251001"}
+	var lastErr error
+
+	for _, model := range candidateModels {
+		payload := map[string]interface{}{
+			"model":      model,
+			"max_tokens": maxTokens,
+			"messages": []map[string]interface{}{
+				{
+					"role":    "user",
+					"content": content,
+				},
+			},
+		}
+		bodyBytes, err := json.Marshal(payload)
+		if err != nil {
+			return "", err
+		}
+
+		req, err := http.NewRequestWithContext(ctx, "POST", "https://api.anthropic.com/v1/messages", bytes.NewBuffer(bodyBytes))
+		if err != nil {
+			return "", err
+		}
+		req.Header.Set("x-api-key", s.anthropicKey)
+		req.Header.Set("anthropic-version", "2023-06-01")
+		req.Header.Set("content-type", "application/json")
+
+		client := &http.Client{Timeout: 90 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			fmt.Printf("⚠️ Claude model %s network error: %v, trying next...\n", model, err)
+			continue
+		}
+
+		respBytes, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBytes))
+			fmt.Printf("⚠️ Claude model %s returned status %d: %s\n", model, resp.StatusCode, string(respBytes))
+			continue
+		}
+
+		var claudeResp struct {
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+			Error *struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+
+		if err := json.Unmarshal(respBytes, &claudeResp); err != nil {
+			lastErr = err
+			continue
+		}
+		if claudeResp.Error != nil {
+			lastErr = fmt.Errorf("claude api error: %s", claudeResp.Error.Message)
+			continue
+		}
+
+		var textBuilder strings.Builder
+		for _, c := range claudeResp.Content {
+			if c.Type == "text" {
+				textBuilder.WriteString(c.Text)
+			}
+		}
+		out := textBuilder.String()
+		if strings.TrimSpace(out) != "" {
+			return out, nil
+		}
+	}
+	return "", lastErr
+}
+
 // extractJobInfoViaClaudeVision: ใช้ Anthropic Claude วิเคราะห์รูปภาพ
 func (s *GeminiService) extractJobInfoViaClaudeVision(ctx context.Context, images []JobImageInput, prompt string) (*dto.ExtractedJobResponse, error) {
 	if s.anthropicKey == "" {
@@ -221,63 +304,12 @@ func (s *GeminiService) extractJobInfoViaClaudeVision(ctx context.Context, image
 		"text": prompt + "\n\nOutput only raw JSON.",
 	})
 
-	payload := map[string]interface{}{
-		"model":      "claude-3-5-sonnet-20241022",
-		"max_tokens": 4096,
-		"messages": []map[string]interface{}{
-			{
-				"role":    "user",
-				"content": contentParts,
-			},
-		},
-	}
-
-	bodyBytes, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.anthropic.com/v1/messages", bytes.NewBuffer(bodyBytes))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("x-api-key", s.anthropicKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
-	req.Header.Set("content-type", "application/json")
-
-	client := &http.Client{Timeout: 90 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	respBytes, err := io.ReadAll(resp.Body)
+	rawText, err := s.callClaude(ctx, contentParts, 4096)
 	if err != nil {
 		return nil, err
 	}
 
-	var claudeResp struct {
-		Content []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		} `json:"content"`
-		Error *struct {
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-
-	if err := json.Unmarshal(respBytes, &claudeResp); err != nil {
-		return nil, err
-	}
-	if claudeResp.Error != nil {
-		return nil, fmt.Errorf("claude api error: %s", claudeResp.Error.Message)
-	}
-
-	var textBuilder strings.Builder
-	for _, c := range claudeResp.Content {
-		if c.Type == "text" {
-			textBuilder.WriteString(c.Text)
-		}
-	}
-
-	cleanJSON := extractCleanJSON(textBuilder.String())
+	cleanJSON := extractCleanJSON(rawText)
 	var extracted dto.ExtractedJobResponse
 	if err := json.Unmarshal([]byte(cleanJSON), &extracted); err != nil {
 		return nil, fmt.Errorf("json parse error from claude: %v", err)
@@ -330,7 +362,7 @@ func (s *GeminiService) GenerateJobFromPrompt(ctx context.Context, userPrompt, j
 
 	// 1. ลอง Gemini ก่อน
 	if s.client != nil {
-		candidateModels := []string{"gemini-2.5-flash", "gemini-flash-latest", "gemini-3.5-flash"}
+		candidateModels := []string{"gemini-3-flash-preview", "gemini-3.1-flash-lite-preview", "gemini-flash-latest"}
 		for _, m := range candidateModels {
 			model := s.client.GenerativeModel(m)
 			model.ResponseMIMEType = "application/json"
@@ -338,6 +370,7 @@ func (s *GeminiService) GenerateJobFromPrompt(ctx context.Context, userPrompt, j
 			resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 			if err != nil {
 				lastErr = err
+				fmt.Printf("⚠️ Gemini model %s failed: %v, trying next...\n", m, err)
 				continue
 			}
 			if len(resp.Candidates) > 0 && len(resp.Candidates[0].Content.Parts) > 0 {
@@ -360,42 +393,17 @@ func (s *GeminiService) GenerateJobFromPrompt(ctx context.Context, userPrompt, j
 	// 2. Fallback สู่ Claude
 	if s.anthropicKey != "" {
 		fmt.Println("🔄 Generating job via Claude API...")
-		payload := map[string]interface{}{
-			"model":      "claude-3-5-sonnet-20241022",
-			"max_tokens": 4096,
-			"messages": []map[string]interface{}{
-				{
-					"role":    "user",
-					"content": prompt + "\n\nOutput only pure raw JSON.",
-				},
-			},
-		}
-		bodyBytes, _ := json.Marshal(payload)
-		req, err := http.NewRequestWithContext(ctx, "POST", "https://api.anthropic.com/v1/messages", bytes.NewBuffer(bodyBytes))
+		rawText, err := s.callClaude(ctx, prompt+"\n\nOutput only pure raw JSON.", 4096)
 		if err == nil {
-			req.Header.Set("x-api-key", s.anthropicKey)
-			req.Header.Set("anthropic-version", "2023-06-01")
-			req.Header.Set("content-type", "application/json")
-			client := &http.Client{Timeout: 60 * time.Second}
-			resp, err := client.Do(req)
-			if err == nil {
-				defer resp.Body.Close()
-				b, _ := io.ReadAll(resp.Body)
-				var claudeResp struct {
-					Content []struct {
-						Type string `json:"type"`
-						Text string `json:"text"`
-					} `json:"content"`
-				}
-				if json.Unmarshal(b, &claudeResp) == nil && len(claudeResp.Content) > 0 {
-					cleanJSON := extractCleanJSON(claudeResp.Content[0].Text)
-					var job dto.ExtractedJobResponse
-					if json.Unmarshal([]byte(cleanJSON), &job) == nil && job.Title != "" {
-						fmt.Printf("✅ [Claude Text SUCCESS] Generated job '%s'\n", job.Title)
-						return &job, nil
-					}
-				}
+			cleanJSON := extractCleanJSON(rawText)
+			var job dto.ExtractedJobResponse
+			if err := json.Unmarshal([]byte(cleanJSON), &job); err == nil && job.Title != "" {
+				fmt.Printf("✅ [Claude Text SUCCESS] Generated job '%s'\n", job.Title)
+				return &job, nil
 			}
+		} else {
+			fmt.Printf("⚠️ Claude fallback error: %v\n", err)
+			lastErr = err
 		}
 	}
 
@@ -452,7 +460,7 @@ func (s *GeminiService) GenerateCriteriaFromText(ctx context.Context, jobTitle s
 
 	// 1. ลอง Gemini
 	if s.client != nil {
-		candidateModels := []string{"gemini-2.5-flash", "gemini-flash-latest", "gemini-3.5-flash"}
+		candidateModels := []string{"gemini-3-flash-preview", "gemini-3.1-flash-lite-preview", "gemini-flash-latest"}
 		for _, m := range candidateModels {
 			model := s.client.GenerativeModel(m)
 			model.ResponseMIMEType = "application/json"
@@ -460,6 +468,7 @@ func (s *GeminiService) GenerateCriteriaFromText(ctx context.Context, jobTitle s
 			resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 			if err != nil {
 				lastErr = err
+				fmt.Printf("⚠️ Gemini model %s failed: %v, trying next...\n", m, err)
 				continue
 			}
 			if len(resp.Candidates) > 0 && len(resp.Candidates[0].Content.Parts) > 0 {
@@ -480,41 +489,18 @@ func (s *GeminiService) GenerateCriteriaFromText(ctx context.Context, jobTitle s
 
 	// 2. Fallback สู่ Claude
 	if s.anthropicKey != "" {
-		payload := map[string]interface{}{
-			"model":      "claude-3-5-sonnet-20241022",
-			"max_tokens": 4096,
-			"messages": []map[string]interface{}{
-				{
-					"role":    "user",
-					"content": prompt + "\n\nOutput only raw JSON array.",
-				},
-			},
-		}
-		bodyBytes, _ := json.Marshal(payload)
-		req, err := http.NewRequestWithContext(ctx, "POST", "https://api.anthropic.com/v1/messages", bytes.NewBuffer(bodyBytes))
+		fmt.Println("🔄 Generating criteria via Claude API...")
+		rawText, err := s.callClaude(ctx, prompt+"\n\nOutput only raw JSON array.", 4096)
 		if err == nil {
-			req.Header.Set("x-api-key", s.anthropicKey)
-			req.Header.Set("anthropic-version", "2023-06-01")
-			req.Header.Set("content-type", "application/json")
-			client := &http.Client{Timeout: 60 * time.Second}
-			resp, err := client.Do(req)
-			if err == nil {
-				defer resp.Body.Close()
-				b, _ := io.ReadAll(resp.Body)
-				var claudeResp struct {
-					Content []struct {
-						Type string `json:"type"`
-						Text string `json:"text"`
-					} `json:"content"`
-				}
-				if json.Unmarshal(b, &claudeResp) == nil && len(claudeResp.Content) > 0 {
-					cleanJSON := extractCleanJSONArray(claudeResp.Content[0].Text)
-					var criteria []dto.MainCriterionDTO
-					if json.Unmarshal([]byte(cleanJSON), &criteria) == nil && len(criteria) > 0 {
-						return criteria, nil
-					}
-				}
+			cleanJSON := extractCleanJSONArray(rawText)
+			var criteria []dto.MainCriterionDTO
+			if json.Unmarshal([]byte(cleanJSON), &criteria) == nil && len(criteria) > 0 {
+				fmt.Printf("✅ [Claude Criteria SUCCESS] Generated %d criteria\n", len(criteria))
+				return criteria, nil
 			}
+		} else {
+			fmt.Printf("⚠️ Claude fallback error: %v\n", err)
+			lastErr = err
 		}
 	}
 
