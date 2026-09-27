@@ -13,7 +13,8 @@ export const getApiUrl = () => {
     return envUrl;
   }
   const host = getBackendHost();
-  return `http://${host}:8080/api`;
+  const protocol = typeof window !== "undefined" && window.location && window.location.protocol === "https:" ? "https:" : "http:";
+  return `${protocol}//${host}:8080/api`;
 };
 
 export const getBackendBaseUrl = () => {

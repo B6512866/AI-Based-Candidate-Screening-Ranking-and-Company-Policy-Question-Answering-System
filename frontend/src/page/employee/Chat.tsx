@@ -6,8 +6,6 @@ import { getChatHistory, saveChatMessage, getChatSessions, ChatSessionData } fro
 import { getTyphoonApiUrl, getApiUrl } from "../../services/apiClient";
 import AIModelDropdown from "../../components/common/AIModelDropdown";
 
-const TYPHOON_API = getTyphoonApiUrl();
-
 interface Message {
     id: number;
     from: "bot" | "user";
@@ -21,14 +19,67 @@ function generateSessionId() {
 }
 
 async function checkTyphoon(): Promise<boolean> {
+    const fetchWithTimeout = async (url: string, timeoutMs = 4000): Promise<Response> => {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            return await fetch(url, { signal: controller.signal });
+        } finally {
+            clearTimeout(id);
+        }
+    };
+
+    // 1. Try Go backend /api/typhoon-status
     try {
-        // Use backend /api/typhoon-status to avoid CORS issues in browser
-        const r = await fetch(`${getApiUrl()}/typhoon-status?model=typhoon`, { signal: AbortSignal.timeout(12000) });
-        const d = await r.json();
-        return d.local_typhoon === true || (d.online === true && !d.cloud_ai);
+        const r = await fetchWithTimeout(`${getApiUrl()}/typhoon-status?model=typhoon`, 5000);
+        if (r.ok) {
+            const d = await r.json();
+            if (d.local_typhoon === true || d.online === true) {
+                return true;
+            }
+        }
     } catch {
-        return false;
+        // continue
     }
+
+    // 2. Try Go backend proxy /api/typhoon/health
+    try {
+        const r = await fetchWithTimeout(`${getTyphoonApiUrl()}/health`, 5000);
+        if (r.ok) {
+            const d = await r.json();
+            if (d.status === "ok" || d.local_typhoon === true || d.online === true) {
+                return true;
+            }
+        }
+    } catch {
+        // continue
+    }
+
+    // 3. Try direct local FastAPI
+    for (const directUrl of ["http://127.0.0.1:8000/health", "http://localhost:8000/health"]) {
+        try {
+            const r = await fetchWithTimeout(directUrl, 2500);
+            if (r.ok) {
+                const d = await r.json();
+                if (d.status === "ok") return true;
+            }
+        } catch {
+            // continue
+        }
+    }
+
+    // 4. Try loca.lt tunnel
+    try {
+        const r = await fetchWithTimeout("https://hireai-typhoon.loca.lt/health", 3000);
+        if (r.ok) {
+            const d = await r.json();
+            if (d.status === "ok") return true;
+        }
+    } catch {
+        // ignore
+    }
+
+    return false;
 }
 
 export default function EmployeeChat() {
@@ -91,21 +142,26 @@ export default function EmployeeChat() {
 
     // 1. ตรวจสอบสถานะโมเดล AI ออนไลน์
     useEffect(() => {
+        let isMounted = true;
         const verifyOnlineStatus = async () => {
             const isCloudModel = selectedModel.includes("gemini") ||
                 selectedModel.includes("gpt") ||
                 selectedModel.includes("claude") ||
                 selectedModel.startsWith("ft:");
             if (isCloudModel) {
-                setOnline(true);
+                if (isMounted) setOnline(true);
             } else {
+                if (isMounted) setOnline(null);
                 const isTyphoonUp = await checkTyphoon();
-                setOnline(isTyphoonUp);
+                if (isMounted) setOnline(isTyphoonUp);
             }
         };
         verifyOnlineStatus();
-        const interval = setInterval(verifyOnlineStatus, 30000);
-        return () => clearInterval(interval);
+        const interval = setInterval(verifyOnlineStatus, 15000);
+        return () => {
+            isMounted = false;
+            clearInterval(interval);
+        };
     }, [selectedModel]);
 
     // 2. โหลดรายการห้องแชตทั้งหมดจากฝั่งหลังบ้านตอนเริ่มแรก
@@ -243,7 +299,8 @@ export default function EmployeeChat() {
 === เอกสารในคลังความรู้และนโยบายบริษัททั้งหมด (/hr/knowledge) ===
 ${knowledgeContext || "(ขณะนี้ยังไม่มีเอกสารในคลังความรู้ระบบ)"}`;
 
-            const response = await fetch(`${TYPHOON_API}/chat`, {
+            const typhoonApi = getTyphoonApiUrl();
+            const response = await fetch(`${typhoonApi}/chat`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

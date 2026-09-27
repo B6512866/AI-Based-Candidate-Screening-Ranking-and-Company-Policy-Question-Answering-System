@@ -92,20 +92,43 @@ type ChatRequestInput struct {
 	Model        string             `json:"model"`
 }
 
+// getWorkingTyphoonURL checks all candidate URLs (configured target, 127.0.0.1:8000, localhost:8000, tunnel) and returns the first healthy one
+func (c *AIController) getWorkingTyphoonURL() string {
+	rawTarget := strings.TrimRight(strings.TrimSpace(c.typhoonTarget), "/")
+	candidates := []string{
+		rawTarget,
+		"http://127.0.0.1:8000",
+		"http://localhost:8000",
+		"https://hireai-typhoon.loca.lt",
+	}
+
+	client := &http.Client{Timeout: 3 * time.Second}
+	seen := make(map[string]bool)
+	for _, target := range candidates {
+		if target == "" || seen[target] {
+			continue
+		}
+		seen[target] = true
+		req, err := http.NewRequest("GET", target+"/health", nil)
+		if err != nil {
+			continue
+		}
+		req.Header.Set("Bypass-Tunnel-Reminder", "true")
+		resp, err := client.Do(req)
+		if err == nil && resp != nil {
+			statusCode := resp.StatusCode
+			resp.Body.Close()
+			if statusCode == http.StatusOK {
+				return target
+			}
+		}
+	}
+	return ""
+}
+
 // CheckLocalTyphoon checks if local Typhoon server is responsive
 func (c *AIController) isLocalTyphoonOnline() bool {
-	client := &http.Client{Timeout: 8 * time.Second}
-	req, err := http.NewRequest("GET", c.typhoonTarget+"/health", nil)
-	if err != nil {
-		return false
-	}
-	req.Header.Set("Bypass-Tunnel-Reminder", "true")
-	resp, err := client.Do(req)
-	if err != nil || resp == nil {
-		return false
-	}
-	defer resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
+	return c.getWorkingTyphoonURL() != ""
 }
 
 // GET /api/typhoon-status
@@ -188,10 +211,11 @@ func (c *AIController) GetRoles(ctx *gin.Context) {
 
 // forwardToLocalTyphoonOCR forwards OCR multipart request directly using clean http.Client
 func (c *AIController) forwardToLocalTyphoonOCR(ctx *gin.Context, bodyBytes []byte) bool {
-	if !c.isLocalTyphoonOnline() {
+	workingURL := c.getWorkingTyphoonURL()
+	if workingURL == "" {
 		return false
 	}
-	targetURL := c.typhoonTarget + "/ocr"
+	targetURL := workingURL + "/ocr"
 	forwardReq, err := http.NewRequestWithContext(ctx.Request.Context(), "POST", targetURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return false
@@ -317,10 +341,11 @@ func (c *AIController) HandleOCR(ctx *gin.Context) {
 
 // streamLocalTyphoon streams chat response from local Typhoon server directly with immediate flushing
 func (c *AIController) streamLocalTyphoon(ctx *gin.Context, bodyBytes []byte) bool {
-	if !c.isLocalTyphoonOnline() {
+	workingURL := c.getWorkingTyphoonURL()
+	if workingURL == "" {
 		return false
 	}
-	targetURL := c.typhoonTarget + "/chat"
+	targetURL := workingURL + "/chat"
 	forwardReq, err := http.NewRequestWithContext(ctx.Request.Context(), "POST", targetURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return false

@@ -549,14 +549,76 @@ export default function ScreeningPage() {
             setOnline(true);
             return;
         }
+
+        const fetchWithTimeout = async (url: string, timeoutMs = 4000): Promise<Response> => {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                return await fetch(url, { signal: controller.signal });
+            } finally {
+                clearTimeout(id);
+            }
+        };
+
+        // 1. Try Go backend /api/typhoon-status
         try {
-            // Check local Typhoon status from backend
-            const r = await fetch(`${getApiUrl()}/typhoon-status?model=${encodeURIComponent(selectedModel)}`, { signal: AbortSignal.timeout(12000) });
-            const d = await r.json();
-            setOnline(d.local_typhoon === true || (d.online === true && !d.cloud_ai));
+            const r = await fetchWithTimeout(`${getApiUrl()}/typhoon-status?model=${encodeURIComponent(selectedModel)}`, 5000);
+            if (r.ok) {
+                const d = await r.json();
+                if (d.local_typhoon === true || d.online === true) {
+                    setOnline(true);
+                    return;
+                }
+            }
         } catch {
-            setOnline(false);
+            // continue
         }
+
+        // 2. Try Go backend proxy /api/typhoon/health
+        try {
+            const r = await fetchWithTimeout(`${getTyphoonApiUrl()}/health`, 5000);
+            if (r.ok) {
+                const d = await r.json();
+                if (d.status === "ok" || d.local_typhoon === true || d.online === true) {
+                    setOnline(true);
+                    return;
+                }
+            }
+        } catch {
+            // continue
+        }
+
+        // 3. Try direct local FastAPI
+        for (const directUrl of ["http://127.0.0.1:8000/health", "http://localhost:8000/health"]) {
+            try {
+                const r = await fetchWithTimeout(directUrl, 2500);
+                if (r.ok) {
+                    const d = await r.json();
+                    if (d.status === "ok") {
+                        setOnline(true);
+                        return;
+                    }
+                }
+            } catch {
+                // continue
+            }
+        }
+
+        // 4. Try loca.lt tunnel
+        try {
+            const r = await fetchWithTimeout("https://hireai-typhoon.loca.lt/health", 3000);
+            if (r.ok) {
+                const d = await r.json();
+                if (d.status === "ok") {
+                    setOnline(true);
+                    return;
+                }
+            }
+        } catch {
+            // ignore
+        }
+
+        setOnline(false);
     };
 
     // Re-check AI online status when model changes
