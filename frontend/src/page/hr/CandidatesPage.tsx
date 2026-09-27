@@ -3,7 +3,7 @@ import { Search, Sparkles, Eye, RefreshCw, ChevronDown, ChevronUp, X, Award, Fil
 import { Link } from "react-router-dom";
 import apiClient, { getBackendBaseUrl } from "../../services/apiClient";
 import { openFileInNewTab, downloadFile, isPdf, isImage } from "../../utils/fileViewer";
-import { getalljobs, updateApplicationStatus, updateApplicationScreening } from "../../services/jobPositionService";
+import { getalljobs, updateApplicationStatus, updateApplicationScreening, updateCandidateApplicationInfo } from "../../services/jobPositionService";
 import rules from "../../components/rules/rule";
 
 interface SubCriterion {
@@ -46,6 +46,8 @@ interface AnalysisDataObj {
 interface CandidateItem {
     id: string;
     name: string;
+    firstName: string;
+    lastName: string;
     email: string;
     phone: string;
     position: string;
@@ -144,6 +146,95 @@ export default function CandidatesPage() {
     const [activeDocTab, setActiveDocTab] = useState<"resume" | "transcript">("resume");
     const [editingScoreId, setEditingScoreId] = useState<string | null>(null);
     const [editingScoreValue, setEditingScoreValue] = useState<number | string>(0);
+
+    // Edit Candidate Info states
+    const [isEditingCandidate, setIsEditingCandidate] = useState(false);
+    const [editFormCandidate, setEditFormCandidate] = useState<{
+        firstName: string;
+        lastName: string;
+        email: string;
+        phone: string;
+        position: string;
+    }>({
+        firstName: "",
+        lastName: "",
+        email: "",
+        phone: "",
+        position: "",
+    });
+    const [savingCandidateInfo, setSavingCandidateInfo] = useState(false);
+    const [editSuccessMsg, setEditSuccessMsg] = useState<string | null>(null);
+
+    const startEditingCandidate = (c: CandidateItem) => {
+        setEditFormCandidate({
+            firstName: c.firstName || c.name.split(" ")[0] || "",
+            lastName: c.lastName || c.name.split(" ").slice(1).join(" ") || "",
+            email: c.email && c.email !== "-" ? c.email : "",
+            phone: c.phone && c.phone !== "-" ? c.phone : "",
+            position: c.position || "",
+        });
+        setIsEditingCandidate(true);
+        setEditSuccessMsg(null);
+    };
+
+    const handleSaveCandidateInfo = async () => {
+        if (!selectedCandidateModal) return;
+        if (!editFormCandidate.firstName.trim()) {
+            alert("กรุณาระบุชื่อผู้สมัคร");
+            return;
+        }
+
+        setSavingCandidateInfo(true);
+        try {
+            const appId = parseInt(selectedCandidateModal.id);
+            await updateCandidateApplicationInfo(appId, {
+                first_name: editFormCandidate.firstName.trim(),
+                last_name: editFormCandidate.lastName.trim(),
+                email: editFormCandidate.email.trim(),
+                phone: editFormCandidate.phone.trim(),
+                position: editFormCandidate.position.trim(),
+            });
+
+            const newFullName = `${editFormCandidate.firstName.trim()} ${editFormCandidate.lastName.trim()}`.trim();
+
+            setCandidates(prev => prev.map(c => {
+                if (c.id === selectedCandidateModal.id) {
+                    return {
+                        ...c,
+                        name: newFullName,
+                        firstName: editFormCandidate.firstName.trim(),
+                        lastName: editFormCandidate.lastName.trim(),
+                        email: editFormCandidate.email.trim() || c.email,
+                        phone: editFormCandidate.phone.trim() || c.phone,
+                        position: editFormCandidate.position.trim() || c.position,
+                    };
+                }
+                return c;
+            }));
+
+            setSelectedCandidateModal(prev => {
+                if (!prev) return null;
+                return {
+                    ...prev,
+                    name: newFullName,
+                    firstName: editFormCandidate.firstName.trim(),
+                    lastName: editFormCandidate.lastName.trim(),
+                    email: editFormCandidate.email.trim() || prev.email,
+                    phone: editFormCandidate.phone.trim() || prev.phone,
+                    position: editFormCandidate.position.trim() || prev.position,
+                };
+            });
+
+            setIsEditingCandidate(false);
+            setEditSuccessMsg("✨ บันทึกการแก้ไขข้อมูลผู้สมัครสำเร็จเรียบร้อย!");
+            setTimeout(() => setEditSuccessMsg(null), 4000);
+        } catch (err) {
+            console.error("Failed to update candidate info:", err);
+            alert("เกิดข้อผิดพลาดในการบันทึกข้อมูลผู้สมัคร");
+        } finally {
+            setSavingCandidateInfo(false);
+        }
+    };
 
     const getCleanFileUrl = (url: string) => {
         if (!url) return "";
@@ -484,6 +575,8 @@ export default function CandidatesPage() {
                     return {
                         id: app.ID ? app.ID.toString() : app.id?.toString() || "0",
                         name: name,
+                        firstName: rawFirstName || (name.split(" ")[0] || ""),
+                        lastName: rawLastName || (name.split(" ").slice(1).join(" ") || ""),
                         email: rules.email.sanitize(cand.email || parsedAnalysisObj?.candidate_basic_info?.email || "-"),
                         phone: rules.phone.format(cand.phone || parsedAnalysisObj?.candidate_basic_info?.phone || "-") || (cand.phone || "-"),
                         position: matchedJob?.title || app.position || "ไม่ระบุตำแหน่ง",
@@ -891,7 +984,21 @@ export default function CandidatesPage() {
                                                         </button>
 
                                                         <button
-                                                            onClick={() => setSelectedCandidateModal(c)}
+                                                            onClick={() => {
+                                                                setSelectedCandidateModal(c);
+                                                                startEditingCandidate(c);
+                                                            }}
+                                                            className="inline-flex items-center justify-center p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all border border-transparent hover:border-amber-100"
+                                                            title="แก้ไขข้อมูลผู้สมัคร"
+                                                        >
+                                                            <Edit3 className="w-4 h-4" />
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() => {
+                                                                setIsEditingCandidate(false);
+                                                                setSelectedCandidateModal(c);
+                                                            }}
                                                             className="inline-flex items-center justify-center p-2 text-slate-400 hover:text-[#4169E1] hover:bg-indigo-50 rounded-xl transition-all border border-transparent hover:border-indigo-100"
                                                             title="ดูรายละเอียดฉบับเต็ม"
                                                         >
@@ -1041,51 +1148,185 @@ export default function CandidatesPage() {
             {selectedCandidateModal && (
                 <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
                     <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 md:p-8 space-y-6 animate-in fade-in zoom-in-95 duration-200">
-                        {/* Modal Header */}
-                        <div className="flex items-start justify-between border-b border-slate-100 pb-5">
-                            <div className="flex items-center gap-4">
-                                <div className="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-100 text-[#4169E1] flex items-center justify-center font-black text-xl shadow-sm">
-                                    {selectedCandidateModal.name.charAt(0)}
+                        {/* Success Message Banner */}
+                        {editSuccessMsg && (
+                            <div className="flex items-center gap-2.5 p-3.5 bg-emerald-50 border border-emerald-200/80 text-emerald-700 rounded-2xl text-xs font-bold shadow-2xs animate-in fade-in slide-in-from-top-2">
+                                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                                <span>{editSuccessMsg}</span>
+                            </div>
+                        )}
+
+                        {/* Modal Header (Normal View or Edit View) */}
+                        {isEditingCandidate ? (
+                            <div className="border-b border-slate-100 pb-5 space-y-4 bg-slate-50/50 p-5 rounded-2xl border">
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2.5 rounded-xl bg-amber-500 text-white shadow-sm shadow-amber-200">
+                                            <Edit3 className="w-5 h-5" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-base font-bold text-slate-800">แก้ไขข้อมูลผู้สมัคร</h3>
+                                            <p className="text-xs text-slate-500">ปรับปรุงข้อมูลส่วนตัว ตำแหน่งงาน และช่องทางติดต่อ</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleSaveCandidateInfo}
+                                            disabled={savingCandidateInfo}
+                                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#4169E1] hover:bg-[#3152c4] shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                                        >
+                                            {savingCandidateInfo ? (
+                                                <>
+                                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                                    <span>กำลังบันทึก...</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Check className="w-3.5 h-3.5" />
+                                                    <span>บันทึกข้อมูล</span>
+                                                </>
+                                            )}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsEditingCandidate(false)}
+                                            disabled={savingCandidateInfo}
+                                            className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-200/70 hover:bg-slate-300 transition-all cursor-pointer"
+                                        >
+                                            ยกเลิก
+                                        </button>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h2 className="text-xl font-black text-slate-800">{selectedCandidateModal.name}</h2>
-                                    <p className="text-slate-500 text-sm">{selectedCandidateModal.position} • ยื่นสมัครเมื่อ {selectedCandidateModal.appliedDate}</p>
-                                    <p className="text-slate-400 text-xs mt-0.5">{selectedCandidateModal.email} | {selectedCandidateModal.phone}</p>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                                            ชื่อ <span className="text-rose-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={editFormCandidate.firstName}
+                                            onChange={e => setEditFormCandidate(prev => ({ ...prev, firstName: e.target.value }))}
+                                            placeholder="ระบุชื่อจริง"
+                                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 outline-none focus:border-[#4169E1] focus:ring-1 focus:ring-[#4169E1]"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-700 mb-1">นามสกุล</label>
+                                        <input
+                                            type="text"
+                                            value={editFormCandidate.lastName}
+                                            onChange={e => setEditFormCandidate(prev => ({ ...prev, lastName: e.target.value }))}
+                                            placeholder="ระบุนามสกุล"
+                                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 outline-none focus:border-[#4169E1] focus:ring-1 focus:ring-[#4169E1]"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-700 mb-1">ตำแหน่งที่สมัคร</label>
+                                        <div className="flex gap-1.5">
+                                            <input
+                                                type="text"
+                                                value={editFormCandidate.position}
+                                                onChange={e => setEditFormCandidate(prev => ({ ...prev, position: e.target.value }))}
+                                                placeholder="ระบุตำแหน่งงาน"
+                                                className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 outline-none focus:border-[#4169E1] focus:ring-1 focus:ring-[#4169E1]"
+                                            />
+                                            {uniquePositions.length > 0 && (
+                                                <select
+                                                    onChange={e => {
+                                                        if (e.target.value) setEditFormCandidate(prev => ({ ...prev, position: e.target.value }));
+                                                    }}
+                                                    className="w-8 px-1 bg-white border border-slate-200 rounded-xl text-xs text-slate-500 cursor-pointer outline-none"
+                                                    title="เลือกจากตำแหน่งงานที่มีในระบบ"
+                                                    defaultValue=""
+                                                >
+                                                    <option value="" disabled>เลือก...</option>
+                                                    {uniquePositions.map((pos, pIdx) => (
+                                                        <option key={pIdx} value={pos}>{pos}</option>
+                                                    ))}
+                                                </select>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-700 mb-1">อีเมล</label>
+                                        <input
+                                            type="email"
+                                            value={editFormCandidate.email}
+                                            onChange={e => setEditFormCandidate(prev => ({ ...prev, email: e.target.value }))}
+                                            placeholder="example@mail.com"
+                                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 outline-none focus:border-[#4169E1] focus:ring-1 focus:ring-[#4169E1]"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-700 mb-1">เบอร์โทรศัพท์</label>
+                                        <input
+                                            type="tel"
+                                            value={editFormCandidate.phone}
+                                            onChange={e => setEditFormCandidate(prev => ({ ...prev, phone: e.target.value }))}
+                                            placeholder="08X-XXX-XXXX"
+                                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 outline-none focus:border-[#4169E1] focus:ring-1 focus:ring-[#4169E1]"
+                                        />
+                                    </div>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => {
-                                        setActiveDocTab("resume");
-                                        setViewingResumeModal(selectedCandidateModal);
-                                    }}
-                                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/80 transition-all cursor-pointer shadow-2xs"
-                                >
-                                    <FileText className="w-4 h-4 text-amber-600" />
-                                    <span>เปิดดู Resume</span>
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        setActiveDocTab("transcript");
-                                        setViewingResumeModal(selectedCandidateModal);
-                                    }}
-                                    className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs border ${
-                                        selectedCandidateModal.transcriptUrl || selectedCandidateModal.transcriptText
-                                            ? "bg-blue-50 hover:bg-blue-100 text-[#4169E1] border-blue-200/80"
-                                            : "bg-slate-50 text-slate-500 hover:bg-slate-100 border-slate-200 opacity-70"
-                                    }`}
-                                >
-                                    <GraduationCap className="w-4 h-4 text-[#4169E1]" />
-                                    <span>เปิดดู Transcript</span>
-                                </button>
-                                <button
-                                    onClick={() => setSelectedCandidateModal(null)}
-                                    className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"
-                                >
-                                    <X className="w-5 h-5" />
-                                </button>
+                        ) : (
+                            <div className="flex items-start justify-between border-b border-slate-100 pb-5">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-100 text-[#4169E1] flex items-center justify-center font-black text-xl shadow-sm">
+                                        {selectedCandidateModal.name.charAt(0)}
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-2.5">
+                                            <h2 className="text-xl font-black text-slate-800">{selectedCandidateModal.name}</h2>
+                                            <button
+                                                onClick={() => startEditingCandidate(selectedCandidateModal)}
+                                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 transition-all cursor-pointer shadow-2xs"
+                                                title="แก้ไขข้อมูลผู้สมัครนี้"
+                                            >
+                                                <Edit3 className="w-3.5 h-3.5" />
+                                                <span>แก้ไขข้อมูล</span>
+                                            </button>
+                                        </div>
+                                        <p className="text-slate-500 text-sm mt-0.5">{selectedCandidateModal.position} • ยื่นสมัครเมื่อ {selectedCandidateModal.appliedDate}</p>
+                                        <p className="text-slate-400 text-xs mt-0.5">{selectedCandidateModal.email} | {selectedCandidateModal.phone}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => {
+                                            setActiveDocTab("resume");
+                                            setViewingResumeModal(selectedCandidateModal);
+                                        }}
+                                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/80 transition-all cursor-pointer shadow-2xs"
+                                    >
+                                        <FileText className="w-4 h-4 text-amber-600" />
+                                        <span>เปิดดู Resume</span>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setActiveDocTab("transcript");
+                                            setViewingResumeModal(selectedCandidateModal);
+                                        }}
+                                        className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs border ${
+                                            selectedCandidateModal.transcriptUrl || selectedCandidateModal.transcriptText
+                                                ? "bg-blue-50 hover:bg-blue-100 text-[#4169E1] border-blue-200/80"
+                                                : "bg-slate-50 text-slate-500 hover:bg-slate-100 border-slate-200 opacity-70"
+                                        }`}
+                                    >
+                                        <GraduationCap className="w-4 h-4 text-[#4169E1]" />
+                                        <span>เปิดดู Transcript</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setSelectedCandidateModal(null)}
+                                        className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all cursor-pointer"
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* Top Overview Cards */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

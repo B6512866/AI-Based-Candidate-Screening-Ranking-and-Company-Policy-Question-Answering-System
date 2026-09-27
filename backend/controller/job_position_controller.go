@@ -1245,6 +1245,7 @@ func (c *JobPositionController) UpdateCandidateApplicationInfo(ctx *gin.Context)
 		LastName  string `json:"last_name"`
 		Phone     string `json:"phone"`
 		Email     string `json:"email"`
+		Position  string `json:"position"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
@@ -1274,6 +1275,13 @@ func (c *JobPositionController) UpdateCandidateApplicationInfo(ctx *gin.Context)
 	if len(candUpdates) > 0 {
 		if err := c.db.Model(&entity.Candidate{}).Where("id = ?", app.CandidateID).Updates(candUpdates).Error; err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอัปเดตข้อมูลผู้สมัครได้"})
+			return
+		}
+	}
+
+	if strings.TrimSpace(req.Position) != "" {
+		if err := c.db.Model(&entity.Application{}).Where("id = ?", app.ID).Update("position", strings.TrimSpace(req.Position)).Error; err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอัปเดตตำแหน่งงานได้"})
 			return
 		}
 	}

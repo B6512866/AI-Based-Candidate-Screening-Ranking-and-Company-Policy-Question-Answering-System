@@ -136,7 +136,19 @@ func (s *GeminiService) ExtractJobInfoFromImages(ctx context.Context, images []J
 
 	var lastErr error
 
-	// 1. ลองใช้ Gemini ก่อน
+	// 1. ลองใช้ Claude Vision ก่อนเป็นตัวหลัก (Primary Model: Anthropic Claude 3.5 Sonnet / Haiku)
+	if s.anthropicKey != "" {
+		fmt.Println("🚀 [Claude Vision API] Analyzing job images with Claude...")
+		extracted, err := s.extractJobInfoViaClaudeVision(ctx, images, prompt)
+		if err == nil && extracted != nil && extracted.Title != "" {
+			fmt.Printf("✅ [Claude Vision SUCCESS] Extracted job '%s'\n", extracted.Title)
+			return extracted, nil
+		}
+		fmt.Printf("⚠️ Claude Vision failed: %v, falling back to Gemini...\n", err)
+		lastErr = err
+	}
+
+	// 2. ถ้า Claude ไม่สำเร็จ หรือไม่มี Key ให้ Fallback สู่ Gemini ทันที
 	if s.client != nil {
 		candidateModels := []string{"gemini-3-flash-preview", "gemini-3.1-flash-lite-preview", "gemini-flash-latest"}
 		for _, modelName := range candidateModels {
@@ -167,22 +179,11 @@ func (s *GeminiService) ExtractJobInfoFromImages(ctx context.Context, images []J
 				cleanJSON := extractCleanJSON(textBuilder.String())
 				var extracted dto.ExtractedJobResponse
 				if err := json.Unmarshal([]byte(cleanJSON), &extracted); err == nil && extracted.Title != "" {
-					fmt.Printf("✅ [Gemini Vision SUCCESS] Extracted job '%s' using model %s\n", extracted.Title, modelName)
+					fmt.Printf("✅ [Gemini Vision Fallback SUCCESS] Extracted job '%s' using model %s\n", extracted.Title, modelName)
 					return &extracted, nil
 				}
 			}
 		}
-	}
-
-	// 2. ถ้า Gemini ล้มเหลว หรือติดปัญหา JSON ให้ Fallback สู่ Claude Vision ทันที
-	if s.anthropicKey != "" {
-		fmt.Println("🔄 Falling back to Claude 3.5 Vision API...")
-		extracted, err := s.extractJobInfoViaClaudeVision(ctx, images, prompt)
-		if err == nil && extracted != nil {
-			fmt.Printf("✅ [Claude Vision SUCCESS] Extracted job '%s'\n", extracted.Title)
-			return extracted, nil
-		}
-		lastErr = err
 	}
 
 	if lastErr != nil {
@@ -360,7 +361,24 @@ func (s *GeminiService) GenerateJobFromPrompt(ctx context.Context, userPrompt, j
 
 	var lastErr error
 
-	// 1. ลอง Gemini ก่อน
+	// 1. ใช้ Claude เป็นตัวหลัก (Primary Model: Anthropic Claude Sonnet 5 / Haiku)
+	if s.anthropicKey != "" {
+		fmt.Println("🚀 [Claude Text API] Generating job via Claude API (Primary)...")
+		rawText, err := s.callClaude(ctx, prompt+"\n\nOutput only pure raw JSON.", 4096)
+		if err == nil {
+			cleanJSON := extractCleanJSON(rawText)
+			var job dto.ExtractedJobResponse
+			if err := json.Unmarshal([]byte(cleanJSON), &job); err == nil && job.Title != "" {
+				fmt.Printf("✅ [Claude Text SUCCESS] Generated job '%s'\n", job.Title)
+				return &job, nil
+			}
+		} else {
+			fmt.Printf("⚠️ Claude generation error: %v, falling back to Gemini...\n", err)
+			lastErr = err
+		}
+	}
+
+	// 2. ถ้า Claude ล้มเหลว หรือไม่ได้ตั้งค่า Key ให้ Fallback สู่ Gemini
 	if s.client != nil {
 		candidateModels := []string{"gemini-3-flash-preview", "gemini-3.1-flash-lite-preview", "gemini-flash-latest"}
 		for _, m := range candidateModels {
@@ -383,27 +401,10 @@ func (s *GeminiService) GenerateJobFromPrompt(ctx context.Context, userPrompt, j
 				cleanJSON := extractCleanJSON(textBuilder.String())
 				var job dto.ExtractedJobResponse
 				if err := json.Unmarshal([]byte(cleanJSON), &job); err == nil && job.Title != "" {
-					fmt.Printf("✅ [Gemini Text SUCCESS] Generated job '%s' using %s\n", job.Title, m)
+					fmt.Printf("✅ [Gemini Text Fallback SUCCESS] Generated job '%s' using %s\n", job.Title, m)
 					return &job, nil
 				}
 			}
-		}
-	}
-
-	// 2. Fallback สู่ Claude
-	if s.anthropicKey != "" {
-		fmt.Println("🔄 Generating job via Claude API...")
-		rawText, err := s.callClaude(ctx, prompt+"\n\nOutput only pure raw JSON.", 4096)
-		if err == nil {
-			cleanJSON := extractCleanJSON(rawText)
-			var job dto.ExtractedJobResponse
-			if err := json.Unmarshal([]byte(cleanJSON), &job); err == nil && job.Title != "" {
-				fmt.Printf("✅ [Claude Text SUCCESS] Generated job '%s'\n", job.Title)
-				return &job, nil
-			}
-		} else {
-			fmt.Printf("⚠️ Claude fallback error: %v\n", err)
-			lastErr = err
 		}
 	}
 
@@ -413,7 +414,7 @@ func (s *GeminiService) GenerateJobFromPrompt(ctx context.Context, userPrompt, j
 	return nil, fmt.Errorf("ไม่สามารถสร้างตำแหน่งงานด้วย AI ได้")
 }
 
-// GenerateCriteriaFromText: เจนเกณฑ์ประเมินจาก Job Title และ Job Description
+// GenerateCriteriaFromText: เจนเกณฑ์ประเมินจาก Job Title และ Job Description (ใช้ Claude เป็นหลัก)
 func (s *GeminiService) GenerateCriteriaFromText(ctx context.Context, jobTitle string, jobDescription string) ([]dto.MainCriterionDTO, error) {
 	prompt := fmt.Sprintf(`คุณคือผู้เชี่ยวชาญด้าน HR Recruiter
 โปรดสร้างเกณฑ์ประเมินผู้สมัครงาน สำหรับตำแหน่ง: "%s"
@@ -458,7 +459,24 @@ func (s *GeminiService) GenerateCriteriaFromText(ctx context.Context, jobTitle s
 
 	var lastErr error
 
-	// 1. ลอง Gemini
+	// 1. ใช้ Claude เป็นตัวหลัก (Primary Model: Anthropic Claude Sonnet 5 / Haiku)
+	if s.anthropicKey != "" {
+		fmt.Println("🚀 [Claude Text API] Generating criteria via Claude API (Primary)...")
+		rawText, err := s.callClaude(ctx, prompt+"\n\nOutput only raw JSON array.", 4096)
+		if err == nil {
+			cleanJSON := extractCleanJSONArray(rawText)
+			var criteria []dto.MainCriterionDTO
+			if json.Unmarshal([]byte(cleanJSON), &criteria) == nil && len(criteria) > 0 {
+				fmt.Printf("✅ [Claude Criteria SUCCESS] Generated %d criteria\n", len(criteria))
+				return criteria, nil
+			}
+		} else {
+			fmt.Printf("⚠️ Claude criteria error: %v, falling back to Gemini...\n", err)
+			lastErr = err
+		}
+	}
+
+	// 2. ถ้า Claude ล้มเหลว ให้ Fallback สู่ Gemini
 	if s.client != nil {
 		candidateModels := []string{"gemini-3-flash-preview", "gemini-3.1-flash-lite-preview", "gemini-flash-latest"}
 		for _, m := range candidateModels {
@@ -484,23 +502,6 @@ func (s *GeminiService) GenerateCriteriaFromText(ctx context.Context, jobTitle s
 					return criteria, nil
 				}
 			}
-		}
-	}
-
-	// 2. Fallback สู่ Claude
-	if s.anthropicKey != "" {
-		fmt.Println("🔄 Generating criteria via Claude API...")
-		rawText, err := s.callClaude(ctx, prompt+"\n\nOutput only raw JSON array.", 4096)
-		if err == nil {
-			cleanJSON := extractCleanJSONArray(rawText)
-			var criteria []dto.MainCriterionDTO
-			if json.Unmarshal([]byte(cleanJSON), &criteria) == nil && len(criteria) > 0 {
-				fmt.Printf("✅ [Claude Criteria SUCCESS] Generated %d criteria\n", len(criteria))
-				return criteria, nil
-			}
-		} else {
-			fmt.Printf("⚠️ Claude fallback error: %v\n", err)
-			lastErr = err
 		}
 	}
 

@@ -31,7 +31,7 @@ func NewJobController(geminiService *services.GeminiService, jobService *service
 // ExtractFromImage: รับภาพหลายไฟล์ของประกาศเดียวกัน -> ส่งให้ Gemini วิเคราะห์รวมกัน
 func (c *JobController) ExtractFromImage(ctx *gin.Context) {
 	if c.geminiService == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Gemini Service ไม่ได้เปิดใช้งาน หรือตั้งค่า API Key ไม่ถูกต้อง"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "AI Service (Claude / Gemini) ไม่ได้เปิดใช้งาน หรือตั้งค่า API Key ไม่ถูกต้อง"})
 		return
 	}
 

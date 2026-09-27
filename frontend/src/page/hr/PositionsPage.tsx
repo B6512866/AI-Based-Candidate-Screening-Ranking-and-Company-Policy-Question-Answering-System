@@ -596,7 +596,7 @@ export default function PositionsPage() {
             }
 
             setMessage({
-                text: `✨ AI ร่างตำแหน่งงาน "${ai.title || query}" พร้อมเกณฑ์ประเมินสำเร็จเรียบร้อย!`,
+                text: `✨ Claude ร่างตำแหน่งงาน "${ai.title || query}" พร้อมเกณฑ์ประเมินสำเร็จเรียบร้อย!`,
                 type: "success",
             });
         } catch (error) {
@@ -613,7 +613,7 @@ export default function PositionsPage() {
     const handleAIGenerateCriteria = async () => {
         if (!editTitle.trim()) {
             setMessage({
-                text: "กรุณาระบุชื่อตำแหน่งงานก่อนให้ AI สร้าง Criteria",
+                text: "กรุณาระบุชื่อตำแหน่งงานก่อนให้ Claude สร้าง Criteria",
                 type: "error",
             });
             return;
@@ -632,7 +632,7 @@ export default function PositionsPage() {
                 });
                 setExpandedCriteria(expanded);
                 setMessage({
-                    text: "✨ AI สร้าง Criteria และระดับเกณฑ์ย่อยตามตำแหน่งงานสำเร็จแล้ว!",
+                    text: "✨ Claude สร้าง Criteria และระดับเกณฑ์ย่อยตามตำแหน่งงานสำเร็จแล้ว!",
                     type: "success",
                 });
             } else {
@@ -1879,11 +1879,16 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                         <Sparkles className="w-4 h-4" />
                                                     </div>
                                                     <div>
-                                                        <h3 className="font-bold text-slate-800 text-sm">
-                                                            สร้างตำแหน่งงานด้วย AI (AI Job Assistant)
-                                                        </h3>
-                                                        <p className="text-xs text-slate-500">
-                                                            เลือกวิธี: อัปโหลดรูปภาพประกาศงาน หรือ พิมพ์ชื่อตำแหน่งให้ AI ช่วยร่างอัตโนมัติ
+                                                        <div className="flex items-center gap-2">
+                                                            <h3 className="font-bold text-slate-800 text-sm">
+                                                                สร้างตำแหน่งงานด้วย AI (AI Job Assistant)
+                                                            </h3>
+                                                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs">
+                                                                🧠 Claude Sonnet 5
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-xs text-slate-500 mt-0.5">
+                                                            เลือกวิธี: อัปโหลดรูปภาพประกาศงาน หรือ พิมพ์ชื่อตำแหน่งให้ Claude ช่วยร่างอัตโนมัติ
                                                         </p>
                                                     </div>
                                                 </div>
@@ -1909,7 +1914,7 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                                 : "text-slate-600 hover:text-slate-900"
                                                         }`}
                                                     >
-                                                        ✍️ พิมพ์ร่างด้วย AI
+                                                        ✍️ พิมพ์ร่างด้วย Claude
                                                     </button>
                                                 </div>
                                             </div>
@@ -1918,10 +1923,10 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                 <div className="mt-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                                                     <div>
                                                         <p className="text-xs font-semibold text-slate-700">
-                                                            อัปโหลดรูปภาพประกาศงาน (รองรับ JPG, PNG, WEBP)
+                                                            อัปโหลดรูปภาพประกาศงาน (ประมวลผลด้วย Claude Vision)
                                                         </p>
                                                         <p className="text-xs text-slate-500 mt-0.5">
-                                                            AI จะอ่านข้อความจากทุกภาพ และแปลงเป็นฟอร์มตำแหน่งงาน พร้อมกำหนดเกณฑ์ประเมิน 3 ระดับ
+                                                            Claude จะอ่านข้อความจากทุกภาพ และแปลงเป็นฟอร์มตำแหน่งงาน พร้อมกำหนดเกณฑ์ประเมิน 3 ระดับ
                                                         </p>
                                                     </div>
 
@@ -1944,7 +1949,7 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                             {analyzingImage ? (
                                                                 <>
                                                                     <RefreshCw className="w-4 h-4 animate-spin" />
-                                                                    กำลังวิเคราะห์รูปภาพ...
+                                                                    กำลังวิเคราะห์รูปภาพด้วย Claude...
                                                                 </>
                                                             ) : (
                                                                 <>
@@ -1984,12 +1989,12 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                                 {generatingWithAI ? (
                                                                     <>
                                                                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                                                        กำลังร่างข้อมูล...
+                                                                        กำลังร่างข้อมูลด้วย Claude...
                                                                     </>
                                                                 ) : (
                                                                     <>
                                                                         <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
-                                                                        ให้ AI ร่างตำแหน่งงานทันที
+                                                                        ให้ Claude ร่างตำแหน่งงานทันที
                                                                     </>
                                                                 )}
                                                             </button>
@@ -2304,17 +2309,17 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                         onClick={handleAIGenerateCriteria}
                                                         disabled={generatingCriteria || !editTitle.trim()}
                                                         className="inline-flex items-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all shadow-xs disabled:opacity-50 cursor-pointer"
-                                                        title="ให้ AI ช่วยสร้าง Criteria จากชื่อตำแหน่งและลักษณะงาน"
+                                                        title="ให้ Claude ช่วยสร้าง Criteria จากชื่อตำแหน่งและลักษณะงาน"
                                                     >
                                                         {generatingCriteria ? (
                                                             <>
                                                                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                                                กำลังสร้าง Criteria...
+                                                                กำลังสร้าง Criteria ด้วย Claude...
                                                             </>
                                                         ) : (
                                                             <>
                                                                 <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
-                                                                ให้ AI สร้าง Criteria
+                                                                ให้ Claude สร้าง Criteria
                                                             </>
                                                         )}
                                                     </button>
@@ -2340,7 +2345,7 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                     </p>
 
                                                     <p className="text-xs text-slate-400 mt-1">
-                                                        สามารถให้ AI สร้างชุดเกณฑ์ประเมิน 3 ระดับให้ทันที หรือกดเพิ่มเองได้
+                                                        สามารถให้ Claude สร้างชุดเกณฑ์ประเมิน 3 ระดับให้ทันที หรือกดเพิ่มเองได้
                                                     </p>
 
                                                     <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
@@ -2353,12 +2358,12 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                             {generatingCriteria ? (
                                                                 <>
                                                                     <RefreshCw className="w-4 h-4 animate-spin" />
-                                                                    กำลังสร้าง Criteria...
+                                                                    กำลังสร้าง Criteria ด้วย Claude...
                                                                 </>
                                                             ) : (
                                                                 <>
                                                                     <Sparkles className="w-4 h-4 text-yellow-300" />
-                                                                    ให้ AI สร้าง Criteria อัตโนมัติ
+                                                                    ให้ Claude สร้าง Criteria อัตโนมัติ
                                                                 </>
                                                             )}
                                                         </button>

@@ -413,6 +413,7 @@ export async function updateCandidateApplicationInfo(
         last_name?: string;
         phone?: string;
         email?: string;
+        position?: string;
     }
 ) {
     const res = await apiClient.put(`/applications/${appId}/candidate-info`, data);
