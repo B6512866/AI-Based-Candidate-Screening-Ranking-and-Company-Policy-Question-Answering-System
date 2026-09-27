@@ -781,7 +781,7 @@ export default function CandidatesPage() {
                                 <th className="py-3.5 px-6">คะแนน PTS (0-100)</th>
                                 <th className="py-3.5 px-6">สถานะ</th>
                                 <th className="py-3.5 px-6">วันที่ยื่นสมัคร</th>
-                                <th className="py-3.5 px-6 text-right">รายละเอียดคะแนน</th>
+                                <th className="py-3.5 px-6 text-right">การจัดการและเอกสาร</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-sm text-slate-700 font-medium">
@@ -810,10 +810,23 @@ export default function CandidatesPage() {
                                                     #{index + 1}
                                                 </td>
                                                 <td className="py-4 px-6">
-                                                    <div className="space-y-1.5">
-                                                        <p className="font-bold text-slate-800 text-base">{c.name}</p>
-                                                        <p className="text-slate-400 text-xs">{c.email} • {c.phone}</p>
-                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setIsEditingCandidate(false);
+                                                            setSelectedCandidateModal(c);
+                                                        }}
+                                                        className="text-left group cursor-pointer block"
+                                                        title="คลิกเพื่อเปิดดูโปรไฟล์และแก้ไขข้อมูลผู้สมัคร"
+                                                    >
+                                                        <p className="font-bold text-slate-800 text-base group-hover:text-[#4169E1] transition-colors flex items-center gap-1.5">
+                                                            <span>{c.name}</span>
+                                                            <span className="opacity-0 group-hover:opacity-100 text-[10px] font-bold text-[#4169E1] bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded transition-opacity">
+                                                                ดูโปรไฟล์
+                                                            </span>
+                                                        </p>
+                                                        <p className="text-slate-400 text-xs mt-0.5">{c.email} • {c.phone}</p>
+                                                    </button>
                                                 </td>
                                                 <td className="py-4 px-6 text-slate-600 font-semibold">{c.position}</td>
                                                 <td className="py-4 px-6">
@@ -988,10 +1001,11 @@ export default function CandidatesPage() {
                                                                 setSelectedCandidateModal(c);
                                                                 startEditingCandidate(c);
                                                             }}
-                                                            className="inline-flex items-center justify-center p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all border border-transparent hover:border-amber-100"
-                                                            title="แก้ไขข้อมูลผู้สมัคร"
+                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white transition-all cursor-pointer shadow-xs"
+                                                            title="แก้ไขข้อมูลผู้สมัครคนนี้"
                                                         >
-                                                            <Edit3 className="w-4 h-4" />
+                                                            <Edit3 className="w-3.5 h-3.5" />
+                                                            <span>แก้ไข</span>
                                                         </button>
 
                                                         <button
@@ -999,10 +1013,11 @@ export default function CandidatesPage() {
                                                                 setIsEditingCandidate(false);
                                                                 setSelectedCandidateModal(c);
                                                             }}
-                                                            className="inline-flex items-center justify-center p-2 text-slate-400 hover:text-[#4169E1] hover:bg-indigo-50 rounded-xl transition-all border border-transparent hover:border-indigo-100"
-                                                            title="ดูรายละเอียดฉบับเต็ม"
+                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-[#4169E1] border border-indigo-200 transition-all cursor-pointer shadow-2xs"
+                                                            title="ดูรายละเอียดโปรไฟล์ฉบับเต็ม"
                                                         >
-                                                            <Eye className="w-4 h-4" />
+                                                            <Eye className="w-3.5 h-3.5" />
+                                                            <span>โปรไฟล์</span>
                                                         </button>
                                                     </div>
                                                 </td>
@@ -1282,11 +1297,11 @@ export default function CandidatesPage() {
                                             <h2 className="text-xl font-black text-slate-800">{selectedCandidateModal.name}</h2>
                                             <button
                                                 onClick={() => startEditingCandidate(selectedCandidateModal)}
-                                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 transition-all cursor-pointer shadow-2xs"
-                                                title="แก้ไขข้อมูลผู้สมัครนี้"
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white transition-all cursor-pointer shadow-xs shadow-amber-200"
+                                                title="แก้ไขข้อมูลส่วนตัวและตำแหน่งงานของผู้สมัครนี้"
                                             >
                                                 <Edit3 className="w-3.5 h-3.5" />
-                                                <span>แก้ไขข้อมูล</span>
+                                                <span>แก้ไขข้อมูลผู้สมัคร</span>
                                             </button>
                                         </div>
                                         <p className="text-slate-500 text-sm mt-0.5">{selectedCandidateModal.position} • ยื่นสมัครเมื่อ {selectedCandidateModal.appliedDate}</p>
@@ -1570,6 +1585,21 @@ export default function CandidatesPage() {
 
                             {/* Tab Switcher & Action buttons */}
                             <div className="flex items-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const c = viewingResumeModal;
+                                        setViewingResumeModal(null);
+                                        setSelectedCandidateModal(c);
+                                        startEditingCandidate(c);
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-xs shadow-amber-200 cursor-pointer"
+                                    title="แก้ไขข้อมูลส่วนตัวและตำแหน่งงานของผู้สมัครคนนี้"
+                                >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                    <span>แก้ไขข้อมูลผู้สมัคร</span>
+                                </button>
+
                                 <div className="flex items-center bg-slate-200/70 p-1 rounded-xl">
                                     <button
                                         onClick={() => setActiveDocTab("resume")}
