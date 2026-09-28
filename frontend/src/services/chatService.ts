@@ -40,3 +40,19 @@ export async function saveChatMessage(question: string, answer: string, sessionI
   });
   return response.data;
 }
+
+// 4. ลบห้องสนทนาทั้งหมด (soft delete)
+export async function deleteSession(sessionId: string) {
+  const response = await apiClient.delete(`/chat/sessions?session_id=${encodeURIComponent(sessionId)}`);
+  return response.data;
+}
+
+// 5. เปลี่ยนชื่อหัวข้อห้องสนทนา
+export async function renameSession(sessionId: string, newTitle: string) {
+  const response = await apiClient.put("/chat/sessions/rename", {
+    session_id: sessionId,
+    new_title: newTitle,
+  });
+  return response.data;
+}
+

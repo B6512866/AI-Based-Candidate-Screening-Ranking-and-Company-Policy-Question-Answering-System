@@ -3,6 +3,7 @@ import { BookOpen, Upload, Plus, Edit3, Save, Trash2, FileText, CheckCircle2, Al
 import { getallknowledge, createknowledge, updateknowledge, deleteknowledge } from "../../services/knowledgeService";
 import { getTyphoonApiUrl } from "../../services/apiClient";
 import AIModelDropdown, { AVAILABLE_AI_MODELS } from "../../components/common/AIModelDropdown";
+import { useConfirm } from "../../context/ConfirmContext";
 
 const TYPHOON_API = getTyphoonApiUrl();
 
@@ -15,6 +16,7 @@ interface Document {
 }
 
 export default function KnowledgePage() {
+    const { confirm } = useConfirm();
     const [selectedModel, setSelectedModel] = useState<string>("gemini-3.5-flash");
     const [docs, setDocs] = useState<Document[]>([]);
     const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
@@ -101,7 +103,17 @@ export default function KnowledgePage() {
     };
 
     const handleDelete = async (id: number) => {
-        if (!window.confirm("คุณต้องการลบเอกสารนี้ใช่หรือไม่?")) return;
+        const doc = docs.find((d) => d.ID === id);
+        const docName = doc?.filename ? ` "${doc.filename}"` : "";
+
+        const isConfirmed = await confirm({
+            title: "ยืนยันการลบเอกสาร?",
+            message: `คุณต้องการลบเอกสาร${docName} ใช่หรือไม่?\n\nข้อมูลเอกสารจะถูกลบออกจากคลังความรู้อย่างถาวร`,
+            confirmText: "ลบเอกสาร",
+            variant: "danger",
+        });
+        if (!isConfirmed) return;
+
         try {
             const data = await deleteknowledge(id);
             if (data) {
@@ -228,7 +240,7 @@ export default function KnowledgePage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-black text-slate-800">คลังความรู้และนโยบายองค์กร</h1>
-                    <p className="text-slate-400 text-sm mt-1">จัดการเอกสารนโยบายและระเบียบบริษัท (เก็บใน Database สำหรับให้ AI ตอบคำถาม)</p>
+                    <p className="text-slate-400 text-sm mt-1">จัดการเอกสารนโยบายและระเบียบบริษัท</p>
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
                     <AIModelDropdown

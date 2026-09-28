@@ -46,6 +46,8 @@ import {
 
 import apiClient, { getTyphoonApiUrl } from "../../services/apiClient";
 import { openFileInNewTab } from "../../utils/fileViewer";
+import rules from "../../components/rules/rule";
+import { useConfirm } from "../../context/ConfirmContext";
 
 interface SubCriterion {
     ID?: number;
@@ -58,7 +60,7 @@ interface SubCriterion {
     id: string;
     title: string;
     description: string;
-    weight: number;
+    weight: number | string;
 }
 
 interface Criterion {
@@ -71,7 +73,7 @@ interface Criterion {
 
     id: string;
     title: string;
-    weight: number;
+    weight: number | string;
 
     sub_criteria: SubCriterion[];
 }
@@ -170,6 +172,7 @@ const getApplicationDaysRemaining = (value?: string | null) => {
 
 export default function PositionsPage() {
     const navigate = useNavigate();
+    const { confirm } = useConfirm();
 
     /* =====================================================
        JOB STATES
@@ -460,7 +463,16 @@ export default function PositionsPage() {
 
         setCriteriaList(
             Array.isArray(job.criteria)
-                ? job.criteria
+                ? job.criteria.map((c: any) => ({
+                    ...c,
+                    weight: c.weight === 0 || c.weight === "0" ? "" : c.weight,
+                    sub_criteria: Array.isArray(c.sub_criteria)
+                        ? c.sub_criteria.map((s: any) => ({
+                            ...s,
+                            weight: s.weight === 0 || s.weight === "0" ? "" : s.weight,
+                        }))
+                        : []
+                }))
                 : []
         );
 
@@ -625,9 +637,19 @@ export default function PositionsPage() {
 
             const newCriteria = await generateCriteriaFromText(editTitle, editDescription);
             if (Array.isArray(newCriteria) && newCriteria.length > 0) {
-                setCriteriaList(newCriteria);
+                const formatted = newCriteria.map((c: any) => ({
+                    ...c,
+                    weight: c.weight === 0 || c.weight === "0" ? "" : c.weight,
+                    sub_criteria: Array.isArray(c.sub_criteria)
+                        ? c.sub_criteria.map((s: any) => ({
+                            ...s,
+                            weight: s.weight === 0 || s.weight === "0" ? "" : s.weight,
+                        }))
+                        : []
+                }));
+                setCriteriaList(formatted);
                 const expanded: Record<string, boolean> = {};
-                newCriteria.forEach((criterion) => {
+                formatted.forEach((criterion) => {
                     expanded[criterion.id] = true;
                 });
                 setExpandedCriteria(expanded);
@@ -783,10 +805,17 @@ export default function PositionsPage() {
             ============================== */
 
             setCriteriaList(
-                Array.isArray(
-                    ai.suggested_criteria
-                )
-                    ? ai.suggested_criteria
+                Array.isArray(ai.suggested_criteria)
+                    ? ai.suggested_criteria.map((c: any) => ({
+                        ...c,
+                        weight: c.weight === 0 || c.weight === "0" ? "" : c.weight,
+                        sub_criteria: Array.isArray(c.sub_criteria)
+                            ? c.sub_criteria.map((s: any) => ({
+                                ...s,
+                                weight: s.weight === 0 || s.weight === "0" ? "" : s.weight,
+                            }))
+                            : []
+                    }))
                     : []
             );
 
@@ -864,13 +893,12 @@ export default function PositionsPage() {
     ===================================================== */
 
     const addCriterion = () => {
-        const id =
-            `c_${Date.now()}`;
+        const id = `c_${Date.now()}`;
 
         const newCriterion: Criterion = {
             id,
             title: "เกณฑ์ใหม่",
-            weight: 0,
+            weight: "",
             sub_criteria: [],
         };
 
@@ -885,16 +913,16 @@ export default function PositionsPage() {
         }));
     };
 
-    const deleteCriterion = (
+    const deleteCriterion = async (
         criterionIndex: number
     ) => {
-        if (
-            !window.confirm(
-                "ต้องการลบ Criteria นี้หรือไม่?"
-            )
-        ) {
-            return;
-        }
+        const isConfirmed = await confirm({
+            title: "ยืนยันการลบ Criteria?",
+            message: "ต้องการลบ Criteria นี้หรือไม่?",
+            confirmText: "ลบ Criteria",
+            variant: "danger",
+        });
+        if (!isConfirmed) return;
 
         setCriteriaList((prev) =>
             prev.filter(
@@ -917,29 +945,23 @@ export default function PositionsPage() {
                     ? {
                         ...criterion,
                         [field]:
-                            field ===
-                            "weight"
-                                ? Number(
-                                    value
-                                )
+                            field === "weight"
+                                ? (value === "" || value === 0 || value === "0" ? "" : rules.criteria.clampWeight(value))
                                 : value,
                     }
                     : criterion
             )
         );
-
     };
 
     const addSubCriterion = (
         criterionIndex: number
     ) => {
         const newSub: SubCriterion = {
-            id:
-                `s_${Date.now()}`,
-            title:
-                "Subcriteria ใหม่",
+            id: `s_${Date.now()}`,
+            title: "Subcriteria ใหม่",
             description: "",
-            weight: 0,
+            weight: "",
         };
 
         setCriteriaList((prev) =>
@@ -1014,11 +1036,8 @@ export default function PositionsPage() {
                                         ? {
                                             ...sub,
                                             [field]:
-                                                field ===
-                                                "weight"
-                                                    ? Number(
-                                                        value
-                                                    )
+                                                field === "weight"
+                                                    ? (value === "" || value === 0 || value === "0" ? "" : rules.criteria.clampWeight(value))
                                                     : value,
                                         }
                                         : sub
@@ -1058,6 +1077,18 @@ export default function PositionsPage() {
                 type: "error",
             });
 
+            return;
+        }
+
+        /* ==============================
+           VALIDATE CRITERIA (rules.ts)
+        ============================== */
+        const criteriaValidation = rules.criteria.validate(criteriaList as any);
+        if (!criteriaValidation.isValid) {
+            setMessage({
+                text: criteriaValidation.error || rules.criteria.errorMessage,
+                type: "error",
+            });
             return;
         }
 
@@ -1214,13 +1245,13 @@ export default function PositionsPage() {
     const handleDelete = async (
         id: number
     ) => {
-        if (
-            !window.confirm(
-                "คุณต้องการลบตำแหน่งงานนี้ใช่หรือไม่?\n\nการลบจะทำให้ตำแหน่งนี้หายไปจากหน้าแรกด้วย"
-            )
-        ) {
-            return;
-        }
+        const isConfirmed = await confirm({
+            title: "ยืนยันการลบตำแหน่งงาน?",
+            message: "คุณต้องการลบตำแหน่งงานนี้ใช่หรือไม่?\n\nการลบจะทำให้ตำแหน่งนี้หายไปจากหน้าแรกด้วย",
+            confirmText: "ลบตำแหน่งงาน",
+            variant: "danger",
+        });
+        if (!isConfirmed) return;
 
         try {
             const response =
@@ -1881,10 +1912,8 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                     <div>
                                                         <div className="flex items-center gap-2">
                                                             <h3 className="font-bold text-slate-800 text-sm">
-                                                                สร้างตำแหน่งงานด้วย AI (AI Job Assistant)
+                                                                สร้างตำแหน่งงานด้วย AI
                                                             </h3>
-                                                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs">
-                                                            </span>
                                                         </div>
                                                         <p className="text-xs text-slate-500 mt-0.5">
                                                             เลือกวิธี: อัปโหลดรูปภาพประกาศงาน หรือ พิมพ์ชื่อตำแหน่งให้ Claude ช่วยร่างอัตโนมัติ
@@ -1902,7 +1931,7 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                                 : "text-slate-600 hover:text-slate-900"
                                                         }`}
                                                     >
-                                                        📷 อัปโหลดรูปภาพ
+                                                        อัปโหลดรูปภาพ
                                                     </button>
                                                     <button
                                                         type="button"
@@ -1913,7 +1942,7 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                                 : "text-slate-600 hover:text-slate-900"
                                                         }`}
                                                     >
-                                                        ✍️ พิมพ์ร่างด้วย Claude
+                                                        พิมพ์ร่างด้วย Claude
                                                     </button>
                                                 </div>
                                             </div>
@@ -2334,6 +2363,57 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                 </div>
                                             </div>
 
+                                            {/* RULES & TOTAL WEIGHT BANNER */}
+                                            {criteriaList.length > 0 && (() => {
+                                                const totalWeight = rules.criteria.calculateTotal(criteriaList as any);
+                                                const isValid = totalWeight === rules.criteria.REQUIRED_TOTAL;
+                                                const isOver = totalWeight > rules.criteria.REQUIRED_TOTAL;
+
+                                                return (
+                                                    <div className={`p-4 rounded-xl mb-4 border transition-all ${
+                                                        isValid
+                                                            ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                                                            : isOver
+                                                                ? "bg-rose-50 border-rose-200 text-rose-800"
+                                                                : "bg-amber-50 border-amber-200 text-amber-800"
+                                                    }`}>
+                                                        <div className="flex flex-wrap items-center justify-between gap-3">
+                                                            <div className="flex items-center gap-2.5">
+                                                                {isValid ? (
+                                                                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                                                                ) : (
+                                                                    <AlertCircle className={`w-5 h-5 shrink-0 ${isOver ? "text-rose-600" : "text-amber-600"}`} />
+                                                                )}
+                                                                <div>
+                                                                    <div className="text-sm font-bold flex items-center gap-2">
+                                                                        <span>ผลรวมค่าน้ำหนัก Criteria:</span>
+                                                                        <span className={`font-mono text-base px-2 py-0.5 rounded-md font-black ${
+                                                                            isValid
+                                                                                ? "bg-emerald-100 text-emerald-900"
+                                                                                : isOver
+                                                                                    ? "bg-rose-100 text-rose-900"
+                                                                                    : "bg-amber-100 text-amber-900"
+                                                                        }`}>
+                                                                            {totalWeight} / 100 %
+                                                                        </span>
+                                                                    </div>
+                                                                    <p className="text-xs mt-0.5 opacity-90">
+                                                                        {isValid
+                                                                            ? "✓ คะแนนรวมครบ 100% ถูกต้องตามเกณฑ์แล้ว พร้อมบันทึก"
+                                                                            : isOver
+                                                                                ? `⚠️ คะแนนรวมเกินมา ${totalWeight - rules.criteria.REQUIRED_TOTAL}% (เกณฑ์คัดเลือกหลักรวมกันต้องได้ 100% พอดี)`
+                                                                                : `⚠️ ยังขาดอีก ${rules.criteria.REQUIRED_TOTAL - totalWeight}% (เกณฑ์คัดเลือกหลักรวมกันจะต้องได้ 100% พอดี)`}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-[11px] text-slate-500 bg-white/80 backdrop-blur-xs px-3 py-1.5 rounded-lg border border-slate-200/60">
+                                                                กฎ: แต่ละ Criteria ห้ามเกิน 100% (รวมต้องเต็ม 100%) • Subcriteria แต่ละข้อห้ามเกิน 100 คะแนน (รวมเกิน 100 ได้)
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
+
                                             {criteriaList.length ===
                                             0 ? (
                                                 <div className="border border-dashed border-slate-200 rounded-2xl p-8 text-center">
@@ -2442,24 +2522,23 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
 
                                                                             <div className="flex items-center gap-1">
                                                                                 <input
-                                                                                    type="number"
-                                                                                    min="0"
-                                                                                    max="100"
+                                                                                    type="text"
+                                                                                    inputMode="numeric"
+                                                                                    placeholder="0"
                                                                                     value={
-                                                                                        criterion.weight
+                                                                                        criterion.weight === 0 || criterion.weight === "0" ? "" : (criterion.weight ?? "")
                                                                                     }
                                                                                     onChange={(
                                                                                         event
-                                                                                    ) =>
+                                                                                    ) => {
+                                                                                        const cleaned = rules.criteria.stripLeadingZeros(event.target.value);
                                                                                         updateCriterion(
                                                                                             criterionIndex,
                                                                                             "weight",
-                                                                                            event
-                                                                                                .target
-                                                                                                .value
-                                                                                        )
-                                                                                    }
-                                                                                    className="w-20 bg-white border border-slate-200 rounded-lg px-2 py-2 text-sm text-center font-bold outline-none"
+                                                                                            cleaned
+                                                                                        );
+                                                                                    }}
+                                                                                    className="w-20 bg-white border border-slate-200 rounded-lg px-2 py-2 text-sm text-center font-bold outline-none focus:ring-2 focus:ring-[#4169E1]/20"
                                                                                 />
 
                                                                                 <span className="text-xs text-slate-400">
@@ -2531,25 +2610,24 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
 
                                                                                                         <div className="flex items-center gap-1">
                                                                                                             <input
-                                                                                                                type="number"
-                                                                                                                min="0"
-                                                                                                                max="100"
+                                                                                                                type="text"
+                                                                                                                inputMode="numeric"
+                                                                                                                placeholder="0"
                                                                                                                 value={
-                                                                                                                    sub.weight
+                                                                                                                    sub.weight === 0 || sub.weight === "0" ? "" : (sub.weight ?? "")
                                                                                                                 }
                                                                                                                 onChange={(
                                                                                                                     event
-                                                                                                                ) =>
+                                                                                                                ) => {
+                                                                                                                    const cleaned = rules.criteria.stripLeadingZeros(event.target.value);
                                                                                                                     updateSubCriterion(
                                                                                                                         criterionIndex,
                                                                                                                         subIndex,
                                                                                                                         "weight",
-                                                                                                                        event
-                                                                                                                            .target
-                                                                                                                            .value
-                                                                                                                    )
-                                                                                                                }
-                                                                                                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-1 py-2 text-sm text-center font-bold outline-none"
+                                                                                                                        cleaned
+                                                                                                                    );
+                                                                                                                }}
+                                                                                                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-1 py-2 text-sm text-center font-bold outline-none focus:bg-white focus:ring-2 focus:ring-[#4169E1]/20"
                                                                                                             />
 
                                                                                                             <span className="text-xs text-slate-400">

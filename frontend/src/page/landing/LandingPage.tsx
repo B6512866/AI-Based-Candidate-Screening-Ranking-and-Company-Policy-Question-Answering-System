@@ -6,8 +6,6 @@ import {
     ProblemSection,
     Features,
     HowItWorks,
-    TechStack,
-    CTASection,
     Footer,
 } from "./landing-components";
 import { getalljobs, applyjob, checkApplicationStatus, updateCandidateApplicationInfo, deleteapplication } from "../../services/jobPositionService";
@@ -110,6 +108,7 @@ function LandingPage() {
     const [resumeFile, setResumeFile] = useState<File | null>(null);
     const [transcriptFile, setTranscriptFile] = useState<File | null>(null);
     const [submittingApply, setSubmittingApply] = useState(false);
+    const [pdpaConsent, setPdpaConsent] = useState(false);
     const [applyError, setApplyError] = useState("");
     const [applyFormErrors, setApplyFormErrors] = useState<{
         firstName?: string;
@@ -831,7 +830,7 @@ function LandingPage() {
                                     </div>
 
                                     <div>
-                                        <label className="block text-[11px] font-bold text-slate-500 mb-1">เบอร์โทรศัพท์ (เริ่มต้นด้วย 0) *</label>
+                                        <label className="block text-[11px] font-bold text-slate-500 mb-1">เบอร์โทรศัพท์ *</label>
                                         <input
                                             type="tel"
                                             value={statusEditPhone}
@@ -1072,11 +1071,6 @@ function LandingPage() {
                     <HowItWorks />
                 </section>
 
-                <TechStack />
-
-                <section id="cta">
-                    <CTASection />
-                </section>
             </main>
             <Footer />
             <LoginModal open={isLoginOpen} onOpenChange={handleLoginOpenChange} />
@@ -1369,7 +1363,7 @@ function LandingPage() {
                                 )}
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase">เบอร์โทรศัพท์ (เริ่มต้นด้วย 0) *</label>
+                                <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase">เบอร์โทรศัพท์ *</label>
                                 <input
                                     type="tel"
                                     required
@@ -1534,6 +1528,25 @@ function LandingPage() {
                                 </div>
                             </div>
 
+
+                            {/* PDPA Consent Checkbox */}
+                            <div className="border border-blue-200 bg-blue-50/60 rounded-xl p-3.5 flex items-start gap-3">
+                                <input
+                                    id="pdpa-consent"
+                                    type="checkbox"
+                                    checked={pdpaConsent}
+                                    onChange={(e) => setPdpaConsent(e.target.checked)}
+                                    className="w-4 h-4 mt-0.5 rounded accent-[#4169E1] shrink-0 cursor-pointer"
+                                />
+                                <label htmlFor="pdpa-consent" className="text-[11px] text-slate-700 leading-relaxed cursor-pointer">
+                                    <span className="font-bold text-[#4169E1]">ข้าพเจ้ายินยอมให้เก็บรวบรวมและใช้ข้อมูลส่วนบุคคล</span> ตาม{" "}
+                                    <strong>พระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 (PDPA)</strong>{" "}
+                                    โดยข้อมูลที่ให้ไว้จะถูกนำไปใช้เพื่อวัตถุประสงค์ในการสมัครงานและคัดเลือกบุคลากรเท่านั้น
+                                    และจะไม่ถูกเปิดเผยต่อบุคคลภายนอกโดยไม่ได้รับความยินยอม
+                                    <a href="https://www.ratchakitcha.soc.go.th/DATA/PDF/2562/A/069/T_0052.PDF" target="_blank" rel="noopener noreferrer" className="ml-1 text-[#4169E1] font-semibold hover:underline">อ่านนโยบายความเป็นส่วนตัว →</a>
+                                </label>
+                            </div>
+
                             <div className="bg-amber-50 border border-amber-200/60 rounded-xl p-3 text-[11px] text-amber-800 flex items-start gap-2">
                                 <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                                 <span>หากข้อมูลถูกต้องครบถ้วนแล้ว ให้กดปุ่ม <strong>"ยืนยันส่งใบสมัคร"</strong> ด้านล่าง หรือหากต้องการแก้ไขสามารถกด <strong>"กลับไปแก้ไข"</strong> ได้ทันที</span>
@@ -1544,7 +1557,7 @@ function LandingPage() {
                         <div className="p-4 border-t border-slate-100 flex items-center justify-between gap-3 bg-slate-50/50">
                             <button
                                 type="button"
-                                onClick={() => setShowReviewModal(false)}
+                                onClick={() => { setShowReviewModal(false); setPdpaConsent(false); }}
                                 disabled={submittingApply}
                                 className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-100 text-xs transition-all flex items-center gap-1.5"
                             >
@@ -1554,8 +1567,9 @@ function LandingPage() {
                             <button
                                 type="button"
                                 onClick={handleConfirmedApplySubmit}
-                                disabled={submittingApply}
-                                className="bg-[#4169E1] hover:bg-[#3152c4] text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-all shadow-md shadow-blue-100 active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                                disabled={submittingApply || !pdpaConsent}
+                                title={!pdpaConsent ? "กรุณายืนยันการยินยอม PDPA ก่อนส่งใบสมัคร" : undefined}
+                                className="bg-[#4169E1] hover:bg-[#3152c4] text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-all shadow-md shadow-blue-100 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                             >
                                 {submittingApply ? (
                                     <>

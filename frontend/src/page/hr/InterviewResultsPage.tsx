@@ -9,7 +9,9 @@ import {
     getAllInterviews, notifyInterviewResult, updateInterviewScore
 } from "../../services/interviewService";
 import { useAuth } from "../../context/AuthContext";
+import { useConfirm } from "../../context/ConfirmContext";
 import { buildResultEmailContent } from "../../components/interview/interviewTemplates";
+import rules from "../../components/rules/rule";
 
 // ── Helpers & Format Maps ──────────────────────────────────────────────
 const formatIcons: Record<string, JSX.Element> = {
@@ -114,6 +116,7 @@ function Modal({ open, onClose, children, title, maxWidth = "max-w-xl", footer }
 // MAIN COMPONENT: InterviewResultsPage
 // ══════════════════════════════════════════════════════════════════════
 export default function InterviewResultsPage() {
+    const { alert: showAlert } = useConfirm();
     const [interviews, setInterviews] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
 
@@ -281,17 +284,18 @@ export default function InterviewResultsPage() {
             return;
         }
 
-        const num = parseFloat(val);
-        // If score is invalid (<0 or >100): reset to 0 or original value, and show red error message
+        const cleaned = rules.criteria.stripLeadingZeros(val);
+        const num = parseFloat(cleaned);
+        // If score is invalid (<0 or >100): reset to original value or "", and show red error message
         if (isNaN(num) || num < 0 || num > 100) {
-            const fallback = originalVal !== null && originalVal !== undefined ? String(originalVal) : "0";
+            const fallback = originalVal !== null && originalVal !== undefined ? (originalVal === 0 ? "" : String(originalVal)) : "";
             setScoreInputs(prev => ({ ...prev, [id]: fallback }));
             setScoreErrors(prev => ({ ...prev, [id]: "กรุณาระบุคะแนนระหว่าง 0 ถึง 100" }));
             return;
         }
 
         // Valid score
-        setScoreInputs(prev => ({ ...prev, [id]: val }));
+        setScoreInputs(prev => ({ ...prev, [id]: cleaned }));
         setScoreErrors(prev => ({ ...prev, [id]: "" }));
     };
 
@@ -326,7 +330,11 @@ export default function InterviewResultsPage() {
             setTimeout(() => setSavedScoreId(null), 2000);
             setInterviews(prev => prev.map(iv => iv.ID === id ? { ...iv, interviewer_score: num } : iv));
         } catch (err: any) {
-            alert(err.response?.data?.error || "ไม่สามารถบันทึกคะแนนได้");
+            showAlert({
+                title: "บันทึกคะแนนล้มเหลว",
+                message: err.response?.data?.error || "ไม่สามารถบันทึกคะแนนได้",
+                variant: "danger",
+            });
         } finally {
             setSavingScoreId(null);
         }
@@ -352,7 +360,11 @@ export default function InterviewResultsPage() {
                 return iv;
             }));
         } catch (err: any) {
-            alert(err.response?.data?.error || "ไม่สามารถเปลี่ยนผลการสัมภาษณ์ได้");
+            showAlert({
+                title: "เปลี่ยนผลล้มเหลว",
+                message: err.response?.data?.error || "ไม่สามารถเปลี่ยนผลการสัมภาษณ์ได้",
+                variant: "danger",
+            });
         }
     };
 
@@ -383,7 +395,11 @@ export default function InterviewResultsPage() {
             setShowSuccessModal(true);
             fetchInterviews();
         } catch (err: any) {
-            alert(err.response?.data?.error || "เกิดข้อผิดพลาดในการส่งแจ้งผลสัมภาษณ์");
+            showAlert({
+                title: "ส่งแจ้งผลไม่สำเร็จ",
+                message: err.response?.data?.error || "เกิดข้อผิดพลาดในการส่งแจ้งผลสัมภาษณ์",
+                variant: "danger",
+            });
         } finally {
             setSendingResult(false);
         }
@@ -751,14 +767,13 @@ export default function InterviewResultsPage() {
                                                             : "border-slate-200 hover:border-slate-300 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-200/60"
                                                     }`}>
                                                         <input
-                                                            type="number"
-                                                            min="0"
-                                                            max="100"
+                                                            type="text"
+                                                            inputMode="numeric"
                                                             placeholder="-"
                                                             value={
                                                                 scoreInputs[iv.ID] !== undefined
                                                                     ? scoreInputs[iv.ID]
-                                                                    : (humanScore !== null && humanScore !== undefined ? String(humanScore) : "")
+                                                                    : (humanScore !== null && humanScore !== undefined ? (humanScore === 0 ? "" : String(humanScore)) : "")
                                                             }
                                                             onChange={e => handleInlineScoreChange(iv.ID, e.target.value, humanScore)}
                                                             onBlur={() => handleInlineScoreSave(iv.ID, humanScore)}

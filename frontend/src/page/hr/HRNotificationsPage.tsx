@@ -17,9 +17,11 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { notificationService, NotificationItem } from "../../services/notificationService";
+import { useConfirm } from "../../context/ConfirmContext";
 
 export default function HRNotificationsPage() {
     const navigate = useNavigate();
+    const { confirm, alert: showAlert } = useConfirm();
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
     const [activeTab, setActiveTab] = useState<string>("all");
     const [searchQuery, setSearchQuery] = useState("");
@@ -61,8 +63,16 @@ export default function HRNotificationsPage() {
         }
     };
 
-    const handleDeleteNotif = (id: string, e: React.MouseEvent) => {
+    const handleDeleteNotif = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
+        const isConfirmed = await confirm({
+            title: "ยืนยันการลบการแจ้งเตือน?",
+            message: "คุณต้องการลบรายการแจ้งเตือนนี้ใช่หรือไม่?",
+            confirmText: "ลบการแจ้งเตือน",
+            variant: "danger",
+        });
+        if (!isConfirmed) return;
+
         const updated = notificationService.deleteNotification(id, "HR");
         setNotifications(updated);
         if (selectedNotif?.id === id) setSelectedNotif(null);
@@ -120,7 +130,11 @@ export default function HRNotificationsPage() {
         setNewMessage("");
         setNewLinkPath("");
         setNewLinkText("");
-        alert("ส่งประกาศ / การแจ้งเตือนเรียบร้อยแล้ว");
+        showAlert({
+            title: "ส่งประกาศสำเร็จ",
+            message: "ส่งประกาศ / การแจ้งเตือนเรียบร้อยแล้ว",
+            variant: "success",
+        });
     };
 
     const filteredNotifs = notifications.filter((n) => {

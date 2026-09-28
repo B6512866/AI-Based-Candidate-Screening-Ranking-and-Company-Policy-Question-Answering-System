@@ -19,6 +19,7 @@ import {
     sendInterviewEmail,
 } from "../../services/interviewService";
 import { formatPhoneNumber, formatTime12H } from "../../components/rules/rule";
+import { useConfirm } from "../../context/ConfirmContext";
 import {
     buildInterviewEmailContent,
     parseInterviewFormatDescription,
@@ -87,6 +88,7 @@ function formatTime(dateStr: string): string {
 
 // ══════════════════════════════════════════════════════════════════
 export default function InterviewsPage() {
+    const { confirm, alert: showAlert } = useConfirm();
     // ── Tab state ──
     const [activeTab, setActiveTab] = useState<"create" | "table">("create");
     const [tableFilterStatus, setTableFilterStatus] = useState("ทั้งหมด");
@@ -320,7 +322,11 @@ export default function InterviewsPage() {
     const handleSaveInterview = async () => {
         setShowConfirmModal(false);
         if (!selectedAppId || !interviewDate) {
-            alert("กรุณาเลือกผู้สมัครและกำหนดวัน/เวลา");
+            showAlert({
+                title: "ข้อมูลไม่ครบถ้วน",
+                message: "กรุณาเลือกผู้สมัครและกำหนดวัน/เวลา",
+                variant: "warning",
+            });
             return;
         }
         setSaving(true);
@@ -388,7 +394,11 @@ export default function InterviewsPage() {
                 fetchInterviews();
             }
         } catch (err: any) {
-            alert(err.response?.data?.error || "เกิดข้อผิดพลาดในการบันทึกนัดสัมภาษณ์");
+            showAlert({
+                title: "เกิดข้อผิดพลาด",
+                message: err.response?.data?.error || "เกิดข้อผิดพลาดในการบันทึกนัดสัมภาษณ์",
+                variant: "danger",
+            });
         } finally {
             setSaving(false);
         }
@@ -463,7 +473,13 @@ export default function InterviewsPage() {
             ? `${targetIv.application.Candidate.first_name} ${targetIv.application.Candidate.last_name}`
             : "รายการนี้";
 
-        if (!confirm(`ต้องการลบนัดสัมภาษณ์ของ "${targetName}" หรือไม่?`)) return;
+        const isConfirmed = await confirm({
+            title: "ยืนยันการลบนัดสัมภาษณ์?",
+            message: `ต้องการลบนัดสัมภาษณ์ของ "${targetName}" หรือไม่?\n\nการกระทำนี้ไม่สามารถย้อนกลับได้`,
+            confirmText: "ลบนัดสัมภาษณ์",
+            variant: "danger",
+        });
+        if (!isConfirmed) return;
         try {
             await deleteInterview(id);
 
@@ -491,13 +507,21 @@ export default function InterviewsPage() {
             await fetchInterviews();
             await fetchCandidates();
         } catch (err: any) {
-            alert(err.response?.data?.error || "ลบไม่สำเร็จ");
+            showAlert({
+                title: "เกิดข้อผิดพลาด",
+                message: err.response?.data?.error || "ลบไม่สำเร็จ",
+                variant: "danger",
+            });
         }
     };
 
     const handleSendEmail = async () => {
         if (!lastSavedInterviewId) {
-            alert("กรุณาบันทึกข้อมูลการนัดสัมภาษณ์ก่อน");
+            showAlert({
+                title: "ยังไม่ได้บันทึกข้อมูล",
+                message: "กรุณาบันทึกข้อมูลการนัดสัมภาษณ์ก่อน",
+                variant: "warning",
+            });
             return;
         }
         setShowEmailModal(false);
@@ -506,7 +530,11 @@ export default function InterviewsPage() {
             await sendInterviewEmail(lastSavedInterviewId, emailContent);
             setShowEmailSentSuccessModal(true);
         } catch (err: any) {
-            alert(err.response?.data?.error || "ส่งอีเมลไม่สำเร็จ");
+            showAlert({
+                title: "เกิดข้อผิดพลาด",
+                message: err.response?.data?.error || "ส่งอีเมลไม่สำเร็จ",
+                variant: "danger",
+            });
         } finally {
             setSendingEmail(false);
         }

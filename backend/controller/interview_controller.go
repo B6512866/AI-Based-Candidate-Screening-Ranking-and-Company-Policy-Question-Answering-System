@@ -399,7 +399,10 @@ func (c *InterviewController) SendEmail(ctx *gin.Context) {
 		if interview.FormatDescription != "" {
 			locStr += " (" + interview.FormatDescription + ")"
 		}
-		appCode := fmt.Sprintf("APP-%d", 10000+interview.ApplicationID)
+		appCode := interview.Application.ApplicationCode
+		if appCode == "" {
+			appCode = fmt.Sprintf("APP-%d", 10000+interview.ApplicationID)
+		}
 		err = services.SendInterviewEmailWithButtons(candidateEmail, candName, appCode, jobTitle, dateStr, locStr, interview.FormatDescription, interview.ResponseToken, backendBaseURL, interview.ID)
 	}
 
@@ -475,7 +478,10 @@ func (c *InterviewController) Respond(ctx *gin.Context) {
 	}
 
 	candName := fmt.Sprintf("%s %s", interview.Application.Candidate.FirstName, interview.Application.Candidate.LastName)
-	appCode := fmt.Sprintf("APP-%d", 10000+interview.ApplicationID)
+	appCode := interview.Application.ApplicationCode
+	if appCode == "" {
+		appCode = fmt.Sprintf("APP-%d", 10000+interview.ApplicationID)
+	}
 	jobTitle := interview.Application.JobPosition.Title
 	if jobTitle == "" {
 		jobTitle = interview.Application.Position
@@ -604,11 +610,11 @@ func (c *InterviewController) Respond(ctx *gin.Context) {
 func renderConfirmationPromptPage(interviewID uint, defaultAction, token, candName, appCode, jobTitle, dateStr, formatLabel, formatDesc, currentStatus string) string {
 	statusNoticeHtml := ""
 	if currentStatus == "confirmed" {
-		statusNoticeHtml = `<div style="background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46; padding:10px 14px; border-radius:12px; margin-bottom:16px; font-size:12.5px; font-weight:600; text-align:center;">✓ นัดสัมภาษณ์นี้ได้รับการบันทึกว่า "ยืนยันแล้ว" (ท่านสามารถปรับเปลี่ยนคำตอบได้)</div>`
+		statusNoticeHtml = `<div style="background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46; padding:10px 14px; border-radius:12px; margin-bottom:16px; font-size:12.5px; font-weight:600; text-align:center;">นัดสัมภาษณ์นี้ได้รับการบันทึกว่า "ยืนยันแล้ว" (ท่านสามารถปรับเปลี่ยนคำตอบได้)</div>`
 	} else if currentStatus == "rescheduled" {
-		statusNoticeHtml = `<div style="background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:10px 14px; border-radius:12px; margin-bottom:16px; font-size:12.5px; font-weight:600; text-align:center;">ℹ นัดสัมภาษณ์นี้ได้เคยแจ้ง "ขอเลื่อนนัด" ไว้แล้ว</div>`
+		statusNoticeHtml = `<div style="background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:10px 14px; border-radius:12px; margin-bottom:16px; font-size:12.5px; font-weight:600; text-align:center;">นัดสัมภาษณ์นี้ได้เคยแจ้ง "ขอเลื่อนนัด" ไว้แล้ว</div>`
 	} else if currentStatus == "cancelled" {
-		statusNoticeHtml = `<div style="background:#fff1f2; border:1px solid #fecdd3; color:#9f1239; padding:10px 14px; border-radius:12px; margin-bottom:16px; font-size:12.5px; font-weight:600; text-align:center;">✕ นัดสัมภาษณ์นี้ได้เคยแจ้ง "สละสิทธิ์/ปฏิเสธ" ไว้แล้ว</div>`
+		statusNoticeHtml = `<div style="background:#fff1f2; border:1px solid #fecdd3; color:#9f1239; padding:10px 14px; border-radius:12px; margin-bottom:16px; font-size:12.5px; font-weight:600; text-align:center;">นัดสัมภาษณ์นี้ได้เคยแจ้ง "สละสิทธิ์/ปฏิเสธ" ไว้แล้ว</div>`
 	}
 
 	formatDetailHtml := ""
@@ -948,7 +954,7 @@ func renderConfirmationPromptPage(interviewID uint, defaultAction, token, candNa
                     <label class="choice-card" id="card-confirm">
                         <input type="radio" name="action" value="confirm" %s onchange="handleActionChange('confirm')" />
                         <div>
-                            <span class="choice-title" style="color: #059669;">✓ ยืนยันเข้าร่วมสัมภาษณ์</span>
+                            <span class="choice-title" style="color: #059669;">ยืนยันเข้าร่วมสัมภาษณ์</span>
                             <span class="choice-desc">สะดวกและพร้อมเข้าร่วมการสัมภาษณ์ตามวันและเวลาที่ระบุ</span>
                         </div>
                     </label>
@@ -956,7 +962,7 @@ func renderConfirmationPromptPage(interviewID uint, defaultAction, token, candNa
                     <label class="choice-card" id="card-reschedule">
                         <input type="radio" name="action" value="reschedule" %s onchange="handleActionChange('reschedule')" />
                         <div>
-                            <span class="choice-title" style="color: #d97706;">⏱ ขอเลื่อนวัน-เวลาสัมภาษณ์</span>
+                            <span class="choice-title" style="color: #d97706;">ขอเลื่อนวัน-เวลาสัมภาษณ์</span>
                             <span class="choice-desc">ไม่สะดวกในวันเวลาดังกล่าว ขอประสานงานนัดหมายวันเวลาใหม่</span>
                         </div>
                     </label>
@@ -964,7 +970,7 @@ func renderConfirmationPromptPage(interviewID uint, defaultAction, token, candNa
                     <label class="choice-card" id="card-reject">
                         <input type="radio" name="action" value="reject" %s onchange="handleActionChange('reject')" />
                         <div>
-                            <span class="choice-title" style="color: #e11d48;">✕ ขอสละสิทธิ์ / ไม่สะดวกสัมภาษณ์</span>
+                            <span class="choice-title" style="color: #e11d48;">ขอสละสิทธิ์ / ไม่สะดวกสัมภาษณ์</span>
                             <span class="choice-desc">ต้องการสละสิทธิ์หรือขอปฏิเสธการเข้ารับการสัมภาษณ์งาน</span>
                         </div>
                     </label>
@@ -983,9 +989,6 @@ func renderConfirmationPromptPage(interviewID uint, defaultAction, token, candNa
                 </button>
             </form>
 
-            <p class="cancel-hint">
-                เมื่อกดส่งคำตอบแล้ว ระบบจะแจ้งเตือนไปยังฝ่ายทรัพยากรบุคคลโดยอัตโนมัติ
-            </p>
         </div>
         <div class="footer">
             HireAI Recruitment Platform &copy; All Rights Reserved
@@ -1346,7 +1349,10 @@ func (c *InterviewController) NotifyResult(ctx *gin.Context) {
 
 	// ส่งอีเมลแจ้งผล
 	candName := fmt.Sprintf("%s %s", interview.Application.Candidate.FirstName, interview.Application.Candidate.LastName)
-	appCode := fmt.Sprintf("APP-%d", 10000+interview.ApplicationID)
+	appCode := interview.Application.ApplicationCode
+	if appCode == "" {
+		appCode = fmt.Sprintf("APP-%d", 10000+interview.ApplicationID)
+	}
 	jobTitle := interview.Application.JobPosition.Title
 	if jobTitle == "" {
 		jobTitle = interview.Application.Position
@@ -1494,7 +1500,10 @@ func (c *InterviewController) AcknowledgeResult(ctx *gin.Context) {
 	}
 
 	candName := fmt.Sprintf("%s %s", interview.Application.Candidate.FirstName, interview.Application.Candidate.LastName)
-	appCode := fmt.Sprintf("APP-%d", 10000+interview.ApplicationID)
+	appCode := interview.Application.ApplicationCode
+	if appCode == "" {
+		appCode = fmt.Sprintf("APP-%d", 10000+interview.ApplicationID)
+	}
 	jobTitle := interview.Application.JobPosition.Title
 	if jobTitle == "" {
 		jobTitle = interview.Application.Position

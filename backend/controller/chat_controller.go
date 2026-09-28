@@ -115,3 +115,61 @@ func (cc *ChatController) SaveChatMessage(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusCreated, gin.H{"message": "บันทึกข้อมูลเรียบร้อยแล้ว", "data": msg})
 }
+
+// 4. ลบห้องสนทนาทั้งหมด (soft delete ข้อความทั้งหมดใน session)
+func (cc *ChatController) DeleteSession(ctx *gin.Context) {
+	var userID uint = 1
+	if idVal, exists := ctx.Get("id"); exists {
+		if idFloat, ok := idVal.(float64); ok {
+			userID = uint(idFloat)
+		} else if idUint, ok := idVal.(uint); ok {
+			userID = idUint
+		}
+	}
+
+	sessionID := ctx.Query("session_id")
+	if sessionID == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ต้องระบุ session_id"})
+		return
+	}
+
+	if err := cc.db.Where("user_id = ? AND session_id = ?", userID, sessionID).Delete(&entity.ChatMessage{}).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถลบห้องสนทนาได้"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"message": "ลบห้องสนทนาเรียบร้อยแล้ว"})
+}
+
+// 5. เปลี่ยนชื่อหัวข้อห้องสนทนา
+func (cc *ChatController) RenameSession(ctx *gin.Context) {
+	var userID uint = 1
+	if idVal, exists := ctx.Get("id"); exists {
+		if idFloat, ok := idVal.(float64); ok {
+			userID = uint(idFloat)
+		} else if idUint, ok := idVal.(uint); ok {
+			userID = idUint
+		}
+	}
+
+	type RenameReq struct {
+		SessionID string `json:"session_id" binding:"required"`
+		NewTitle  string `json:"new_title"  binding:"required"`
+	}
+
+	var req RenameReq
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ครบถ้วน"})
+		return
+	}
+
+	if err := cc.db.Model(&entity.ChatMessage{}).
+		Where("user_id = ? AND session_id = ?", userID, req.SessionID).
+		Update("session_title", req.NewTitle).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถเปลี่ยนชื่อห้องสนทนาได้"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"message": "เปลี่ยนชื่อห้องสนทนาเรียบร้อยแล้ว"})
+}
+

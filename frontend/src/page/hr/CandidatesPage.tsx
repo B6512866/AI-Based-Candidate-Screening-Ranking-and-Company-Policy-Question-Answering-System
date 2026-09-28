@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
-import { Search, Sparkles, Eye, RefreshCw, ChevronDown, ChevronUp, X, Award, FileText, BarChart3, Check, Briefcase, ExternalLink, Download, Edit3, GraduationCap } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Search, Sparkles, Eye, RefreshCw, ChevronDown, ChevronUp, ChevronsUpDown, X, Award, FileText, BarChart3, Check, Briefcase, ExternalLink, Download, Edit3, GraduationCap } from "lucide-react";
 import { Link } from "react-router-dom";
 import apiClient, { getBackendBaseUrl } from "../../services/apiClient";
 import { openFileInNewTab, downloadFile, isPdf, isImage } from "../../utils/fileViewer";
 import { getalljobs, updateApplicationStatus, updateApplicationScreening, updateCandidateApplicationInfo } from "../../services/jobPositionService";
+import { getAllInterviews, updateInterviewScore } from "../../services/interviewService";
 import rules from "../../components/rules/rule";
+import { useConfirm } from "../../context/ConfirmContext";
 
 interface SubCriterion {
     id?: string;
@@ -54,6 +56,13 @@ interface CandidateItem {
     aiScore: number;
     status: string;
     appliedDate: string;
+    rawCreatedAt: string;
+    interviewerScore: number | null;
+    interviewId: number | null;
+    interviewStatus: string;
+    interviewResult: string;
+    interviewDate: string;
+    interviewTime: string;
     analysisObj: AnalysisDataObj | null;
     criteriaBreakdown: MainCriterionBreakdown[];
     strengths: string;
@@ -133,6 +142,7 @@ const getLevelRatio = (levelStr: string, currentScore: number, maxScore: number)
 };
 
 export default function CandidatesPage() {
+    const { alert: showAlert } = useConfirm();
     const [candidates, setCandidates] = useState<CandidateItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [search, setSearch] = useState("");
@@ -146,6 +156,29 @@ export default function CandidatesPage() {
     const [activeDocTab, setActiveDocTab] = useState<"resume" | "transcript">("resume");
     const [editingScoreId, setEditingScoreId] = useState<string | null>(null);
     const [editingScoreValue, setEditingScoreValue] = useState<number | string>(0);
+
+    // Interviewer Score editing states
+    const [editingIvScoreId, setEditingIvScoreId] = useState<string | null>(null);
+    const [editingIvScoreValue, setEditingIvScoreValue] = useState<number | string>("");
+
+    // Sorting states
+    type SortField = "id" | "name" | "position" | "aiScore" | "interviewerScore" | "status" | "appliedDate";
+    type SortOrder = "asc" | "desc";
+    const [sortField, setSortField] = useState<SortField>("aiScore");
+    const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+
+    const handleSort = (field: SortField) => {
+        if (sortField === field) {
+            setSortOrder(prev => (prev === "asc" ? "desc" : "asc"));
+        } else {
+            setSortField(field);
+            if (field === "aiScore" || field === "interviewerScore" || field === "appliedDate") {
+                setSortOrder("desc");
+            } else {
+                setSortOrder("asc");
+            }
+        }
+    };
 
     // Edit Candidate Info states
     const [isEditingCandidate, setIsEditingCandidate] = useState(false);
@@ -180,7 +213,11 @@ export default function CandidatesPage() {
     const handleSaveCandidateInfo = async () => {
         if (!selectedCandidateModal) return;
         if (!editFormCandidate.firstName.trim()) {
-            alert("กรุณาระบุชื่อผู้สมัคร");
+            showAlert({
+                title: "ข้อมูลไม่ครบถ้วน",
+                message: "กรุณาระบุชื่อผู้สมัคร",
+                variant: "warning",
+            });
             return;
         }
 
@@ -230,7 +267,11 @@ export default function CandidatesPage() {
             setTimeout(() => setEditSuccessMsg(null), 4000);
         } catch (err) {
             console.error("Failed to update candidate info:", err);
-            alert("เกิดข้อผิดพลาดในการบันทึกข้อมูลผู้สมัคร");
+            showAlert({
+                title: "เกิดข้อผิดพลาด",
+                message: "เกิดข้อผิดพลาดในการบันทึกข้อมูลผู้สมัคร",
+                variant: "danger",
+            });
         } finally {
             setSavingCandidateInfo(false);
         }
@@ -256,7 +297,11 @@ export default function CandidatesPage() {
             }
         } catch (err) {
             console.error("Failed to update candidate status:", err);
-            alert("เกิดข้อผิดพลาดในการอัปเดตสถานะผู้สมัคร");
+            showAlert({
+                title: "เกิดข้อผิดพลาด",
+                message: "เกิดข้อผิดพลาดในการอัปเดตสถานะผู้สมัคร",
+                variant: "danger",
+            });
         }
     };
 
@@ -285,16 +330,45 @@ export default function CandidatesPage() {
             }
         } catch (err) {
             console.error("Failed to update PTS score:", err);
-            alert("เกิดข้อผิดพลาดในการบันทึกคะแนน PTS");
+            showAlert({
+                title: "เกิดข้อผิดพลาด",
+                message: "เกิดข้อผิดพลาดในการบันทึกคะแนน PTS",
+                variant: "danger",
+            });
+        }
+    };
+
+    const handleInterviewerScoreChange = async (interviewId: number, newScore: number | null, candidateId: string) => {
+        try {
+            await updateInterviewScore(interviewId, {
+                interviewer_score: newScore
+            });
+            setCandidates(prev => prev.map(c => {
+                if (c.id === candidateId) {
+                    return { ...c, interviewerScore: newScore };
+                }
+                return c;
+            }));
+            if (selectedCandidateModal && selectedCandidateModal.id === candidateId) {
+                setSelectedCandidateModal(prev => prev ? { ...prev, interviewerScore: newScore } : null);
+            }
+        } catch (err) {
+            console.error("Failed to update interviewer score:", err);
+            showAlert({
+                title: "เกิดข้อผิดพลาด",
+                message: "เกิดข้อผิดพลาดในการบันทึกคะแนนผู้สัมภาษณ์",
+                variant: "danger",
+            });
         }
     };
 
     const fetchCandidates = async () => {
         setLoading(true);
         try {
-            const [resCandidates, resJobs] = await Promise.all([
+            const [resCandidates, resJobs, resInterviews] = await Promise.all([
                 apiClient.get("/interviews/candidates").catch(() => ({ data: { data: [] } })),
-                getalljobs().catch(() => ({ data: [] }))
+                getalljobs().catch(() => ({ data: [] })),
+                getAllInterviews().catch(() => ({ data: [] }))
             ]);
 
             const jobsList = resJobs?.data || resJobs || [];
@@ -303,6 +377,17 @@ export default function CandidatesPage() {
                 jobsList.forEach((j: any) => {
                     const jId = j.ID?.toString() || j.id?.toString();
                     if (jId) jobsMap[jId] = j;
+                });
+            }
+
+            const interviewsList = resInterviews?.data || resInterviews || [];
+            const interviewsMap: Record<string, any> = {};
+            if (Array.isArray(interviewsList)) {
+                interviewsList.forEach((iv: any) => {
+                    const appId = iv.application_id || iv.ApplicationID || iv.Application?.ID || iv.application?.id;
+                    if (appId) {
+                        interviewsMap[appId.toString()] = iv;
+                    }
                 });
             }
 
@@ -572,8 +657,19 @@ export default function CandidatesPage() {
 
                     let tText = app.transcript_text || app.TranscriptText || app.transcriptText || cand.transcript_text || cand.TranscriptText || cand.transcriptText || "";
 
+                    const appIdStr = app.ID ? app.ID.toString() : app.id?.toString() || "0";
+                    const matchedInterview = interviewsMap[appIdStr] || null;
+                    const ivScore = (matchedInterview && matchedInterview.interviewer_score !== undefined && matchedInterview.interviewer_score !== null)
+                        ? matchedInterview.interviewer_score
+                        : null;
+                    const ivId = matchedInterview ? (matchedInterview.ID || matchedInterview.id || null) : null;
+                    const ivStatus = matchedInterview ? (matchedInterview.interview_status || "") : "";
+                    const ivResult = matchedInterview ? (matchedInterview.interview_result || "") : "";
+                    const ivDate = matchedInterview ? (matchedInterview.interview_date || "") : "";
+                    const ivTime = matchedInterview ? (matchedInterview.interview_time || "") : "";
+
                     return {
-                        id: app.ID ? app.ID.toString() : app.id?.toString() || "0",
+                        id: appIdStr,
                         name: name,
                         firstName: rawFirstName || (name.split(" ")[0] || ""),
                         lastName: rawLastName || (name.split(" ").slice(1).join(" ") || ""),
@@ -583,6 +679,13 @@ export default function CandidatesPage() {
                         aiScore: Math.round(finalPTS),
                         status: app.status || "รอพิจารณา",
                         appliedDate: dateStr,
+                        rawCreatedAt: app.created_at || app.CreatedAt || "",
+                        interviewerScore: ivScore,
+                        interviewId: ivId,
+                        interviewStatus: ivStatus,
+                        interviewResult: ivResult,
+                        interviewDate: ivDate,
+                        interviewTime: ivTime,
                         analysisObj: parsedAnalysisObj,
                         criteriaBreakdown: criteriaBreakdown,
                         strengths: aiScreening.strengths || aiScreening.Strengths || "",
@@ -611,7 +714,13 @@ export default function CandidatesPage() {
         fetchCandidates();
     }, []);
 
-    const uniquePositions = Array.from(new Set(candidates.map(c => c.position).filter(Boolean)));
+    const uniquePositions = useMemo(() => {
+        const set = new Set<string>();
+        candidates.forEach(c => {
+            if (c.position) set.add(c.position);
+        });
+        return Array.from(set).sort((a, b) => a.localeCompare(b, "th"));
+    }, [candidates]);
 
     const filtered = candidates.filter(c => {
         const matchSearch = c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -628,6 +737,73 @@ export default function CandidatesPage() {
         return matchSearch && matchTab && matchPosition;
     });
 
+    const sortedCandidates = useMemo(() => {
+        const list = [...filtered];
+        list.sort((a, b) => {
+            let comp = 0;
+            switch (sortField) {
+                case "id":
+                    comp = (parseInt(a.id) || 0) - (parseInt(b.id) || 0);
+                    break;
+                case "name":
+                    comp = a.name.localeCompare(b.name, "th");
+                    break;
+                case "position":
+                    comp = a.position.localeCompare(b.position, "th");
+                    break;
+                case "aiScore":
+                    comp = a.aiScore - b.aiScore;
+                    break;
+                case "interviewerScore": {
+                    const scoreA = a.interviewerScore !== null ? a.interviewerScore : -1;
+                    const scoreB = b.interviewerScore !== null ? b.interviewerScore : -1;
+                    comp = scoreA - scoreB;
+                    break;
+                }
+                case "status":
+                    comp = a.status.localeCompare(b.status, "th");
+                    break;
+                case "appliedDate": {
+                    const timeA = a.rawCreatedAt ? new Date(a.rawCreatedAt).getTime() : 0;
+                    const timeB = b.rawCreatedAt ? new Date(b.rawCreatedAt).getTime() : 0;
+                    comp = timeA - timeB;
+                    break;
+                }
+                default:
+                    comp = 0;
+            }
+            return sortOrder === "asc" ? comp : -comp;
+        });
+        return list;
+    }, [filtered, sortField, sortOrder]);
+
+    const renderSortHeader = (field: SortField, title: string, className = "") => {
+        const isActive = sortField === field;
+        return (
+            <button
+                type="button"
+                onClick={() => handleSort(field)}
+                className={`inline-flex items-center gap-1 font-bold text-xs uppercase tracking-wider transition-colors select-none group cursor-pointer ${
+                    isActive ? "text-[#4169E1]" : "text-slate-500 hover:text-slate-800"
+                } ${className}`}
+                title={`จัดเรียงตาม ${title} (${isActive ? (sortOrder === "asc" ? "น้อยไปมาก / ก-ฮ (คลิกเพื่อสลับ)" : "มากไปน้อย / ฮ-ก (คลิกเพื่อสลับ)") : "คลิกเพื่อจัดเรียง"})`}
+            >
+                <span>{title}</span>
+                <span className="inline-flex items-center">
+                    {isActive ? (
+                        sortOrder === "asc" ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-[#4169E1] stroke-[2.5]" />
+                        ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-[#4169E1] stroke-[2.5]" />
+                        )
+                    ) : (
+                        <ChevronsUpDown className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 transition-colors" />
+                    )}
+                </span>
+            </button>
+        );
+    };
+
     const toggleExpandRow = (id: string) => {
         setExpandedCandidateId(prev => prev === id ? null : id);
     };
@@ -638,13 +814,13 @@ export default function CandidatesPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <div className="flex items-center gap-2.5">
-                        <h1 className="text-2xl font-black text-slate-800 tracking-tight">จัดลำดับและโปรไฟล์ผู้สมัคร (PTS Ranking)</h1>
+                        <h1 className="text-2xl font-black text-slate-800 tracking-tight">จัดลำดับและโปรไฟล์ผู้สมัคร</h1>
                         <span className="bg-indigo-50 text-[#4169E1] text-xs font-bold px-2.5 py-0.5 rounded-full border border-indigo-100">
                             {candidates.length} ผู้สมัคร
                         </span>
                     </div>
                     <p className="text-slate-500 text-sm mt-1 font-medium">
-                        รายชื่อผู้สมัครทั้งหมด เรียงลำดับตามคะแนน PTS พร้อมรายละเอียดเกณฑ์การประเมิน (Criteria, Sub-Criteria & Weights)
+                        รายชื่อผู้สมัครทั้งหมด พร้อมรายละเอียดต่างๆ ของผู้สมัคร
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -775,30 +951,45 @@ export default function CandidatesPage() {
                     <table className="w-full text-left border-collapse min-w-[1100px]">
                         <thead>
                             <tr className="bg-slate-50/90 border-b border-slate-200/80 text-slate-500 text-xs uppercase tracking-wider font-bold">
-                                <th className="py-4 px-4 w-12 text-center">#</th>
-                                <th className="py-4 px-5 min-w-[210px]">ผู้สมัคร</th>
-                                <th className="py-4 px-4 min-w-[170px]">ตำแหน่งที่สมัคร</th>
-                                <th className="py-4 px-4 min-w-[140px]">คะแนน PTS</th>
-                                <th className="py-4 px-4 min-w-[150px]">สถานะ</th>
-                                <th className="py-4 px-4 min-w-[110px] whitespace-nowrap">วันที่ยื่นสมัคร</th>
-                                <th className="py-4 px-5 text-right min-w-[340px] whitespace-nowrap">เอกสารและการจัดการ</th>
+                                <th className="py-4 px-4 w-14 text-center">
+                                    {renderSortHeader("id", "#", "justify-center w-full")}
+                                </th>
+                                <th className="py-4 px-5 min-w-[210px]">
+                                    {renderSortHeader("name", "ผู้สมัคร")}
+                                </th>
+                                <th className="py-4 px-4 min-w-[170px]">
+                                    {renderSortHeader("position", "ตำแหน่งที่สมัคร")}
+                                </th>
+                                <th className="py-4 px-4 min-w-[140px]">
+                                    {renderSortHeader("aiScore", "คะแนน PTS")}
+                                </th>
+                                <th className="py-4 px-4 min-w-[150px]">
+                                    {renderSortHeader("interviewerScore", "คะแนนผู้สัมภาษณ์")}
+                                </th>
+                                <th className="py-4 px-4 min-w-[150px]">
+                                    {renderSortHeader("status", "สถานะ")}
+                                </th>
+                                <th className="py-4 px-4 min-w-[120px] whitespace-nowrap">
+                                    {renderSortHeader("appliedDate", "วันที่ยื่นสมัคร")}
+                                </th>
+                                <th className="py-4 px-5 text-right min-w-[280px] whitespace-nowrap">เอกสารและการจัดการ</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-sm text-slate-700 font-medium">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={7} className="py-12 text-center text-slate-400">
+                                    <td colSpan={8} className="py-12 text-center text-slate-400">
                                         กำลังโหลดข้อมูลผู้สมัครและคะแนนประเมิน...
                                     </td>
                                 </tr>
-                            ) : filtered.length === 0 ? (
+                            ) : sortedCandidates.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="py-12 text-center text-slate-400">
+                                    <td colSpan={8} className="py-12 text-center text-slate-400">
                                         ยังไม่มีข้อมูลผู้สมัครในระบบ
                                     </td>
                                 </tr>
                             ) : (
-                                filtered.map((c, index) => {
+                                sortedCandidates.map((c, index) => {
                                     const isExpanded = expandedCandidateId === c.id;
                                     return (
                                         <>
@@ -841,14 +1032,14 @@ export default function CandidatesPage() {
                                                     {editingScoreId === c.id ? (
                                                         <div className="flex items-center gap-1.5">
                                                             <input
-                                                                type="number"
-                                                                min={0}
-                                                                max={100}
-                                                                value={editingScoreValue}
-                                                                onChange={e => setEditingScoreValue(e.target.value)}
+                                                                type="text"
+                                                                inputMode="numeric"
+                                                                value={editingScoreValue === 0 || editingScoreValue === "0" ? "" : editingScoreValue}
+                                                                placeholder="0"
+                                                                onChange={e => setEditingScoreValue(rules.criteria.stripLeadingZeros(e.target.value))}
                                                                 onKeyDown={e => {
                                                                     if (e.key === "Enter") {
-                                                                        const val = parseInt(String(editingScoreValue));
+                                                                        const val = parseInt(String(editingScoreValue || 0));
                                                                         if (!isNaN(val)) handleScoreChange(c.id, val);
                                                                         setEditingScoreId(null);
                                                                     } else if (e.key === "Escape") {
@@ -918,6 +1109,98 @@ export default function CandidatesPage() {
                                                     )}
                                                 </td>
                                                 <td className="py-4 px-4 min-w-[150px] whitespace-nowrap">
+                                                    {c.interviewId ? (
+                                                        editingIvScoreId === c.id ? (
+                                                            <div className="flex items-center gap-1.5">
+                                                                <input
+                                                                    type="text"
+                                                                    inputMode="numeric"
+                                                                    value={editingIvScoreValue === 0 || editingIvScoreValue === "0" ? "" : editingIvScoreValue}
+                                                                    placeholder="0"
+                                                                    onChange={e => setEditingIvScoreValue(rules.criteria.stripLeadingZeros(e.target.value))}
+                                                                    onKeyDown={e => {
+                                                                        if (e.key === "Enter") {
+                                                                            const val = editingIvScoreValue === "" ? null : parseInt(String(editingIvScoreValue));
+                                                                            if (val === null || (!isNaN(val) && val >= 0 && val <= 100)) {
+                                                                                handleInterviewerScoreChange(c.interviewId!, val, c.id);
+                                                                            }
+                                                                            setEditingIvScoreId(null);
+                                                                        } else if (e.key === "Escape") {
+                                                                            setEditingIvScoreId(null);
+                                                                        }
+                                                                    }}
+                                                                    className="w-16 px-2 py-1 bg-white border-2 border-purple-500 rounded-lg text-sm font-black font-mono text-slate-800 outline-none text-center shadow-xs"
+                                                                    autoFocus
+                                                                />
+                                                                <button
+                                                                    onClick={() => {
+                                                                        const val = editingIvScoreValue === "" ? null : parseInt(String(editingIvScoreValue));
+                                                                        if (val === null || (!isNaN(val) && val >= 0 && val <= 100)) {
+                                                                            handleInterviewerScoreChange(c.interviewId!, val, c.id);
+                                                                        }
+                                                                        setEditingIvScoreId(null);
+                                                                    }}
+                                                                    className="p-1 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-all cursor-pointer"
+                                                                    title="บันทึกคะแนนผู้สัมภาษณ์"
+                                                                >
+                                                                    <Check className="w-3.5 h-3.5" />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setEditingIvScoreId(null)}
+                                                                    className="p-1 bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300 transition-all cursor-pointer"
+                                                                    title="ยกเลิก"
+                                                                >
+                                                                    <X className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex items-center gap-1.5 group">
+                                                                <span className={`font-extrabold text-xs font-mono px-2 py-0.5 rounded-md ${
+                                                                    c.interviewerScore !== null
+                                                                        ? c.interviewerScore >= 80
+                                                                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                                                            : c.interviewerScore >= 50
+                                                                                ? "bg-purple-50 text-purple-700 border border-purple-200"
+                                                                                : "bg-rose-50 text-rose-700 border border-rose-200"
+                                                                        : "bg-slate-100 text-slate-400 border border-slate-200"
+                                                                }`}>
+                                                                    {c.interviewerScore !== null ? `${c.interviewerScore} / 100` : "- / 100"}
+                                                                </span>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setEditingIvScoreId(c.id);
+                                                                        setEditingIvScoreValue(c.interviewerScore !== null ? c.interviewerScore : "");
+                                                                    }}
+                                                                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-purple-50 text-slate-400 hover:text-purple-600 rounded-md transition-all cursor-pointer"
+                                                                    title="คลิกเพื่อปรับแก้ไขคะแนนผู้สัมภาษณ์"
+                                                                >
+                                                                    <Edit3 className="w-3 h-3" />
+                                                                </button>
+                                                                <Link
+                                                                    to="/hr/interview-results"
+                                                                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-indigo-50 text-slate-400 hover:text-[#4169E1] rounded-md transition-all"
+                                                                    title="ไปที่หน้าแจ้งผลการสัมภาษณ์"
+                                                                >
+                                                                    <ExternalLink className="w-3 h-3" />
+                                                                </Link>
+                                                            </div>
+                                                        )
+                                                    ) : (
+                                                        <div className="flex items-center gap-1 text-xs text-slate-400">
+                                                            <span>- / 100</span>
+                                                            {(c.status === "รอนัดสัมภาษณ์" || c.status === "shortlisted") && (
+                                                                <Link
+                                                                    to="/hr/interviews"
+                                                                    className="text-[11px] font-bold text-purple-600 hover:underline"
+                                                                    title="ไปหน้าตั้งเวลานัดสัมภาษณ์"
+                                                                >
+                                                                    (รอนัด)
+                                                                </Link>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                <td className="py-4 px-4 min-w-[150px] whitespace-nowrap">
                                                     <div className="flex flex-col items-start gap-1">
                                                         <div className="relative inline-block">
                                                             <select
@@ -937,7 +1220,7 @@ export default function CandidatesPage() {
                                                                                 : c.status === "interview" || c.status === "นัดสัมภาษณ์แล้ว"
                                                                                     ? "bg-indigo-50 text-[#4169E1] border-indigo-200 hover:bg-indigo-100"
                                                                                     : "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
-                                                                    }`}
+                                                                        }`}
                                                             >
                                                                 <option value="ผ่าน">🟢 ผ่าน</option>
                                                                 <option value="รอพิจารณา">🟡 รอพิจารณา</option>
@@ -960,10 +1243,10 @@ export default function CandidatesPage() {
                                                         )}
                                                     </div>
                                                 </td>
-                                                <td className="py-4 px-4 text-slate-500 text-xs min-w-[110px] whitespace-nowrap">
+                                                <td className="py-4 px-4 text-slate-500 text-xs min-w-[120px] whitespace-nowrap">
                                                     {c.appliedDate}
                                                 </td>
-                                                <td className="py-4 px-5 text-right min-w-[340px] whitespace-nowrap">
+                                                <td className="py-4 px-5 text-right min-w-[280px] whitespace-nowrap">
                                                     <div className="flex items-center justify-end gap-1.5">
                                                         {/* Document group */}
                                                         <div className="inline-flex items-center bg-slate-100/90 p-0.5 rounded-xl border border-slate-200/80 shadow-2xs">
@@ -1010,30 +1293,17 @@ export default function CandidatesPage() {
                                                             {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                                                         </button>
 
-                                                        {/* Edit button */}
-                                                        <button
-                                                            onClick={() => {
-                                                                setSelectedCandidateModal(c);
-                                                                startEditingCandidate(c);
-                                                            }}
-                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white transition-all cursor-pointer shadow-2xs"
-                                                            title="แก้ไขข้อมูลผู้สมัครคนนี้"
-                                                        >
-                                                            <Edit3 className="w-3.5 h-3.5" />
-                                                            <span>แก้ไข</span>
-                                                        </button>
-
-                                                        {/* View Profile button */}
+                                                        {/* Unified Profile & Info button */}
                                                         <button
                                                             onClick={() => {
                                                                 setIsEditingCandidate(false);
                                                                 setSelectedCandidateModal(c);
                                                             }}
-                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-[#4169E1] border border-indigo-200 transition-all cursor-pointer shadow-2xs"
-                                                            title="ดูรายละเอียดโปรไฟล์ฉบับเต็ม"
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-[#4169E1] border border-indigo-200 transition-all cursor-pointer shadow-2xs"
+                                                            title="ดูรายละเอียดโปรไฟล์และแก้ไขข้อมูลผู้สมัคร"
                                                         >
                                                             <Eye className="w-3.5 h-3.5" />
-                                                            <span>โปรไฟล์</span>
+                                                            <span>โปรไฟล์ & ข้อมูล</span>
                                                         </button>
                                                     </div>
                                                 </td>
@@ -1042,7 +1312,7 @@ export default function CandidatesPage() {
                                             {/* Expandable Criteria & SubCriteria Breakdown Row */}
                                             {isExpanded && (
                                                 <tr key={`expand-${c.id}`} className="bg-slate-50/60 border-b border-slate-100">
-                                                    <td colSpan={7} className="p-6">
+                                                    <td colSpan={8} className="p-6">
                                                         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-6">
                                                             {/* Title Header */}
                                                             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -1360,20 +1630,21 @@ export default function CandidatesPage() {
                         )}
 
                         {/* Top Overview Cards */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="bg-gradient-to-br from-indigo-50 to-blue-50/50 rounded-2xl p-4 border border-indigo-100 text-center">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {/* Card 1: PTS Score */}
+                            <div className="bg-gradient-to-br from-indigo-50 to-blue-50/50 rounded-2xl p-4 border border-indigo-100 text-center flex flex-col justify-between">
                                 <span className="text-xs text-indigo-500 font-bold uppercase tracking-wider block">คะแนน PTS สรุป (ปรับแก้ไขได้)</span>
                                 {editingScoreId === selectedCandidateModal.id ? (
                                     <div className="flex items-center justify-center gap-2 mt-1">
                                         <input
-                                            type="number"
-                                            min={0}
-                                            max={100}
-                                            value={editingScoreValue}
-                                            onChange={e => setEditingScoreValue(e.target.value)}
+                                            type="text"
+                                            inputMode="numeric"
+                                            value={editingScoreValue === 0 || editingScoreValue === "0" ? "" : editingScoreValue}
+                                            placeholder="0"
+                                            onChange={e => setEditingScoreValue(rules.criteria.stripLeadingZeros(e.target.value))}
                                             onKeyDown={e => {
                                                 if (e.key === "Enter") {
-                                                    const val = parseInt(String(editingScoreValue));
+                                                    const val = parseInt(String(editingScoreValue || 0));
                                                     if (!isNaN(val)) handleScoreChange(selectedCandidateModal.id, val);
                                                     setEditingScoreId(null);
                                                 } else if (e.key === "Escape") {
@@ -1419,7 +1690,97 @@ export default function CandidatesPage() {
                                 )}
                                 <span className="text-xs text-slate-500 mt-1 block font-medium">คำนวณจากค่าน้ำหนัก Criteria</span>
                             </div>
-                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col items-center justify-center text-center">
+
+                            {/* Card 2: Interviewer Score */}
+                            <div className="bg-gradient-to-br from-purple-50 to-indigo-50/50 rounded-2xl p-4 border border-purple-100 text-center flex flex-col justify-between">
+                                <span className="text-xs text-purple-600 font-bold uppercase tracking-wider block">คะแนนผู้สัมภาษณ์ (Interviewer)</span>
+                                {selectedCandidateModal.interviewId ? (
+                                    editingIvScoreId === selectedCandidateModal.id ? (
+                                        <div className="flex items-center justify-center gap-2 mt-1">
+                                            <input
+                                                type="text"
+                                                inputMode="numeric"
+                                                value={editingIvScoreValue === 0 || editingIvScoreValue === "0" ? "" : editingIvScoreValue}
+                                                placeholder="0"
+                                                onChange={e => setEditingIvScoreValue(rules.criteria.stripLeadingZeros(e.target.value))}
+                                                onKeyDown={e => {
+                                                    if (e.key === "Enter") {
+                                                        const val = editingIvScoreValue === "" ? null : parseInt(String(editingIvScoreValue));
+                                                        if (val === null || (!isNaN(val) && val >= 0 && val <= 100)) {
+                                                            handleInterviewerScoreChange(selectedCandidateModal.interviewId!, val, selectedCandidateModal.id);
+                                                        }
+                                                        setEditingIvScoreId(null);
+                                                    } else if (e.key === "Escape") {
+                                                        setEditingIvScoreId(null);
+                                                    }
+                                                }}
+                                                className="w-20 px-2 py-1 bg-white border-2 border-purple-500 rounded-xl text-xl font-black font-mono text-slate-800 outline-none text-center shadow-xs"
+                                                autoFocus
+                                            />
+                                            <button
+                                                onClick={() => {
+                                                    const val = editingIvScoreValue === "" ? null : parseInt(String(editingIvScoreValue));
+                                                    if (val === null || (!isNaN(val) && val >= 0 && val <= 100)) {
+                                                        handleInterviewerScoreChange(selectedCandidateModal.interviewId!, val, selectedCandidateModal.id);
+                                                    }
+                                                    setEditingIvScoreId(null);
+                                                }}
+                                                className="p-1.5 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-all cursor-pointer"
+                                                title="บันทึกคะแนนผู้สัมภาษณ์"
+                                            >
+                                                <Check className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => setEditingIvScoreId(null)}
+                                                className="p-1.5 bg-slate-200 text-slate-600 rounded-xl hover:bg-slate-300 transition-all cursor-pointer"
+                                                title="ยกเลิก"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center justify-center gap-2 mt-1">
+                                            <span className="text-3xl font-black text-purple-700 font-mono">
+                                                {selectedCandidateModal.interviewerScore !== null ? `${selectedCandidateModal.interviewerScore} / 100` : "- / 100"}
+                                            </span>
+                                            <button
+                                                onClick={() => {
+                                                    setEditingIvScoreId(selectedCandidateModal.id);
+                                                    setEditingIvScoreValue(selectedCandidateModal.interviewerScore !== null ? selectedCandidateModal.interviewerScore : "");
+                                                }}
+                                                className="p-1.5 hover:bg-purple-100/70 text-purple-600 rounded-xl transition-all cursor-pointer"
+                                                title="คลิกเพื่อปรับแก้ไขคะแนนผู้สัมภาษณ์"
+                                            >
+                                                <Edit3 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    )
+                                ) : (
+                                    <div className="mt-2 text-slate-400 font-medium text-sm">
+                                        ยังไม่มีนัดสัมภาษณ์
+                                    </div>
+                                )}
+                                {selectedCandidateModal.interviewId ? (
+                                    <Link
+                                        to="/hr/interview-results"
+                                        className="text-xs text-purple-600 hover:text-purple-800 hover:underline inline-flex items-center justify-center gap-1 font-bold mt-1"
+                                    >
+                                        <span>ไปยังหน้าแจ้งผลสัมภาษณ์</span>
+                                        <ExternalLink className="w-3 h-3" />
+                                    </Link>
+                                ) : (
+                                    <Link
+                                        to="/hr/interviews"
+                                        className="text-xs text-purple-600 hover:text-purple-800 hover:underline inline-flex items-center justify-center gap-1 font-bold mt-1"
+                                    >
+                                        <span>ไปตั้งเวลานัดสัมภาษณ์</span>
+                                        <ExternalLink className="w-3 h-3" />
+                                    </Link>
+                                )}
+                            </div>
+
+                            {/* Card 3: Status */}
+                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col items-center justify-between text-center">
                                 <span className="text-xs text-slate-400 font-bold uppercase tracking-wider block mb-1.5">เปลี่ยนสถานะผู้สมัคร</span>
                                 <select
                                     value={
@@ -1429,9 +1790,9 @@ export default function CandidatesPage() {
                                                     selectedCandidateModal.status === "interview" ? "นัดสัมภาษณ์แล้ว" : selectedCandidateModal.status
                                     }
                                     onChange={e => handleStatusChange(selectedCandidateModal.id, e.target.value)}
-                                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all border outline-none cursor-pointer text-center ${selectedCandidateModal.status === "ผ่าน" || selectedCandidateModal.status === "ผ่านการคัดเลือก" || selectedCandidateModal.status === "approved"
+                                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all border outline-none cursor-pointer text-center w-full ${selectedCandidateModal.status === "ผ่าน" || selectedCandidateModal.status === "ผ่านการคัดเลือก" || selectedCandidateModal.status === "approved"
                                             ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                                            : selectedCandidateModal.status === "รอพิจารณา" || selectedCandidateModal.status === "รอพิจารณา" || selectedCandidateModal.status === "pending"
+                                            : selectedCandidateModal.status === "รอพิจารณา" || selectedCandidateModal.status === "pending"
                                                 ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
                                                 : selectedCandidateModal.status === "ไม่ผ่าน" || selectedCandidateModal.status === "ปฏิเสธ" || selectedCandidateModal.status === "rejected"
                                                     ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
@@ -1446,10 +1807,16 @@ export default function CandidatesPage() {
                                     <option value="รอนัดสัมภาษณ์">🟣 รอนัดสัมภาษณ์</option>
                                     <option value="นัดสัมภาษณ์แล้ว">🔵 นัดสัมภาษณ์แล้ว</option>
                                 </select>
+                                <span className="text-xs text-slate-400 mt-1 block">อัปเดตแบบเรียลไทม์</span>
                             </div>
-                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 text-center">
+
+                            {/* Card 4: AI Model */}
+                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 text-center flex flex-col justify-between">
                                 <span className="text-xs text-slate-400 font-bold uppercase tracking-wider block">โมเดล AI ที่ใช้วิเคราะห์</span>
-                                <span className="text-sm font-semibold text-slate-700 mt-2 block">{selectedCandidateModal.modelUsed}</span>
+                                <span className="text-sm font-semibold text-slate-700 block truncate" title={selectedCandidateModal.modelUsed}>
+                                    {selectedCandidateModal.modelUsed}
+                                </span>
+                                <span className="text-xs text-slate-400 block font-mono">LoRA Adapter Active</span>
                             </div>
                         </div>
 

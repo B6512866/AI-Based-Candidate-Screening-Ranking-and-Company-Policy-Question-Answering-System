@@ -1,11 +1,15 @@
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown, Sparkles, Cpu, Zap, Brain, Gem, Check } from "lucide-react";
+import { ChevronDown, Sparkles, Check } from "lucide-react";
+import { TyphoonLogo, GeminiLogo, ClaudeLogo, OpenAILogo } from "../icons/AILogos";
+
+// Re-export icons for convenience
+export { TyphoonLogo, GeminiLogo, ClaudeLogo, OpenAILogo };
 
 export interface AIModelOption {
     id: string;
     name: string;
     badge: string;
-    provider: "fine-tuned" | "typhoon" | "openai" | "claude" | "gemini";
+    provider: "typhoon" | "claude" | "gemini";
     description: string;
     isFineTuned?: boolean;
 }
@@ -13,25 +17,25 @@ export interface AIModelOption {
 export const AVAILABLE_AI_MODELS: AIModelOption[] = [
     {
         id: "typhoon-v2.5-instruct",
-        name: "Typhoon 2.5 (ไม่ต้องใช้ API Key - ฟรีในเครื่อง 100%)",
-        badge: "🌀 Typhoon 2.5 🆓 ไม่ต้องใช้ Key",
+        name: "Typhoon 2.5",
+        badge: "Typhoon 2.5",
         provider: "typhoon",
-        description: "โมเดลภาษาไทยประมวลผลโลคัล LoRA Adapter Fine-Tuned (ไม่ต้องใช้ API Key, ฟรี 100%, ไม่ติด Limit)",
+        description: "โมเดลภาษาไทยประมวลผลโลคัล LoRA Adapter Fine-Tuned",
         isFineTuned: true
     },
     {
         id: "gemini-3.5-flash",
-        name: "Gemini 3.5 Flash (Resume Extraction Prompt)",
-        badge: "💎 Gemini 3.5 Flash 🔑 ใช้ GEMINI_API_KEY",
+        name: "Gemini 3.5 Flash",
+        badge: "Gemini 3.5 Flash",
         provider: "gemini",
-        description: "โมเดล Google Gemini 3.5 Flash Cloud API (ใช้ GEMINI_API_KEY ในไฟล์ .env)"
+        description: "โมเดล Google Gemini 3.5 Flash Cloud API"
     },
     {
         id: "claude-sonnet-5",
-        name: "Claude Sonnet 5 (Cloud API)",
-        badge: "🧠 Claude Sonnet 5 🔑 ใช้ ANTHROPIC_API_KEY",
+        name: "Claude Sonnet 5",
+        badge: "Claude Sonnet 5",
         provider: "claude",
-        description: "โมเดล Anthropic Claude Sonnet 5 Cloud API ประสิทธิภาพระดับท็อป (ใช้ ANTHROPIC_API_KEY ในไฟล์ .env)"
+        description: "โมเดล Anthropic Claude Sonnet 5 Cloud API"
     }
 ];
 
@@ -41,6 +45,7 @@ interface AIModelDropdownProps {
     label?: string;
     compact?: boolean;
     className?: string;
+    align?: "left" | "right" | "auto";
 }
 
 export default function AIModelDropdown({
@@ -48,7 +53,8 @@ export default function AIModelDropdown({
     onSelectModel,
     label = "เลือกโมเดล AI:",
     compact = false,
-    className = ""
+    className = "",
+    align = "auto"
 }: AIModelDropdownProps) {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -65,20 +71,16 @@ export default function AIModelDropdown({
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    const getModelIcon = (provider: string) => {
+    const getModelIcon = (provider: string, className = "w-4 h-4") => {
         switch (provider) {
-            case "fine-tuned":
-                return <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />;
             case "typhoon":
-                return <Cpu className="w-4 h-4 text-indigo-500" />;
-            case "openai":
-                return <Zap className="w-4 h-4 text-emerald-500" />;
-            case "claude":
-                return <Brain className="w-4 h-4 text-purple-500" />;
+                return <TyphoonLogo className={className} />;
             case "gemini":
-                return <Gem className="w-4 h-4 text-blue-500" />;
+                return <GeminiLogo className={className} />;
+            case "claude":
+                return <ClaudeLogo className={className} />;
             default:
-                return <Sparkles className="w-4 h-4 text-indigo-500" />;
+                return <Sparkles className={`${className} text-indigo-500`} />;
         }
     };
 
@@ -97,8 +99,10 @@ export default function AIModelDropdown({
                     compact ? "px-3 py-1.5 text-xs" : "px-3.5 py-2 text-xs"
                 }`}
             >
-                <div className="flex items-center gap-2 min-w-0">
-                    {getModelIcon(currentModel.provider)}
+                <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-6 h-6 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 shadow-2xs">
+                        {getModelIcon(currentModel.provider, "w-4 h-4")}
+                    </div>
                     <div className="flex flex-col items-start text-left min-w-0">
                         <span className="font-extrabold text-slate-800 truncate max-w-[200px] sm:max-w-[280px]">
                             {currentModel.name}
@@ -114,14 +118,19 @@ export default function AIModelDropdown({
             </button>
 
             {isOpen && (
-                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className={`absolute ${
+                    align === "left"
+                        ? "left-0 right-auto"
+                        : align === "right"
+                            ? "right-0 left-auto"
+                            : compact
+                                ? "right-0 left-auto"
+                                : "left-0 sm:left-auto sm:right-0"
+                } mt-2 w-[calc(100vw-2.5rem)] max-w-xs sm:max-w-sm sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 z-50 animate-in fade-in zoom-in-95 duration-150`}>
                     <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
                         <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                             <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
                             รายการโมเดล AI ที่รองรับ
-                        </span>
-                        <span className="text-[10px] bg-indigo-50 text-[#4169E1] font-bold px-2 py-0.5 rounded-full">
-                            Cloud API & Fine-Tuned
                         </span>
                     </div>
 
@@ -143,15 +152,12 @@ export default function AIModelDropdown({
                                     }`}
                                 >
                                     <div className="flex items-start gap-2.5 min-w-0">
-                                        <div className="mt-0.5">{getModelIcon(model.provider)}</div>
-                                        <div className="space-y-0.5">
+                                        <div className="w-7 h-7 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
+                                            {getModelIcon(model.provider, "w-4.5 h-4.5")}
+                                        </div>
+                                        <div className="space-y-0.5 min-w-0">
                                             <div className="flex items-center gap-1.5 flex-wrap">
                                                 <span className="font-bold text-xs text-slate-800">{model.name}</span>
-                                                {model.isFineTuned && (
-                                                    <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded border border-amber-200">
-                                                        Fine-Tuned
-                                                    </span>
-                                                )}
                                             </div>
                                             <p className="text-[11px] text-slate-500 leading-relaxed font-normal">
                                                 {model.description}

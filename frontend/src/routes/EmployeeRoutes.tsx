@@ -3,7 +3,6 @@ import { ProtectedRoute } from "./ProtectedRoute";
 import EmployeeLayout from "../layout/employee/EmployeeLayout";
 import EmployeeChat from "../page/employee/Chat";
 import EmployeeProfile from "../page/employee/ProfilePage";
-import DocumentsPage from "../page/employee/DocumentsPage";
 import NotificationsPage from "../page/employee/NotificationsPage";
 
 export function EmployeeRoutes() {
@@ -14,7 +13,6 @@ export function EmployeeRoutes() {
                     <Route index element={<EmployeeChat />} />
                     <Route path="chat" element={<EmployeeChat />} />
                     <Route path="profile" element={<EmployeeProfile />} />
-                    <Route path="documents" element={<DocumentsPage />} />
                     <Route path="notifications" element={<NotificationsPage />} />
                     <Route path="*" element={<EmployeeChat />} />
                 </Route>

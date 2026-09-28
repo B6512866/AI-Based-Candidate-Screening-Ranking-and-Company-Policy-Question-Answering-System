@@ -9,11 +9,9 @@ import {
     LogOut,
     Bell,
     ChevronRight,
-    Sparkles,
     PanelLeftClose,
     PanelLeftOpen,
     UserCheck,
-    Bot,
     CheckCheck,
     Menu,
     X,
@@ -65,7 +63,7 @@ export default function EmployeeLayout() {
         },
         {
             title: "ส่วนตัว",
-            items: employeeMenuItems.filter(item => item.id === "profile" || item.id === "documents" || item.id === "notifications")
+            items: employeeMenuItems.filter(item => item.id === "profile" || item.id === "notifications")
         }
     ];
 
@@ -92,8 +90,8 @@ export default function EmployeeLayout() {
                     <div className="flex items-center gap-3">
                         <img src={logo} alt="HireAI Logo" className="h-8 w-auto object-contain" />
                         {!isCollapsed && (
-                            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-100/60">
-                                Employee
+                            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-[#4169E1] border border-blue-100">
+                                Hire AI
                             </span>
                         )}
                     </div>
@@ -115,23 +113,6 @@ export default function EmployeeLayout() {
                         </button>
                     </div>
                 </div>
-
-                {/* Employee AI Status Banner */}
-                {!isCollapsed && (
-                    <div className="mx-4 mt-4 p-3 rounded-xl bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 text-white shadow-sm border border-teal-500/20">
-                        <div className="flex items-center justify-between text-[11px] font-medium text-teal-300">
-                            <span className="flex items-center gap-1.5 font-semibold">
-                                <Bot className="w-3.5 h-3.5 text-teal-400 animate-bounce" />
-                                HR Policy Advisor
-                            </span>
-                            <span className="flex items-center gap-1 text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/20">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                                Ready
-                            </span>
-                        </div>
-                        <p className="text-[10px] text-slate-400 mt-1 truncate">ถาม-ตอบ สวัสดิการ & นโยบายองค์กร</p>
-                    </div>
-                )}
 
                 {/* Navigation Items */}
                 <div className="px-3 py-4 flex-1 overflow-y-auto space-y-6">
@@ -239,11 +220,6 @@ export default function EmployeeLayout() {
                     </div>
 
                     <div className="flex items-center gap-3 sm:gap-4">
-                        <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full bg-teal-50 text-teal-700 border border-teal-100 text-xs font-semibold">
-                            <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-                            <span>AI Assistant Powered</span>
-                        </div>
-
                         {/* Notifications Popover */}
                         <div className="relative">
                             <button

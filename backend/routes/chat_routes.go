@@ -11,8 +11,10 @@ func ChatRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	chatController := controller.NewChatController(db)
 	c := api.Group("/chat")
 	{
-		c.GET("/sessions", middleware.AuthMiddleware(), chatController.GetChatSessions) // <=== เพิ่มจุดนี้
+		c.GET("/sessions", middleware.AuthMiddleware(), chatController.GetChatSessions)
 		c.GET("/history", middleware.AuthMiddleware(), chatController.GetChatHistory)
 		c.POST("/save", middleware.AuthMiddleware(), chatController.SaveChatMessage)
+		c.DELETE("/sessions", middleware.AuthMiddleware(), chatController.DeleteSession)
+		c.PUT("/sessions/rename", middleware.AuthMiddleware(), chatController.RenameSession)
 	}
 }

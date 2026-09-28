@@ -12,7 +12,6 @@ import {
     PanelLeftClose,
     PanelLeftOpen,
     ShieldCheck,
-    Cpu,
     CheckCheck,
     Menu,
     X
@@ -75,7 +74,7 @@ export default function HRLayout() {
     ];
 
     return (
-        <div className="flex h-screen bg-[#f8fafc] font-sans antialiased text-slate-800 overflow-hidden">
+        <div className="flex h-screen h-[100dvh] bg-[#f8fafc] font-sans antialiased text-slate-800 overflow-hidden">
             {/* Mobile Backdrop Overlay */}
             {isMobileMenuOpen && (
                 <div
@@ -98,7 +97,7 @@ export default function HRLayout() {
                         <img src={logo} alt="HireAI Logo" className="h-8 w-auto object-contain" />
                         {!isCollapsed && (
                             <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-[#4169E1] border border-blue-100">
-                                HR Portal
+                                Hire AI
                             </span>
                         )}
                     </div>
@@ -120,23 +119,6 @@ export default function HRLayout() {
                         </button>
                     </div>
                 </div>
-
-                {/* AI Model Status Badge */}
-                {!isCollapsed && (
-                    <div className="mx-4 mt-4 p-3 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-sm border border-indigo-500/20">
-                        <div className="flex items-center justify-between text-[11px] font-medium text-indigo-300">
-                            <span className="flex items-center gap-1.5 font-semibold">
-                                <Cpu className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
-                                Typhoon AI 2.5
-                            </span>
-                            <span className="flex items-center gap-1 text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/20">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                                GPU Ready
-                            </span>
-                        </div>
-                        <p className="text-[10px] text-slate-400 mt-1 truncate">LoRA Adapter + Base Model 4-Bit</p>
-                    </div>
-                )}
 
                 {/* Navigation Menu */}
                 <div className="px-3 py-4 flex-1 overflow-y-auto space-y-6">
@@ -346,8 +328,8 @@ export default function HRLayout() {
                 </header>
 
                 {/* Page Content Container */}
-                <main className="flex-1 overflow-y-auto bg-[#f8fafc] p-4 sm:p-6 lg:p-8 animate-fadeIn">
-                    <div className="max-w-7xl mx-auto">
+                <main className="flex-1 overflow-y-auto bg-[#f8fafc] p-4 sm:p-6 lg:p-8 pb-24 sm:pb-8 animate-fadeIn">
+                    <div className="max-w-7xl mx-auto min-h-full">
                         <Outlet />
                     </div>
                 </main>

@@ -3,11 +3,14 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import AppRoutes from './routes/index'
 import { AuthProvider } from './context/AuthContext'
+import { ConfirmProvider } from './context/ConfirmContext'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
-      <AppRoutes />
+      <ConfirmProvider>
+        <AppRoutes />
+      </ConfirmProvider>
     </AuthProvider>
   </StrictMode>,
 )

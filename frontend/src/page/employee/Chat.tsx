@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
-import { Send, Bot, Wifi, WifiOff, MessageSquare, Plus, Search, ChevronLeft, ChevronRight, Square, Maximize2, Minimize2 } from "lucide-react";
+import { Send, Bot, Wifi, WifiOff, MessageSquare, Plus, Search, ChevronLeft, ChevronRight, Square, Maximize2, Minimize2, Pencil, Trash2, Check, X as XIcon } from "lucide-react";
 import { getallknowledge } from "../../services/knowledgeService";
-import { getChatHistory, saveChatMessage, getChatSessions, ChatSessionData } from "../../services/chatService";
+import { getChatHistory, saveChatMessage, getChatSessions, ChatSessionData, deleteSession, renameSession } from "../../services/chatService";
 import { getTyphoonApiUrl, getApiUrl } from "../../services/apiClient";
 import AIModelDropdown from "../../components/common/AIModelDropdown";
 
@@ -85,7 +85,7 @@ async function checkTyphoon(): Promise<boolean> {
 export default function EmployeeChat() {
     const { firstName } = useAuth();
     const [selectedModel, setSelectedModel] = useState<string>("gemini-3.5-flash");
-    
+
     // State สำหรับแชต
     const [messages, setMessages] = useState<Message[]>([
         {
@@ -98,7 +98,7 @@ export default function EmployeeChat() {
     const [loading, setLoading] = useState(false);
     const [online, setOnline] = useState<boolean | null>(null);
     const chatHistory = useRef<{ role: string; content: string }[]>([]);
-    
+
     // State สำหรับการจัดการห้องแชต (Sessions)
     const [sessions, setSessions] = useState<ChatSessionData[]>([]);
     const [currentSessionId, setCurrentSessionId] = useState<string>("");
@@ -112,6 +112,12 @@ export default function EmployeeChat() {
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
 
+    // State สำหรับแก้ไขชื่อและลบ session
+    const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+    const [editingTitle, setEditingTitle] = useState("");
+    const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+    const editInputRef = useRef<HTMLInputElement>(null);
+
     const toggleFullScreen = () => {
         if (!document.fullscreenElement) {
             if (chatContainerRef.current?.requestFullscreen) {
@@ -123,7 +129,7 @@ export default function EmployeeChat() {
             }
         } else {
             if (document.exitFullscreen) {
-                document.exitFullscreen().catch(() => {});
+                document.exitFullscreen().catch(() => { });
             }
             setIsFullscreen(false);
         }
@@ -136,7 +142,7 @@ export default function EmployeeChat() {
         document.addEventListener("fullscreenchange", handleFullscreenChange);
         return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
     }, []);
-    
+
     const bottomRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -171,7 +177,7 @@ export default function EmployeeChat() {
             if (sRes) {
                 const data = sRes.data || [];
                 setSessions(data);
-                
+
                 // หากดึงข้อมูลครั้งแรก ให้ดึงประวัติห้องแชตล่าสุดมาเปิดให้เลย
                 if (selectLatest && data.length > 0 && !currentSessionId) {
                     const latest = data[0];
@@ -242,7 +248,36 @@ export default function EmployeeChat() {
         ]);
         chatHistory.current = [];
         setInput("");
+        setEditingSessionId(null);
         inputRef.current?.focus();
+    };
+
+    // 6. เปลี่ยนชื่อ session
+    const handleRenameSession = async (sessId: string) => {
+        const trimmed = editingTitle.trim();
+        if (!trimmed) { setEditingSessionId(null); return; }
+        try {
+            await renameSession(sessId, trimmed);
+            setSessions(prev => prev.map(s => s.session_id === sessId ? { ...s, session_title: trimmed } : s));
+            if (currentSessionId === sessId) setCurrentSessionTitle(trimmed);
+        } catch (err) {
+            console.error("เปลี่ยนชื่อล้มเหลว:", err);
+        } finally {
+            setEditingSessionId(null);
+        }
+    };
+
+    // 7. ลบ session
+    const handleDeleteSession = async (sessId: string) => {
+        try {
+            await deleteSession(sessId);
+            setSessions(prev => prev.filter(s => s.session_id !== sessId));
+            if (currentSessionId === sessId) handleNewChat();
+        } catch (err) {
+            console.error("ลบห้องสนทนาล้มเหลว:", err);
+        } finally {
+            setDeletingSessionId(null);
+        }
     };
 
     const abortControllerRef = useRef<AbortController | null>(null);
@@ -420,18 +455,16 @@ ${knowledgeContext || "(ขณะนี้ยังไม่มีเอกส�
     };
 
     return (
-        <div 
+        <div
             ref={chatContainerRef}
-            className={`flex h-full w-full min-h-0 transition-all duration-300 ${
-                isFullscreen ? "fixed inset-0 z-50 bg-[#f8fafc] p-3 sm:p-4" : ""
-            } ${isSidebarOpen ? "gap-3 sm:gap-4" : "gap-0"}`}
+            className={`flex h-full w-full min-h-0 transition-all duration-300 ${isFullscreen ? "fixed inset-0 z-50 bg-[#f8fafc] p-3 sm:p-4" : ""
+                } ${isSidebarOpen ? "gap-3 sm:gap-4" : "gap-0"}`}
         >
             {/* 🚪 Left Sidebar - ห้องสนทนา (Threads) & ค้นหา */}
-            <div className={`transition-all duration-300 overflow-hidden flex flex-col ${
-                isSidebarOpen 
-                    ? "w-72 sm:w-80 p-3.5 sm:p-4 opacity-100 border border-slate-200/80 shadow-xs" 
+            <div className={`transition-all duration-300 overflow-hidden flex flex-col ${isSidebarOpen
+                    ? "w-72 sm:w-80 p-3.5 sm:p-4 opacity-100 border border-slate-200/80 shadow-xs"
                     : "w-0 p-0 opacity-0 border-0 pointer-events-none"
-            } bg-white rounded-2xl gap-3 min-h-0 h-full shrink-0`}>
+                } bg-white rounded-2xl gap-3 min-h-0 h-full shrink-0`}>
                 {/* แถวบนสุด: ปุ่มแชตใหม่ และ ปุ่มปิดแถบข้าง */}
                 <div className="flex items-center gap-2 w-full">
                     <button
@@ -500,20 +533,72 @@ ${knowledgeContext || "(ขณะนี้ยังไม่มีเอกส�
                         <div className="text-center py-6 text-xs text-slate-400">ไม่มีประวัติห้องสนทนา</div>
                     ) : (
                         sessions.map((sess) => (
-                            <button
+                            <div
                                 key={sess.session_id}
-                                onClick={() => handleSelectSession(sess.session_id, sess.session_title)}
-                                className={`flex items-center gap-3 w-full px-3 py-3 rounded-xl transition-all text-left text-xs ${
+                                className={`group flex items-center gap-1 w-full rounded-xl transition-all text-xs ${
                                     currentSessionId === sess.session_id
-                                        ? "bg-slate-100 font-semibold text-[#4169E1]"
-                                        : "hover:bg-slate-50 text-slate-600"
+                                        ? "bg-slate-100"
+                                        : "hover:bg-slate-50"
                                 }`}
                             >
-                                <MessageSquare className={`w-4 h-4 shrink-0 ${
-                                    currentSessionId === sess.session_id ? "text-[#4169E1]" : "text-slate-400"
-                                }`} />
-                                <span className="truncate flex-1">{sess.session_title || "หัวข้อแชตไม่มีชื่อ"}</span>
-                            </button>
+                                {editingSessionId === sess.session_id ? (
+                                    /* ── Inline rename input ── */
+                                    <div className="flex items-center gap-1 flex-1 px-2 py-2">
+                                        <input
+                                            ref={editInputRef}
+                                            value={editingTitle}
+                                            onChange={e => setEditingTitle(e.target.value)}
+                                            onKeyDown={e => {
+                                                if (e.key === "Enter") handleRenameSession(sess.session_id);
+                                                if (e.key === "Escape") setEditingSessionId(null);
+                                            }}
+                                            className="flex-1 bg-white border border-[#4169E1]/40 rounded-lg px-2 py-1 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-[#4169E1]/30"
+                                            autoFocus
+                                        />
+                                        <button onClick={() => handleRenameSession(sess.session_id)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded-lg cursor-pointer"><Check className="w-3.5 h-3.5" /></button>
+                                        <button onClick={() => setEditingSessionId(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded-lg cursor-pointer"><XIcon className="w-3.5 h-3.5" /></button>
+                                    </div>
+                                ) : deletingSessionId === sess.session_id ? (
+                                    /* ── Confirm delete ── */
+                                    <div className="flex items-center gap-1 flex-1 px-2 py-2">
+                                        <span className="flex-1 text-rose-600 font-semibold text-[11px] truncate">ลบแชทนี้?</span>
+                                        <button onClick={() => handleDeleteSession(sess.session_id)} className="px-2 py-1 bg-rose-500 text-white rounded-lg text-[10px] font-bold hover:bg-rose-600 cursor-pointer">ลบ</button>
+                                        <button onClick={() => setDeletingSessionId(null)} className="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold hover:bg-slate-200 cursor-pointer">ยกเลิก</button>
+                                    </div>
+                                ) : (
+                                    /* ── Normal row ── */
+                                    <>
+                                        <button
+                                            className={`flex items-center gap-2 flex-1 px-3 py-3 text-left truncate ${
+                                                currentSessionId === sess.session_id ? "font-semibold text-[#4169E1]" : "text-slate-600"
+                                            }`}
+                                            onClick={() => handleSelectSession(sess.session_id, sess.session_title)}
+                                        >
+                                            <MessageSquare className={`w-4 h-4 shrink-0 ${
+                                                currentSessionId === sess.session_id ? "text-[#4169E1]" : "text-slate-400"
+                                            }`} />
+                                            <span className="truncate flex-1">{sess.session_title || "หัวข้อแชตไม่มีชื่อ"}</span>
+                                        </button>
+                                        {/* action buttons visible on hover */}
+                                        <div className="hidden group-hover:flex items-center gap-0.5 pr-2 shrink-0">
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setEditingTitle(sess.session_title); setEditingSessionId(sess.session_id); }}
+                                                className="p-1.5 rounded-lg text-slate-400 hover:text-[#4169E1] hover:bg-[#4169E1]/10 transition-colors cursor-pointer"
+                                                title="เปลี่ยนชื่อ"
+                                            >
+                                                <Pencil className="w-3.5 h-3.5" />
+                                            </button>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setDeletingSessionId(sess.session_id); }}
+                                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors cursor-pointer"
+                                                title="ลบแชท"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                         ))
                     )}
                 </div>
@@ -550,12 +635,12 @@ ${knowledgeContext || "(ขณะนี้ยังไม่มีเอกส�
                         ) : online ? (
                             <span className="hidden sm:flex items-center gap-1 text-[11px] text-emerald-600 font-semibold bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100/60">
                                 <Wifi className="w-3.5 h-3.5" />
-                                {selectedModel.includes("typhoon") ? "Typhoon พร้อมใช้" : "AI พร้อมใช้"}
+                                {selectedModel.includes("typhoon") ? "Typhoon พร้อมใช้งาน" : selectedModel.includes("gemini") ? "Gemini พร้อมใช้งาน" : selectedModel.includes("claude") ? "Claude พร้อมใช้งาน" : "AI พร้อมใช้งาน"}
                             </span>
                         ) : (
                             <span className="hidden sm:flex items-center gap-1 text-[11px] text-red-500 font-semibold bg-red-50 px-2 py-1 rounded-lg border border-red-100/60" title="โมเดล Typhoon จำเป็นต้องรัน python main.py ในเครื่องก่อนใช้งาน">
                                 <WifiOff className="w-3.5 h-3.5" />
-                                {selectedModel.includes("typhoon") ? "Typhoon ออฟไลน์ (ยังไม่ได้รันโมเดล)" : "AI ออฟไลน์"}
+                                {selectedModel.includes("typhoon") ? "Typhoon ออฟไลน์ (ยังไม่ได้รันโมเดล)" : selectedModel.includes("gemini") ? "Gemini ออฟไลน์" : selectedModel.includes("claude") ? "Claude ออฟไลน์" : "AI ออฟไลน์"}
                             </span>
                         )}
                         <button
@@ -575,19 +660,17 @@ ${knowledgeContext || "(ขณะนี้ยังไม่มีเอกส�
                             key={msg.id}
                             className={`flex gap-3 ${msg.from === "user" ? "flex-row-reverse ml-auto" : ""} max-w-[85%] ${msg.from === "user" ? "ml-auto" : ""}`}
                         >
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
-                                msg.from === "bot" ? "bg-indigo-50" : "bg-gradient-to-tr from-[#4169E1] to-[#5a52e0] text-white text-xs font-bold"
-                            }`}>
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${msg.from === "bot" ? "bg-indigo-50" : "bg-gradient-to-tr from-[#4169E1] to-[#5a52e0] text-white text-xs font-bold"
+                                }`}>
                                 {msg.from === "bot"
                                     ? <Bot className="w-4 h-4 text-[#4169E1]" />
                                     : (firstName?.[0] || "U")}
                             </div>
 
-                            <div className={`px-4 py-3 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap ${
-                                msg.from === "bot"
+                            <div className={`px-4 py-3 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap ${msg.from === "bot"
                                     ? "bg-white border border-slate-100 shadow-sm text-slate-700 rounded-tl-none"
                                     : "bg-[#4169E1] text-white rounded-tr-none shadow-sm"
-                            }`}>
+                                }`}>
                                 {msg.text || (
                                     <span className="flex items-center gap-2 text-slate-400 text-[10px]">
                                         <span className="flex gap-0.5">

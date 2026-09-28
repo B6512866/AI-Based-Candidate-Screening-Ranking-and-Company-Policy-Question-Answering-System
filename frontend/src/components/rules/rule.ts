@@ -322,7 +322,212 @@ export function validateFile(
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// 6. รวมออบเจกต์กฎสำหรับการนำไปใช้ใน Form Validation (Rules Object)
+// 6. หมวดเกณฑ์คัดเลือกและเกณฑ์ย่อย (Criteria & Sub-criteria Rules)
+// ═════════════════════════════════════════════════════════════════════════
+
+export interface SubCriterionRuleItem {
+    id?: string | number;
+    title?: string;
+    description?: string;
+    weight: number | string;
+}
+
+export interface CriterionRuleItem {
+    id?: string | number;
+    title?: string;
+    weight: number | string;
+    sub_criteria?: SubCriterionRuleItem[];
+}
+
+export interface SubCriteriaValidationResult {
+    isValid: boolean;
+    totalWeight: number;
+    error?: string;
+}
+
+export interface CriteriaValidationResult {
+    isValid: boolean;
+    error?: string;
+    totalWeight: number;
+    subCriteriaErrors: Array<{
+        criterionId?: string | number;
+        criterionTitle?: string;
+        totalWeight: number;
+        error: string;
+    }>;
+}
+
+export const CRITERIA_REQUIRED_TOTAL_WEIGHT = 100;
+export const MAX_CRITERION_WEIGHT = 100;
+export const MAX_SUB_CRITERION_WEIGHT = 100;
+
+/**
+ * คำนวณผลรวมคะแนน/ค่าน้ำหนักของ Criteria หลัก
+ */
+export function calculateCriteriaTotalWeight(criteria: Array<{ weight?: number | string }>): number {
+    if (!Array.isArray(criteria)) return 0;
+    return criteria.reduce((sum, item) => sum + (Number(item?.weight) || 0), 0);
+}
+
+/**
+ * คำนวณผลรวมคะแนนของ Sub-criteria
+ */
+export function calculateSubCriteriaTotalWeight(subCriteria: Array<{ weight?: number | string }>): number {
+    if (!Array.isArray(subCriteria)) return 0;
+    return subCriteria.reduce((sum, item) => sum + (Number(item?.weight) || 0), 0);
+}
+
+/**
+ * ตรวจสอบความถูกต้องของค่าน้ำหนักเดี่ยว (ต้องไม่ติดลบ และไม่เกิน 100)
+ */
+export function isValidWeight(val: number | string): boolean {
+    const num = Number(val);
+    return !isNaN(num) && num >= 0 && num <= 100;
+}
+
+/**
+ * ป้องกันและตัดเลข 0 ค้างนำหน้า (No stuck / leading zero) สำหรับคะแนนและค่าน้ำหนัก
+ * เช่น "05" -> "5", "080" -> "80", "0" -> "" (เพื่อให้แสดง placeholder 0 โดยไม่มี 0 ค้างในช่องกรอก)
+ * หากระบุ keepSingleZero = true จะคืนค่า "0" เมื่อกรอกเลข 0 ตัวเดียว
+ */
+export function stripLeadingZeros(val: string | number | null | undefined, keepSingleZero = false): string {
+    if (val === "" || val === null || val === undefined) return "";
+    const str = String(val).trim();
+    if (!str) return "";
+    const clean = str.replace(/[^\d]/g, "");
+    if (!clean) return "";
+    const stripped = clean.replace(/^0+/, "");
+    if (!stripped) {
+        return keepSingleZero ? "0" : "";
+    }
+    return stripped;
+}
+
+/**
+ * ปรับค่าคะแนนให้อยู่ในช่วง 0 - 100 เสมอ (ป้องกันค่าติดลบหรือเกิน 100)
+ */
+export function clampWeight(val: number | string): number {
+    const cleaned = stripLeadingZeros(val, true);
+    const num = Number(cleaned);
+    if (isNaN(num) || num < 0) return 0;
+    if (num > 100) return 100;
+    return num;
+}
+
+/**
+ * ตรวจสอบความถูกต้องของเกณฑ์ย่อย (Sub-criteria):
+ * - แต่ละ Sub-criterion ห้ามเกิน 100 และห้ามติดลบ
+ * - สามารถรวมกันเกิน 100 ได้ (ไม่จำกัดผลรวม)
+ */
+export function validateSubCriteria(
+    subCriteria: Array<{ id?: string | number; title?: string; weight: number | string }>,
+    criterionTitle?: string
+): SubCriteriaValidationResult {
+    if (!Array.isArray(subCriteria) || subCriteria.length === 0) {
+        return { isValid: true, totalWeight: 0 };
+    }
+
+    const titleSuffix = criterionTitle ? ` ของ "${criterionTitle}"` : "";
+
+    for (const sub of subCriteria) {
+        const w = Number(sub.weight) || 0;
+        if (w < 0) {
+            return {
+                isValid: false,
+                totalWeight: calculateSubCriteriaTotalWeight(subCriteria),
+                error: `คะแนนเกณฑ์ย่อย "${sub.title || 'ไม่ระบุชื่อ'}"${titleSuffix} ไม่สามารถติดลบได้`,
+            };
+        }
+        if (w > MAX_SUB_CRITERION_WEIGHT) {
+            return {
+                isValid: false,
+                totalWeight: calculateSubCriteriaTotalWeight(subCriteria),
+                error: `คะแนนเกณฑ์ย่อย "${sub.title || 'ไม่ระบุชื่อ'}"${titleSuffix} ห้ามเกิน ${MAX_SUB_CRITERION_WEIGHT} (ปัจจุบัน: ${w})`,
+            };
+        }
+    }
+
+    return { isValid: true, totalWeight: calculateSubCriteriaTotalWeight(subCriteria) };
+}
+
+/**
+ * ตรวจสอบความถูกต้องของ Criteria ทั้งหมด:
+ * 1. แต่ละ criteria ห้ามเกิน 100% และไม่สามารถติดลบได้
+ * 2. รวมกันจะต้องเต็ม 100% พอดี (ห้ามขาด และห้ามเกิน)
+ * 3. แต่ละ sub criteria ห้ามเกิน 100 และไม่สามารถติดลบได้ (สามารถรวมกันเกิน 100 ได้)
+ */
+export function validateCriteria(criteria: CriterionRuleItem[]): CriteriaValidationResult {
+    const result: CriteriaValidationResult = {
+        isValid: true,
+        totalWeight: 0,
+        subCriteriaErrors: [],
+    };
+
+    if (!Array.isArray(criteria) || criteria.length === 0) {
+        result.isValid = false;
+        result.error = "กรุณาระบุเกณฑ์คัดเลือก (Criteria) อย่างน้อย 1 รายการ และรวมคะแนนให้เต็ม 100%";
+        return result;
+    }
+
+    // 1. ตรวจสอบคะแนนเดี่ยวของแต่ละเกณฑ์หลัก
+    for (const c of criteria) {
+        const cWeight = Number(c.weight) || 0;
+        if (cWeight < 0) {
+            result.isValid = false;
+            result.error = `คะแนนของเกณฑ์ "${c.title || 'ไม่ระบุชื่อ'}" ไม่สามารถติดลบได้`;
+            result.totalWeight = calculateCriteriaTotalWeight(criteria);
+            return result;
+        }
+        if (cWeight > MAX_CRITERION_WEIGHT) {
+            result.isValid = false;
+            result.error = `คะแนนของเกณฑ์ "${c.title || 'ไม่ระบุชื่อ'}" ห้ามเกิน ${MAX_CRITERION_WEIGHT}% (ปัจจุบัน: ${cWeight}%)`;
+            result.totalWeight = calculateCriteriaTotalWeight(criteria);
+            return result;
+        }
+    }
+
+    // 2. ตรวจสอบ Sub-criteria ของแต่ละเกณฑ์หลัก (แต่ละข้อห้ามเกิน 100 และห้ามติดลบ, ผลรวมสามารถเกิน 100 ได้)
+    for (const c of criteria) {
+        if (Array.isArray(c.sub_criteria) && c.sub_criteria.length > 0) {
+            const subValidation = validateSubCriteria(c.sub_criteria, c.title);
+            if (!subValidation.isValid) {
+                result.isValid = false;
+                result.subCriteriaErrors.push({
+                    criterionId: c.id,
+                    criterionTitle: c.title,
+                    totalWeight: subValidation.totalWeight,
+                    error: subValidation.error ?? `คะแนนเกณฑ์ย่อยของ "${c.title || 'เกณฑ์'}" ไม่ถูกต้อง`,
+                });
+                if (!result.error) {
+                    result.error = subValidation.error;
+                }
+            }
+        }
+    }
+
+    // 3. ตรวจสอบผลรวมคะแนนของเกณฑ์หลักทั้งหมด (ต้องเต็ม 100% พอดี)
+    const totalWeight = calculateCriteriaTotalWeight(criteria);
+    result.totalWeight = totalWeight;
+
+    if (totalWeight < CRITERIA_REQUIRED_TOTAL_WEIGHT) {
+        result.isValid = false;
+        const diff = CRITERIA_REQUIRED_TOTAL_WEIGHT - totalWeight;
+        if (!result.error) {
+            result.error = `คะแนนรวมของเกณฑ์คัดเลือก (Criteria) จะต้องเต็ม 100% พอดี (ปัจจุบันรวมได้ ${totalWeight}% ยังขาดอีก ${diff}%)`;
+        }
+    } else if (totalWeight > CRITERIA_REQUIRED_TOTAL_WEIGHT) {
+        result.isValid = false;
+        const diff = totalWeight - CRITERIA_REQUIRED_TOTAL_WEIGHT;
+        if (!result.error) {
+            result.error = `คะแนนรวมของเกณฑ์คัดเลือก (Criteria) ห้ามเกิน 100% (ปัจจุบันรวมได้ ${totalWeight}% เกินมา ${diff}%)`;
+        }
+    }
+
+    return result;
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// 7. รวมออบเจกต์กฎสำหรับการนำไปใช้ใน Form Validation (Rules Object)
 // ═════════════════════════════════════════════════════════════════════════
 
 export const rules = {
@@ -364,6 +569,20 @@ export const rules = {
         format: formatCitizenId,
         validate: isValidCitizenId,
         errorMessage: "เลขประจำตัวประชาชนไม่ถูกต้อง (ต้องเป็นตัวเลข 13 หลักที่ผ่านการตรวจสอบ)"
+    },
+    criteria: {
+        REQUIRED_TOTAL: CRITERIA_REQUIRED_TOTAL_WEIGHT,
+        MAX_TOTAL: CRITERIA_REQUIRED_TOTAL_WEIGHT,
+        MAX_CRITERION_WEIGHT: MAX_CRITERION_WEIGHT,
+        MAX_SUB_CRITERION_WEIGHT: MAX_SUB_CRITERION_WEIGHT,
+        validate: validateCriteria,
+        validateSubCriteria: validateSubCriteria,
+        calculateTotal: calculateCriteriaTotalWeight,
+        calculateSubTotal: calculateSubCriteriaTotalWeight,
+        isValidWeight: isValidWeight,
+        clampWeight: clampWeight,
+        stripLeadingZeros: stripLeadingZeros,
+        errorMessage: "เกณฑ์คัดเลือก (Criteria) แต่ละเกณฑ์ห้ามเกิน 100% และรวมกันจะต้องเต็ม 100% เกณฑ์ย่อยแต่ละข้อห้ามเกิน 100 และทั้งหมดห้ามติดลบ"
     }
 };
 

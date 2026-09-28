@@ -5,6 +5,7 @@ import { getalljobs, getapplications, updateApplicationScreening, deleteapplicat
 import apiClient, { getTyphoonApiUrl, getApiUrl, getBackendBaseUrl } from "../../services/apiClient";
 import { openFileInNewTab, base64ToBlob } from "../../utils/fileViewer";
 import AIModelDropdown, { AVAILABLE_AI_MODELS } from "../../components/common/AIModelDropdown";
+import { useConfirm } from "../../context/ConfirmContext";
 
 const TYPHOON_API = getTyphoonApiUrl();
 
@@ -60,6 +61,7 @@ interface AnalysisResult {
 }
 
 export default function ScreeningPage() {
+    const { confirm, alert: showAlert } = useConfirm();
     const location = useLocation();
     const [selectedModel, setSelectedModel] = useState<string>("gemini-3.5-flash");
     const [resumeText, setResumeText] = useState("");
@@ -111,7 +113,11 @@ export default function ScreeningPage() {
             setApplicants(prev => prev.map((a: any) => a.ID === appId ? { ...a, status: newStatus, Status: newStatus } : a));
         } catch (err) {
             console.error("Failed to update application status:", err);
-            alert("เกิดข้อผิดพลาดในการเปลี่ยนสถานะผู้สมัคร");
+            showAlert({
+                title: "เกิดข้อผิดพลาด",
+                message: "เกิดข้อผิดพลาดในการเปลี่ยนสถานะผู้สมัคร",
+                variant: "danger",
+            });
         }
     };
     const activeJobIdRef = useRef<string>("");
@@ -1084,7 +1090,11 @@ ${tableRowsExample}
             console.error(`Error screening application ${app.ID}:`, err);
             setAnalyzingStates(prev => ({ ...prev, [app.ID]: "error" }));
             if (!isBatch) {
-                alert(`เกิดข้อผิดพลาดในการวิเคราะห์ Resume ของ ${app.Candidate?.first_name || 'ผู้สมัคร'}: ${err.message || 'ไม่สามารถวิเคราะห์ได้'}`);
+                showAlert({
+                    title: "เกิดข้อผิดพลาดในการวิเคราะห์",
+                    message: `เกิดข้อผิดพลาดในการวิเคราะห์ Resume ของ ${app.Candidate?.first_name || 'ผู้สมัคร'}: ${err.message || 'ไม่สามารถวิเคราะห์ได้'}`,
+                    variant: "danger",
+                });
             }
         } finally {
             if (!hasError) {
@@ -1132,14 +1142,30 @@ ${tableRowsExample}
     };
 
     const handleDeleteApplicant = async (appId: number) => {
-        if (!window.confirm("คุณต้องการลบข้อมูลผู้สมัครรายนี้ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้")) return;
+        const applicant = applicants.find((a: any) => a.ID === appId);
+        const candidateName = applicant?.Candidate
+            ? `${applicant.Candidate.first_name || ""} ${applicant.Candidate.last_name || ""}`.trim()
+            : "รายนี้";
+
+        const isConfirmed = await confirm({
+            title: "ยืนยันการลบข้อมูลผู้สมัคร?",
+            message: `คุณต้องการลบข้อมูลผู้สมัคร "${candidateName}" ใช่หรือไม่?\n\nการลบจะทำให้ข้อมูลการสมัครและผลการคัดกรองหายไปจากระบบอย่างถาวร`,
+            confirmText: "ลบข้อมูลผู้สมัคร",
+            variant: "danger",
+        });
+        if (!isConfirmed) return;
+
         try {
             await deleteapplication(appId);
             setApplicants(prev => prev.filter(a => a.ID !== appId));
             setSelectedAppIds(prev => prev.filter(id => id !== appId));
         } catch (err) {
             console.error("ลบข้อมูลผู้สมัครล้มเหลว:", err);
-            alert("เกิดข้อผิดพลาดในการลบข้อมูลผู้สมัคร");
+            showAlert({
+                title: "เกิดข้อผิดพลาด",
+                message: "เกิดข้อผิดพลาดในการลบข้อมูลผู้สมัคร กรุณาลองใหม่อีกครั้ง",
+                variant: "danger",
+            });
         }
     };
 
@@ -1188,7 +1214,11 @@ ${tableRowsExample}
             setManualTranscriptUrl("");
             setManualTranscriptFileName("");
             setShowManualAddModal(false);
-            alert("บันทึกข้อมูลผู้สมัครรายใหม่สำเร็จแล้ว!");
+            showAlert({
+                title: "บันทึกสำเร็จ",
+                message: "บันทึกข้อมูลผู้สมัครรายใหม่สำเร็จแล้ว!",
+                variant: "success",
+            });
         } catch (err: any) {
             setManualError(err.response?.data?.error || "เกิดข้อผิดพลาดในการบันทึกข้อมูลผู้สมัคร");
         } finally {
@@ -1218,7 +1248,11 @@ ${tableRowsExample}
             }
         } catch (e) {
             setManualResumeFileName("");
-            alert("อัปโหลดไฟล์ Resume ล้มเหลว");
+            showAlert({
+                title: "อัปโหลดล้มเหลว",
+                message: "อัปโหลดไฟล์ Resume ล้มเหลว",
+                variant: "danger",
+            });
         }
     };
 
@@ -1244,7 +1278,11 @@ ${tableRowsExample}
             }
         } catch (e) {
             setManualTranscriptFileName("");
-            alert("อัปโหลดไฟล์ Transcript ล้มเหลว");
+            showAlert({
+                title: "อัปโหลดล้มเหลว",
+                message: "อัปโหลดไฟล์ Transcript ล้มเหลว",
+                variant: "danger",
+            });
         }
     };
 
@@ -1322,13 +1360,21 @@ ${tableRowsExample}
                     throw new Error("แกะข้อความจากไฟล์ล้มเหลว");
                 }
             } catch (err: any) {
-                alert(err.message || "เกิดข้อผิดพลาดในการดึงข้อความ");
+                showAlert({
+                    title: "เกิดข้อผิดพลาดในการดึงข้อความ",
+                    message: err.message || "ไม่สามารถอ่านข้อความจากไฟล์ได้",
+                    variant: "danger",
+                });
                 setResumeText("");
             } finally {
                 setOcrLoading(false);
             }
         } else {
-            alert("รองรับเฉพาะไฟล์ .txt, .pdf หรือรูปภาพของ Resume เท่านั้น");
+            showAlert({
+                title: "รูปแบบไฟล์ไม่ถูกต้อง",
+                message: "ระบบรองรับเฉพาะไฟล์ .txt, .pdf หรือรูปภาพของ Resume เท่านั้น",
+                variant: "warning",
+            });
         }
     };
 
@@ -1476,24 +1522,29 @@ ${tableRowsExample}
                 setBatchResults(data.results);
             }
         } catch (err: any) {
-            alert(err.message || "เกิดข้อผิดพลาดในการประเมินผลลัพธ์แบบกลุ่ม");
+            showAlert({
+                title: "เกิดข้อผิดพลาดในการประเมินผลกลุ่ม",
+                message: err.message || "เกิดข้อผิดพลาดในการประเมินผลลัพธ์แบบกลุ่ม",
+                variant: "danger",
+            });
         } finally {
             setBatchLoading(false);
         }
     };
 
     return (
-        <div className="space-y-6 pb-12">
+        <div className="space-y-6 pb-28 sm:pb-12 min-h-screen">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-black text-slate-800">คัดกรองและประเมินผู้สมัคร</h1>
-                    <p className="text-slate-400 text-sm mt-1">วิเคราะห์ Resume ด้วย AI (Cloud & Fine-Tuned)</p>
+                    <p className="text-slate-400 text-sm mt-1">วิเคราะห์ Resume ด้วย AI</p>
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
                     <AIModelDropdown
                         selectedModelId={selectedModel}
                         onSelectModel={handleModelChange}
+                        align="left"
                     />
                     {/* AI Status */}
                     <button
@@ -1507,9 +1558,9 @@ ${tableRowsExample}
                         title={selectedModel.includes("typhoon") && !online ? "โมเดล Typhoon จำเป็นต้องรัน python main.py ในเครื่องก่อนใช้งาน" : ""}
                     >
                         {online === true
-                            ? <><Wifi className="w-4 h-4" /> {selectedModel.includes("typhoon") ? "Typhoon พร้อมใช้" : "AI พร้อมใช้"}</>
+                            ? <><Wifi className="w-4 h-4" /> {selectedModel.includes("typhoon") ? "Typhoon พร้อมใช้งาน" : selectedModel.includes("gemini") ? "Gemini พร้อมใช้งาน" : selectedModel.includes("claude") ? "Claude พร้อมใช้งาน" : "AI พร้อมใช้งาน"}</>
                             : online === false
-                                ? <><WifiOff className="w-4 h-4" /> {selectedModel.includes("typhoon") ? "Typhoon ออฟไลน์ (ยังไม่ได้รันโมเดล)" : "AI ออฟไลน์"}</>
+                                ? <><WifiOff className="w-4 h-4" /> {selectedModel.includes("typhoon") ? "Typhoon ออฟไลน์ (ยังไม่ได้รันโมเดล)" : selectedModel.includes("gemini") ? "Gemini ออฟไลน์" : selectedModel.includes("claude") ? "Claude ออฟไลน์" : "AI ออฟไลน์"}</>
                                 : <><Sparkles className="w-4 h-4" /> ตรวจสอบ...</>}
                     </button>
                 </div>
@@ -1819,7 +1870,7 @@ ${tableRowsExample}
                     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4 font-sans">
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <div className="space-y-1">
-                                <h3 className="font-bold text-slate-800 text-sm">การคัดกรองเรซูเม่แยกตามตำแหน่งงาน (GORM Role Screening)</h3>
+                                <h3 className="font-bold text-slate-800 text-sm">การคัดกรองเรซูเม่แยกตามตำแหน่งงาน</h3>
                                 <p className="text-slate-400 text-xs">เลือกตำแหน่งงานด้านขวา ระบบจะดึงเรซูเม่ของผู้สมัครทุกคนและรันการวิเคราะห์คะแนนอัตโนมัติทันที</p>
                             </div>
                             <div className="flex flex-col sm:flex-row items-center gap-3">
@@ -1883,6 +1934,42 @@ ${tableRowsExample}
                                 <div className="animate-spin rounded-full h-8 w-8 border-2 border-indigo-100 border-t-[#4169E1]"></div>
                             </div>
                             <p className="text-slate-400 text-xs">กำลังโหลดรายชื่อผู้สมัครและไฟล์ Resume...</p>
+                        </div>
+                    )}
+
+                    {/* Empty placeholder state when no position has been chosen yet */}
+                    {!loadingApplicants && (!selectedJobId || selectedJobId === "") && (
+                        <div className="bg-white rounded-3xl border border-dashed border-slate-200 p-8 sm:p-12 text-center space-y-4 shadow-2xs font-sans">
+                            <div className="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-100 text-[#4169E1] flex items-center justify-center mx-auto shadow-xs">
+                                <Briefcase className="w-7 h-7" />
+                            </div>
+                            <div className="max-w-md mx-auto space-y-1.5">
+                                <h4 className="text-base font-bold text-slate-800">
+                                    กรุณาเลือกตำแหน่งงานด้านบน
+                                </h4>
+                                <p className="text-xs text-slate-400 leading-relaxed">
+                                    เมื่อเลือกตำแหน่งงานแล้ว ระบบจะดึงรายชื่อผู้สมัครทั้งหมดและรันการวิเคราะห์คะแนนด้วย AI แบบอัตโนมัติทันที
+                                </p>
+                            </div>
+                            {jobs.length > 0 && (
+                                <div className="pt-3 max-w-md mx-auto">
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">
+                                        หรือแตะเลือกตำแหน่งงานด่วน ({jobs.length} ตำแหน่ง):
+                                    </p>
+                                    <div className="flex flex-wrap items-center justify-center gap-2">
+                                        {jobs.slice(0, 8).map(job => (
+                                            <button
+                                                key={job.ID}
+                                                type="button"
+                                                onClick={() => handleJobChange(job.ID.toString())}
+                                                className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-indigo-50 hover:border-indigo-200 hover:text-[#4169E1] border border-slate-200 text-slate-700 text-xs font-semibold transition-all cursor-pointer active:scale-95"
+                                            >
+                                                {job.title}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -2187,7 +2274,11 @@ ${tableRowsExample}
                                                                                     const text = getCleanStrengths(liveStreamingTexts[app.ID] || getStrengthsText(app));
                                                                                     if (text) {
                                                                                         navigator.clipboard.writeText(text);
-                                                                                        alert("คัดลอกผลการวิเคราะห์เรียบร้อยแล้ว");
+                                                                                        showAlert({
+                                                                                            title: "คัดลอกสำเร็จ",
+                                                                                            message: "คัดลอกผลการวิเคราะห์เรียบร้อยแล้ว",
+                                                                                            variant: "success",
+                                                                                        });
                                                                                     }
                                                                                 }}
                                                                                 className="flex items-center gap-1 bg-white hover:bg-slate-50 text-slate-600 px-2.5 py-1 rounded-lg border border-slate-200 text-[11px] font-semibold transition-all cursor-pointer shadow-2xs"
