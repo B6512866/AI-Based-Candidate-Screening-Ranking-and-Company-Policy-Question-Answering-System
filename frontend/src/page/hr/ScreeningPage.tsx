@@ -2202,11 +2202,6 @@ ${tableRowsExample}
                                                                         <span className="font-extrabold text-xs text-[#4169E1] flex items-center gap-1.5 flex-wrap">
                                                                             <Sparkles className="w-3.5 h-3.5" />
                                                                             <span>รายละเอียดผลการวิเคราะห์เดี่ยวจาก AI</span>
-                                                                            {(app.AIScreening?.model_used || app.AIScreening?.ModelUsed) && (
-                                                                                <span className="font-mono text-[10px] font-bold text-indigo-700 bg-white/90 border border-indigo-200 px-2 py-0.5 rounded-md shadow-2xs">
-                                                                                    โมเดล: {AVAILABLE_AI_MODELS.find(m => m.id === (app.AIScreening?.model_used || app.AIScreening?.ModelUsed))?.name || (app.AIScreening?.model_used || app.AIScreening?.ModelUsed)}
-                                                                                </span>
-                                                                            )}
                                                                         </span>
                                                                     )}
                                                                 </div>
