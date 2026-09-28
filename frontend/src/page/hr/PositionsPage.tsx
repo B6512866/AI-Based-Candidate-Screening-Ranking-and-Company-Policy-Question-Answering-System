@@ -1884,7 +1884,6 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                                 สร้างตำแหน่งงานด้วย AI (AI Job Assistant)
                                                             </h3>
                                                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs">
-                                                                🧠 Claude Sonnet 5
                                                             </span>
                                                         </div>
                                                         <p className="text-xs text-slate-500 mt-0.5">
