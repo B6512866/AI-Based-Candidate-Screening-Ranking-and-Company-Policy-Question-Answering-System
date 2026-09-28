@@ -1110,7 +1110,7 @@ export default function CandidatesPage() {
                                                             </div>
                                                             {c.aiScore > 0 && c.modelUsed && (
                                                                 <span className="text-[10px] text-slate-400 font-mono block truncate max-w-[120px]" title={`โมเดล AI ที่ใช้ประเมิน: ${c.modelUsed}`}>
-                                                                    🤖 {c.modelUsed}
+                                                                    {c.modelUsed}
                                                                 </span>
                                                             )}
                                                         </div>

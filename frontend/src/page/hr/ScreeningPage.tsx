@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { Upload, FileText, Briefcase, Sparkles, X, ChevronDown, ChevronUp, Wifi, WifiOff, RefreshCw, Copy, Check, Search, Trash2, Square, AlertCircle } from "lucide-react";
-import { getalljobs, getapplications, updateApplicationScreening, deleteapplication, applyjob, updateApplicationStatus } from "../../services/jobPositionService";
+import { getalljobs, getapplications, updateApplicationScreening, deleteapplication, applyjob } from "../../services/jobPositionService";
 import apiClient, { getTyphoonApiUrl, getApiUrl, getBackendBaseUrl } from "../../services/apiClient";
 import { openFileInNewTab, base64ToBlob } from "../../utils/fileViewer";
 import AIModelDropdown, { AVAILABLE_AI_MODELS } from "../../components/common/AIModelDropdown";
@@ -104,20 +104,6 @@ export default function ScreeningPage() {
             setSelectedAppIds([]);
         } else {
             setSelectedAppIds(applicants.map(a => a.ID));
-        }
-    };
-
-    const handleStatusChange = async (appId: number | string, newStatus: string) => {
-        try {
-            await updateApplicationStatus(String(appId), newStatus);
-            setApplicants(prev => prev.map((a: any) => a.ID === appId ? { ...a, status: newStatus, Status: newStatus } : a));
-        } catch (err) {
-            console.error("Failed to update application status:", err);
-            showAlert({
-                title: "เกิดข้อผิดพลาด",
-                message: "เกิดข้อผิดพลาดในการเปลี่ยนสถานะผู้สมัคร",
-                variant: "danger",
-            });
         }
     };
     const activeJobIdRef = useRef<string>("");
@@ -2087,56 +2073,12 @@ ${tableRowsExample}
                                                                             Resume
                                                                         </button>
                                                                     )}
-                                                                    {/* Status Select Dropdown */}
-                                                                    {(() => {
-                                                                        const rawStatus = app.Status || app.status || "รอพิจารณา";
-                                                                        const currentStatus =
-                                                                            rawStatus === "approved" || rawStatus === "accepted" || rawStatus === "passed" || rawStatus === "pass" || rawStatus === "ผ่านการคัดเลือก" ? "ผ่าน" :
-                                                                            rawStatus === "rejected" || rawStatus === "failed" || rawStatus === "fail" || rawStatus === "ปฏิเสธ" ? "ไม่ผ่าน" :
-                                                                            rawStatus === "pending" || rawStatus === "waiting" || rawStatus === "รอพิจารณา" ? "รอพิจารณา" :
-                                                                            rawStatus === "interview" || rawStatus === "interviewed" ? "นัดสัมภาษณ์แล้ว" :
-                                                                            rawStatus === "shortlisted" ? "รอนัดสัมภาษณ์" : rawStatus;
-
-                                                                        const isPassed = currentStatus === "ผ่าน";
-                                                                        const isShortlisted = currentStatus === "รอนัดสัมภาษณ์";
-                                                                        const isInterviewed = currentStatus === "นัดสัมภาษณ์แล้ว";
-                                                                        const isRejected = currentStatus === "ไม่ผ่าน";
-
-                                                                        const badgeStyle = isPassed
-                                                                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                                                                            : isShortlisted
-                                                                                ? "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
-                                                                                : isInterviewed
-                                                                                    ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
-                                                                                    : isRejected
-                                                                                        ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
-                                                                                        : "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100";
-
-                                                                        return (
-                                                                            <div className="relative inline-flex items-center shrink-0">
-                                                                                <select
-                                                                                    value={currentStatus}
-                                                                                    onChange={(e) => handleStatusChange(app.ID, e.target.value)}
-                                                                                    onClick={(e) => e.stopPropagation()}
-                                                                                    className={`appearance-none outline-none cursor-pointer pl-2.5 pr-6 py-0.5 rounded-full text-[10px] font-extrabold transition-all border shadow-2xs ${badgeStyle}`}
-                                                                                    title="คลิกเพื่อเปลี่ยนสถานะผู้สมัคร"
-                                                                                >
-                                                                                    <option value="ผ่าน">🟢 ผ่าน</option>
-                                                                                    <option value="รอพิจารณา">🟡 รอพิจารณา</option>
-                                                                                    <option value="ไม่ผ่าน">🔴 ไม่ผ่าน</option>
-                                                                                    <option value="รอนัดสัมภาษณ์">🟣 รอนัดสัมภาษณ์</option>
-                                                                                    <option value="นัดสัมภาษณ์แล้ว">🔵 นัดสัมภาษณ์แล้ว</option>
-                                                                                </select>
-                                                                                <ChevronDown className="w-2.5 h-2.5 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
-                                                                            </div>
-                                                                        );
-                                                                    })()}
                                                                 </div>
                                                                 <p className="text-xs text-slate-400 truncate mt-0.5 flex items-center gap-2 flex-wrap" title={candidateName}>
                                                                     <span>{app.Candidate?.email || "ไม่มีอีเมล"} • {app.Candidate?.phone || "ไม่มีเบอร์"}</span>
                                                                     {(app.AIScreening?.model_used || app.AIScreening?.ModelUsed) && (
                                                                         <span className="font-mono text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md shrink-0 shadow-2xs" title={`โมเดล AI ที่ใช้วิเคราะห์: ${app.AIScreening?.model_used || app.AIScreening?.ModelUsed}`}>
-                                                                            🤖 {AVAILABLE_AI_MODELS.find(m => m.id === (app.AIScreening?.model_used || app.AIScreening?.ModelUsed))?.name || (app.AIScreening?.model_used || app.AIScreening?.ModelUsed)}
+                                                                            {AVAILABLE_AI_MODELS.find(m => m.id === (app.AIScreening?.model_used || app.AIScreening?.ModelUsed))?.name || (app.AIScreening?.model_used || app.AIScreening?.ModelUsed)}
                                                                         </span>
                                                                     )}
                                                                 </p>
@@ -2162,7 +2104,7 @@ ${tableRowsExample}
                                                             })}
                                                             {status === "ai" && (
                                                                 <span className="text-xs text-[#4169E1] font-bold flex items-center gap-1.5 animate-pulse bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
-                                                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> {AVAILABLE_AI_MODELS.find(m => m.id === selectedModel)?.badge || "🤖 AI"} กำลังวิเคราะห์คะแนน...
+                                                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> {AVAILABLE_AI_MODELS.find(m => m.id === selectedModel)?.badge || "AI"} กำลังวิเคราะห์คะแนน...
                                                                 </span>
                                                             )}
                                                             {status === "ocr" && (
