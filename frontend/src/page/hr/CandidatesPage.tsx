@@ -1233,9 +1233,10 @@ export default function CandidatesPage() {
 
                                                         {(c.status === "รอนัดสัมภาษณ์" || c.status === "shortlisted") && (
                                                             <Link
-                                                                to="/hr/interviews"
+                                                                to={`/hr/interviews?appId=${c.id}`}
+                                                                state={{ selectedAppId: Number(c.id) }}
                                                                 className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-600 hover:text-purple-800 hover:underline pl-1 whitespace-nowrap"
-                                                                title="ไปหน้านัดหมายสัมภาษณ์เพื่อระบุวันเวลา"
+                                                                title={`ไปตั้งเวลาสัมภาษณ์สำหรับ ${c.name}`}
                                                             >
                                                                 <Sparkles className="w-3 h-3 text-purple-500" />
                                                                 <span>ไปตั้งเวลาสัมภาษณ์</span>

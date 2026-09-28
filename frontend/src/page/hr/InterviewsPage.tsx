@@ -1,4 +1,5 @@
-import { JSX, useState, useEffect } from "react";
+import { JSX, useState, useEffect, useRef } from "react";
+import { useSearchParams, useLocation } from "react-router-dom";
 import {
     Users,
     CheckCircle2,
@@ -304,10 +305,55 @@ export default function InterviewsPage() {
         }
     };
 
+    const [searchParams] = useSearchParams();
+    const location = useLocation();
+
+    // ดึง appId / candidateId ที่ส่งมาจากหน้า CandidatesPage เพื่อลิ้งค์ผู้สมัครแบบคนต่อคน
+    const targetAppIdFromUrl =
+        searchParams.get("appId") ||
+        searchParams.get("candidateId") ||
+        (location.state as any)?.selectedAppId ||
+        (location.state as any)?.appId ||
+        null;
+
+    const hasAutoSelectedRef = useRef(false);
+
+    useEffect(() => {
+        hasAutoSelectedRef.current = false;
+    }, [targetAppIdFromUrl]);
+
     useEffect(() => {
         fetchInterviews();
         fetchCandidates();
     }, []);
+
+    // เมื่อมี targetAppIdFromUrl และ candidates โหลดเสร็จแล้ว ให้เลือกผู้สมัครคนนั้นทันที
+    useEffect(() => {
+        if (!targetAppIdFromUrl || candidates.length === 0 || hasAutoSelectedRef.current) return;
+
+        const targetIdNum = Number(targetAppIdFromUrl);
+        const matched = candidates.find(
+            (c) =>
+                c.ID === targetIdNum ||
+                c.id === targetIdNum ||
+                String(c.ID) === String(targetAppIdFromUrl) ||
+                String(c.id) === String(targetAppIdFromUrl)
+        );
+
+        if (matched) {
+            hasAutoSelectedRef.current = true;
+            setActiveTab("create");
+            handleSelectCandidate(matched);
+
+            // เลื่อนจอไปยังการ์ดผู้สมัครรายนี้โดยอัตโนมัติ
+            setTimeout(() => {
+                const el = document.getElementById(`candidate-item-${matched.ID}`);
+                if (el) {
+                    el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                }
+            }, 300);
+        }
+    }, [targetAppIdFromUrl, candidates, interviews]);
 
     const selectedApp = candidates.find((c) => c.ID === selectedAppId) || null;
 

@@ -41,6 +41,11 @@ export function CandidateListColumn({
 
     // 1. กรองผู้สมัครเฉพาะที่มีสถานะ "รอนัดสัมภาษณ์" (คัดผู้ที่ผ่านแล้ว หรือไม่ผ่าน/สละสิทธิ์ออก)
     const eligibleCandidates = candidates.filter((app) => {
+        // หากเป็นผู้สมัครที่ถูกเลือกเจาะจงมาจากหน้า CandidatesPage ให้แสดงเสมอ
+        if (selectedAppId && (app.ID === selectedAppId || app.id === selectedAppId)) {
+            return true;
+        }
+
         const rawStatus = (app.status || app.Status || "").toLowerCase();
         // ถ้าผู้สมัครผ่านแล้ว หรือปฏิเสธ/ไม่ผ่าน ให้ไม่แสดงในคิวรอนัดสัมภาษณ์
         if (
@@ -78,6 +83,11 @@ export function CandidateListColumn({
 
     // 3. กรองผู้สมัครตามคำค้นหาและตำแหน่ง
     const filteredCandidates = eligibleCandidates.filter((app) => {
+        // หากเป็น candidate ที่ถูกเลือกเจาะจง ให้แสดงเสมอ
+        if (selectedAppId && (app.ID === selectedAppId || app.id === selectedAppId)) {
+            return true;
+        }
+
         const name = `${app.Candidate?.first_name || ""} ${app.Candidate?.last_name || ""}`.toLowerCase();
         const pos = (app.JobPosition?.title || app.position || "").toLowerCase();
         const q = searchCandidate.toLowerCase();
@@ -180,6 +190,7 @@ export function CandidateListColumn({
 
                         return (
                             <label
+                                id={`candidate-item-${app.ID}`}
                                 key={app.ID}
                                 onClick={() => onSelectCandidate(app)}
                                 className={`flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-all ${
