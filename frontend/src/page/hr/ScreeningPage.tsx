@@ -63,7 +63,7 @@ interface AnalysisResult {
 export default function ScreeningPage() {
     const { confirm, alert: showAlert } = useConfirm();
     const location = useLocation();
-    const [selectedModel, setSelectedModel] = useState<string>("gemini-3.5-flash");
+    const [selectedModel, setSelectedModel] = useState<string>("claude-sonnet-5");
     const [resumeText, setResumeText] = useState("");
     const [jobDesc, setJobDesc] = useState("");
     const [jobCriteria, setJobCriteria] = useState("");
@@ -776,7 +776,7 @@ export default function ScreeningPage() {
                                 app.ID,
                                 app.AIScore || 0,
                                 app.AIScreening?.strengths || "",
-                                app.AIScreening?.model_used || selectedModel || "gemini-3.5-flash",
+                                app.AIScreening?.model_used || selectedModel || "claude-sonnet-5",
                                 resumeText,
                                 app.AIScreening?.analysis_data || "",
                                 extractedJSON

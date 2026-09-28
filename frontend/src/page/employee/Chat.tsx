@@ -84,7 +84,7 @@ async function checkTyphoon(): Promise<boolean> {
 
 export default function EmployeeChat() {
     const { firstName } = useAuth();
-    const [selectedModel, setSelectedModel] = useState<string>("gemini-3.5-flash");
+    const [selectedModel, setSelectedModel] = useState<string>("claude-sonnet-5");
 
     // State สำหรับแชต
     const [messages, setMessages] = useState<Message[]>([
