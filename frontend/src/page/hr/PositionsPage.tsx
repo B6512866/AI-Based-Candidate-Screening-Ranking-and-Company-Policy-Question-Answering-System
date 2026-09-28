@@ -1883,8 +1883,6 @@ SUMMARY: [สรุปสั้นๆ จุดเด่น/จุดด้อ�
                                                             <h3 className="font-bold text-slate-800 text-sm">
                                                                 สร้างตำแหน่งงานด้วย AI (AI Job Assistant)
                                                             </h3>
-                                                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs">
-                                                            </span>
                                                         </div>
                                                         <p className="text-xs text-slate-500 mt-0.5">
                                                             เลือกวิธี: อัปโหลดรูปภาพประกาศงาน หรือ พิมพ์ชื่อตำแหน่งให้ Claude ช่วยร่างอัตโนมัติ
