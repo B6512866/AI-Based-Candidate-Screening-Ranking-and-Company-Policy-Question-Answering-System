@@ -950,9 +950,10 @@ export default function CandidatesPage() {
 
                                                         {(c.status === "รอนัดสัมภาษณ์" || c.status === "shortlisted") && (
                                                             <Link
-                                                                to="/hr/interviews"
+                                                                to={`/hr/interviews?appId=${c.id}`}
+                                                                state={{ selectedAppId: Number(c.id) }}
                                                                 className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-600 hover:text-purple-800 hover:underline pl-1 whitespace-nowrap"
-                                                                title="ไปหน้านัดหมายสัมภาษณ์เพื่อระบุวันเวลา"
+                                                                title={`ไปตั้งเวลาสัมภาษณ์สำหรับ ${c.name}`}
                                                             >
                                                                 <Sparkles className="w-3 h-3 text-purple-500" />
                                                                 <span>ไปตั้งเวลาสัมภาษณ์</span>
@@ -1446,6 +1447,17 @@ export default function CandidatesPage() {
                                     <option value="รอนัดสัมภาษณ์">🟣 รอนัดสัมภาษณ์</option>
                                     <option value="นัดสัมภาษณ์แล้ว">🔵 นัดสัมภาษณ์แล้ว</option>
                                 </select>
+                                {(selectedCandidateModal.status === "รอนัดสัมภาษณ์" || selectedCandidateModal.status === "shortlisted") && (
+                                    <Link
+                                        to={`/hr/interviews?appId=${selectedCandidateModal.id}`}
+                                        state={{ selectedAppId: Number(selectedCandidateModal.id) }}
+                                        className="inline-flex items-center gap-1.5 mt-2.5 text-xs font-bold text-purple-700 bg-purple-100/90 hover:bg-purple-200 px-3 py-1.5 rounded-xl transition-all shadow-2xs"
+                                        title={`ไปหน้านัดหมายสัมภาษณ์สำหรับ ${selectedCandidateModal.name}`}
+                                    >
+                                        <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                                        <span>ไปตั้งเวลาสัมภาษณ์</span>
+                                    </Link>
+                                )}
                             </div>
                             <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 text-center">
                                 <span className="text-xs text-slate-400 font-bold uppercase tracking-wider block">โมเดล AI ที่ใช้วิเคราะห์</span>

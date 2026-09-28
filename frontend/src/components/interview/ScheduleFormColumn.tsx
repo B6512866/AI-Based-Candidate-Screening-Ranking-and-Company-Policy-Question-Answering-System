@@ -93,7 +93,27 @@ export function ScheduleFormColumn({
 
     return (
         <div className="lg:col-span-5 bg-slate-50/80 rounded-2xl border border-slate-100 p-5 space-y-5">
-            <h3 className="text-sm font-black text-slate-700">กำหนดวันและเวลาการนัดสัมภาษณ์</h3>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 pb-3.5">
+                <div>
+                    <h3 className="text-sm font-black text-slate-800">กำหนดวันและเวลาการนัดสัมภาษณ์</h3>
+                    <p className="text-xs text-slate-400">ระบุวัน เวลา และช่องทางการสัมภาษณ์</p>
+                </div>
+                {selectedApp ? (
+                    <div className="flex items-center gap-2 bg-indigo-50/90 border border-indigo-100 px-3 py-1.5 rounded-xl shadow-2xs">
+                        <span className="text-[11px] text-slate-500 font-medium">ผู้สมัคร:</span>
+                        <span className="text-xs font-black text-[#4169E1]">
+                            {selectedApp.Candidate?.first_name} {selectedApp.Candidate?.last_name}
+                        </span>
+                        <span className="text-[10px] font-mono font-bold bg-white text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-100">
+                            {selectedApp.JobPosition?.title || selectedApp.position || "-"}
+                        </span>
+                    </div>
+                ) : (
+                    <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg font-bold">
+                        กรุณาเลือกผู้สมัคร
+                    </span>
+                )}
+            </div>
 
             <div className="space-y-4">
                 {/* ── วันสัมภาษณ์ ── */}
