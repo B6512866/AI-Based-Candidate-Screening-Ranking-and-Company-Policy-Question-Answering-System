@@ -42,6 +42,7 @@ interface AnalysisDataObj {
     candidate_basic_info?: CandidateBasicInfo;
     main_criteria_breakdown?: MainCriterionBreakdown[];
     raw_markdown?: string;
+    model_used?: string;
     analyzed_at?: string;
 }
 
@@ -689,7 +690,7 @@ export default function CandidatesPage() {
                         analysisObj: parsedAnalysisObj,
                         criteriaBreakdown: criteriaBreakdown,
                         strengths: aiScreening.strengths || aiScreening.Strengths || "",
-                        modelUsed: aiScreening.model_used || aiScreening.ModelUsed || "typhoon2.5-qwen3-4b",
+                        modelUsed: parsedAnalysisObj?.model_used || aiScreening.model_used || aiScreening.ModelUsed || "gemini-3.5-flash",
                         rawApp: app,
                         resumeUrl: rUrl,
                         resumeText: rText,
@@ -1069,42 +1070,49 @@ export default function CandidatesPage() {
                                                             </button>
                                                         </div>
                                                     ) : (
-                                                        <div className="flex items-center gap-2 group">
-                                                            <div className="w-14 bg-slate-100 rounded-full h-2.5 overflow-hidden p-0.5 border border-slate-200 shrink-0">
-                                                                <div
-                                                                    className={`h-full rounded-full transition-all ${c.aiScore >= 80
-                                                                            ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
+                                                        <div className="flex flex-col gap-0.5">
+                                                            <div className="flex items-center gap-2 group">
+                                                                <div className="w-14 bg-slate-100 rounded-full h-2.5 overflow-hidden p-0.5 border border-slate-200 shrink-0">
+                                                                    <div
+                                                                        className={`h-full rounded-full transition-all ${c.aiScore >= 80
+                                                                                ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
+                                                                                : c.aiScore >= 50
+                                                                                    ? "bg-gradient-to-r from-amber-500 to-amber-400"
+                                                                                    : c.aiScore > 0
+                                                                                        ? "bg-gradient-to-r from-rose-500 to-rose-400"
+                                                                                        : "bg-slate-300"
+                                                                            }`}
+                                                                        style={{ width: `${c.aiScore}%` }}
+                                                                    />
+                                                                </div>
+                                                                <div className="flex items-center gap-1 shrink-0">
+                                                                    <span className={`font-extrabold text-xs font-mono whitespace-nowrap ${c.aiScore >= 80
+                                                                            ? "text-emerald-600"
                                                                             : c.aiScore >= 50
-                                                                                ? "bg-gradient-to-r from-amber-500 to-amber-400"
+                                                                                ? "text-amber-600"
                                                                                 : c.aiScore > 0
-                                                                                    ? "bg-gradient-to-r from-rose-500 to-rose-400"
-                                                                                    : "bg-slate-300"
-                                                                        }`}
-                                                                    style={{ width: `${c.aiScore}%` }}
-                                                                />
+                                                                                    ? "text-rose-600"
+                                                                                    : "text-slate-400"
+                                                                        }`}>
+                                                                        {c.aiScore} PTS
+                                                                    </span>
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setEditingScoreId(c.id);
+                                                                            setEditingScoreValue(c.aiScore);
+                                                                        }}
+                                                                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-indigo-50 text-slate-400 hover:text-[#4169E1] rounded-md transition-all cursor-pointer"
+                                                                        title="คลิกเพื่อปรับแก้ไขคะแนน PTS"
+                                                                    >
+                                                                        <Edit3 className="w-3 h-3" />
+                                                                    </button>
+                                                                </div>
                                                             </div>
-                                                            <div className="flex items-center gap-1 shrink-0">
-                                                                <span className={`font-extrabold text-xs font-mono whitespace-nowrap ${c.aiScore >= 80
-                                                                        ? "text-emerald-600"
-                                                                        : c.aiScore >= 50
-                                                                            ? "text-amber-600"
-                                                                            : c.aiScore > 0
-                                                                                ? "text-rose-600"
-                                                                                : "text-slate-400"
-                                                                    }`}>
-                                                                    {c.aiScore} PTS
+                                                            {c.aiScore > 0 && c.modelUsed && (
+                                                                <span className="text-[10px] text-slate-400 font-mono block truncate max-w-[120px]" title={`โมเดล AI ที่ใช้ประเมิน: ${c.modelUsed}`}>
+                                                                    🤖 {c.modelUsed}
                                                                 </span>
-                                                                <button
-                                                                    onClick={() => {
-                                                                        setEditingScoreId(c.id);
-                                                                        setEditingScoreValue(c.aiScore);
-                                                                    }}
-                                                                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-indigo-50 text-slate-400 hover:text-[#4169E1] rounded-md transition-all cursor-pointer"
-                                                                    title="คลิกเพื่อปรับแก้ไขคะแนน PTS"
-                                                                >
-                                                                    <Edit3 className="w-3 h-3" />
-                                                                </button>
-                                                            </div>
+                                                            )}
                                                         </div>
                                                     )}
                                                 </td>
@@ -1817,7 +1825,9 @@ export default function CandidatesPage() {
                                 <span className="text-sm font-semibold text-slate-700 block truncate" title={selectedCandidateModal.modelUsed}>
                                     {selectedCandidateModal.modelUsed}
                                 </span>
-                                <span className="text-xs text-slate-400 block font-mono">LoRA Adapter Active</span>
+                                <span className="text-xs text-slate-400 block font-mono">
+                                    {selectedCandidateModal.modelUsed?.toLowerCase().includes("typhoon") ? "LoRA Adapter Active" : "Direct Multi-turn API"}
+                                </span>
                             </div>
                         </div>
 

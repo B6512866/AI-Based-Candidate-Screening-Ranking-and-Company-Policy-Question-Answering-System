@@ -776,7 +776,7 @@ export default function ScreeningPage() {
                                 app.ID,
                                 app.AIScore || 0,
                                 app.AIScreening?.strengths || "",
-                                "typhoon2.5-qwen3-4b",
+                                app.AIScreening?.model_used || selectedModel || "gemini-3.5-flash",
                                 resumeText,
                                 app.AIScreening?.analysis_data || "",
                                 extractedJSON
@@ -1048,6 +1048,7 @@ ${tableRowsExample}
                 candidate_basic_info: basicCandidateInfo,
                 main_criteria_breakdown: breakdownDetails,
                 raw_markdown: sanitizedMarkdown,
+                model_used: selectedModel,
                 analyzed_at: new Date().toISOString()
             });
 
@@ -1063,11 +1064,14 @@ ${tableRowsExample}
                 if (a.ID === app.ID) {
                     return {
                         ...a,
+                        AIScore: totalScore,
+                        ai_score: totalScore,
                         Status: "รอนัดสัมภาษณ์",
                         status: "รอนัดสัมภาษณ์",
                         ResumeText: resumeText,
                         resume_text: resumeText,
                         AIScreening: {
+                            ...(a.AIScreening || {}),
                             skill_score: totalScore,
                             strengths: strengthsText,
                             analysis_data: structuredJSON,
@@ -2128,8 +2132,13 @@ ${tableRowsExample}
                                                                         );
                                                                     })()}
                                                                 </div>
-                                                                <p className="text-xs text-slate-400 truncate mt-0.5" title={candidateName}>
-                                                                    {app.Candidate?.email || "ไม่มีอีเมล"} • {app.Candidate?.phone || "ไม่มีเบอร์"}
+                                                                <p className="text-xs text-slate-400 truncate mt-0.5 flex items-center gap-2 flex-wrap" title={candidateName}>
+                                                                    <span>{app.Candidate?.email || "ไม่มีอีเมล"} • {app.Candidate?.phone || "ไม่มีเบอร์"}</span>
+                                                                    {(app.AIScreening?.model_used || app.AIScreening?.ModelUsed) && (
+                                                                        <span className="font-mono text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md shrink-0 shadow-2xs" title={`โมเดล AI ที่ใช้วิเคราะห์: ${app.AIScreening?.model_used || app.AIScreening?.ModelUsed}`}>
+                                                                            🤖 {AVAILABLE_AI_MODELS.find(m => m.id === (app.AIScreening?.model_used || app.AIScreening?.ModelUsed))?.name || (app.AIScreening?.model_used || app.AIScreening?.ModelUsed)}
+                                                                        </span>
+                                                                    )}
                                                                 </p>
                                                             </div>
                                                         </div>
@@ -2248,9 +2257,14 @@ ${tableRowsExample}
                                                                             </span>
                                                                         </>
                                                                     ) : (
-                                                                        <span className="font-extrabold text-xs text-[#4169E1] flex items-center gap-1.5">
+                                                                        <span className="font-extrabold text-xs text-[#4169E1] flex items-center gap-1.5 flex-wrap">
                                                                             <Sparkles className="w-3.5 h-3.5" />
-                                                                            รายละเอียดผลการวิเคราะห์เดี่ยวจาก AI
+                                                                            <span>รายละเอียดผลการวิเคราะห์เดี่ยวจาก AI</span>
+                                                                            {(app.AIScreening?.model_used || app.AIScreening?.ModelUsed) && (
+                                                                                <span className="font-mono text-[10px] font-bold text-indigo-700 bg-white/90 border border-indigo-200 px-2 py-0.5 rounded-md shadow-2xs">
+                                                                                    โมเดล: {AVAILABLE_AI_MODELS.find(m => m.id === (app.AIScreening?.model_used || app.AIScreening?.ModelUsed))?.name || (app.AIScreening?.model_used || app.AIScreening?.ModelUsed)}
+                                                                                </span>
+                                                                            )}
                                                                         </span>
                                                                     )}
                                                                 </div>

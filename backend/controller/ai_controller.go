@@ -311,31 +311,49 @@ func (c *AIController) HandleOCR(ctx *gin.Context) {
 	if geminiKey == "" {
 		geminiKey = strings.TrimSpace(os.Getenv("GOOGLE_API_KEY"))
 	}
-	if geminiKey == "" {
-		if c.forwardToLocalTyphoonOCR(ctx, bodyBytes) {
+
+	claudeKey := strings.TrimSpace(config.Env.AnthropicAPIKey)
+	if claudeKey == "" {
+		claudeKey = strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY"))
+	}
+
+	// 2. Try Gemini Vision OCR
+	if geminiKey != "" {
+		log.Printf("🔍 [Cloud OCR] Processing %s (%s, %d bytes) via Gemini Cloud Vision...", fileHeader.Filename, mimeType, len(fileBytes))
+		extractedText, err := extractTextViaGemini(geminiKey, fileBytes, mimeType)
+		if err == nil && len(strings.TrimSpace(extractedText)) >= 10 {
+			log.Printf("✅ [Gemini OCR Success] Extracted %d characters from %s (0%% GPU Load)", len(extractedText), fileHeader.Filename)
+			ctx.JSON(http.StatusOK, gin.H{
+				"text": extractedText,
+				"type": "pdf",
+			})
 			return
 		}
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "⚠️ ไม่พบ GEMINI_API_KEY สำหรับรัน Cloud Vision OCR และ Local Typhoon ยังไม่ได้เชื่อมต่อ"})
+		log.Printf("⚠️ Gemini Vision OCR error: %v, attempting Claude Vision OCR fallback...", err)
+	}
+
+	// 3. Fallback: Try Claude Vision OCR (Anthropic)
+	if claudeKey != "" {
+		log.Printf("🔍 [Cloud OCR] Processing %s (%s, %d bytes) via Claude Cloud Vision...", fileHeader.Filename, mimeType, len(fileBytes))
+		extractedText, err := extractTextViaClaude(claudeKey, fileBytes, mimeType)
+		if err == nil && len(strings.TrimSpace(extractedText)) >= 10 {
+			log.Printf("✅ [Claude OCR Success] Extracted %d characters from %s (0%% GPU Load)", len(extractedText), fileHeader.Filename)
+			ctx.JSON(http.StatusOK, gin.H{
+				"text": extractedText,
+				"type": "pdf",
+			})
+			return
+		}
+		log.Printf("⚠️ Claude Vision OCR error: %v", err)
+	}
+
+	// 4. Try local Typhoon as final fallback if not already tried
+	if !isTyphoonRequested && c.forwardToLocalTyphoonOCR(ctx, bodyBytes) {
 		return
 	}
 
-	log.Printf("🔍 [Cloud OCR] Processing %s (%s, %d bytes) via Gemini Cloud Vision...", fileHeader.Filename, mimeType, len(fileBytes))
-
-	extractedText, err := extractTextViaGemini(geminiKey, fileBytes, mimeType)
-	if err != nil {
-		log.Printf("⚠️ Gemini Vision OCR error: %v", err)
-		// Try local Typhoon as final fallback if not already tried
-		if !isTyphoonRequested && c.forwardToLocalTyphoonOCR(ctx, bodyBytes) {
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "การสกัดข้อความ OCR ล้มเหลว: " + err.Error()})
-		return
-	}
-
-	log.Printf("✅ [Cloud OCR Success] Extracted %d characters from %s (0%% GPU Load)", len(extractedText), fileHeader.Filename)
-	ctx.JSON(http.StatusOK, gin.H{
-		"text": extractedText,
-		"type": "pdf",
+	ctx.JSON(http.StatusBadGateway, gin.H{
+		"error": "ไม่สามารถสกัดข้อความ OCR ได้จากทั้ง Gemini Vision, Claude Vision และ Typhoon OCR กรุณาตรวจสอบ API Keys หรือเชื่อมต่อ Typhoon Local",
 	})
 }
 
@@ -688,7 +706,15 @@ func (c *AIController) streamClaude(ctx *gin.Context, apiKey string, req ChatReq
 // extractTextViaGemini calls Gemini Vision API with base64 encoded document
 func extractTextViaGemini(geminiKey string, fileBytes []byte, mimeType string) (string, error) {
 	b64 := base64.StdEncoding.EncodeToString(fileBytes)
-	candidateModels := []string{"gemini-3-flash-preview", "gemini-flash-latest", "gemini-3.1-flash-lite-preview", "gemini-3.5-flash", "gemini-2.5-flash"}
+	candidateModels := []string{
+		"gemini-2.5-flash",
+		"gemini-2.0-flash",
+		"gemini-1.5-flash",
+		"gemini-2.5-pro",
+		"gemini-3-flash-preview",
+		"gemini-flash-latest",
+		"gemini-3.5-flash",
+	}
 
 	payload := map[string]interface{}{
 		"contents": []map[string]interface{}{
@@ -754,4 +780,94 @@ func extractTextViaGemini(geminiKey string, fileBytes []byte, mimeType string) (
 	}
 
 	return "", fmt.Errorf("gemini vision OCR error: %v", lastErr)
+}
+
+// extractTextViaClaude calls Anthropic Claude Vision API with base64 encoded document
+func extractTextViaClaude(claudeKey string, fileBytes []byte, mimeType string) (string, error) {
+	b64 := base64.StdEncoding.EncodeToString(fileBytes)
+	candidateModels := []string{"claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-sonnet-5"}
+
+	var contentItem map[string]interface{}
+	if strings.Contains(mimeType, "pdf") {
+		contentItem = map[string]interface{}{
+			"type": "document",
+			"source": map[string]string{
+				"type":       "base64",
+				"media_type": "application/pdf",
+				"data":       b64,
+			},
+		}
+	} else {
+		contentItem = map[string]interface{}{
+			"type": "image",
+			"source": map[string]string{
+				"type":       "base64",
+				"media_type": mimeType,
+				"data":       b64,
+			},
+		}
+	}
+
+	payload := map[string]interface{}{
+		"max_tokens": 4096,
+		"messages": []map[string]interface{}{
+			{
+				"role": "user",
+				"content": []interface{}{
+					contentItem,
+					map[string]string{
+						"type": "text",
+						"text": "Extract all text and content from this resume document accurately. Output clean markdown only without extra explanations.",
+					},
+				},
+			},
+		},
+	}
+
+	client := &http.Client{Timeout: 90 * time.Second}
+	var lastErr error
+
+	for _, m := range candidateModels {
+		payload["model"] = m
+		bodyBytes, _ := json.Marshal(payload)
+		httpReq, err := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewBuffer(bodyBytes))
+		if err != nil {
+			continue
+		}
+		httpReq.Header.Set("x-api-key", claudeKey)
+		httpReq.Header.Set("anthropic-version", "2023-06-01")
+		httpReq.Header.Set("content-type", "application/json")
+
+		resp, err := client.Do(httpReq)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			defer resp.Body.Close()
+			var resBody struct {
+				Content []struct {
+					Type string `json:"type"`
+					Text string `json:"text"`
+				} `json:"content"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&resBody); err == nil {
+				var sb strings.Builder
+				for _, c := range resBody.Content {
+					if c.Type == "text" {
+						sb.WriteString(c.Text)
+					}
+				}
+				out := strings.TrimSpace(sb.String())
+				if out != "" {
+					return out, nil
+				}
+			}
+		}
+		if resp != nil {
+			b, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(b))
+		} else {
+			lastErr = err
+		}
+	}
+
+	return "", fmt.Errorf("claude vision OCR error: %v", lastErr)
 }
